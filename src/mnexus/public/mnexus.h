@@ -1,0 +1,248 @@
+#pragma once
+
+// c++ headers ------------------------------------------
+#include <memory>
+
+// public project headers -------------------------------
+#include "mbase/public/call.h"
+
+#include "mnexus/public/types.h"
+
+#define MNEXUS_NO_THROW MBASE_NO_THROW
+#define MNEXUS_CALL     MBASE_STDCALL
+
+#if defined(__cplusplus)
+
+namespace mnexus {
+
+class IDevice;
+class ICommandList;
+
+#define _MNEXUS_VAPI(ret, name, ...) \
+  virtual MNEXUS_NO_THROW ret MNEXUS_CALL name(__VA_ARGS__) = 0
+
+class INexus {
+public:
+  static INexus* Create();
+
+  virtual ~INexus() = default;
+
+  // ----------------------------------------------------------------------------------------------
+  // Lifecycle.
+
+  _MNEXUS_VAPI(void, Destroy);
+
+  // ----------------------------------------------------------------------------------------------
+  // Surface lifecycle.
+
+  _MNEXUS_VAPI(void, OnDisplayChanged);
+
+  _MNEXUS_VAPI(void, OnSurfaceDestroyed);
+  _MNEXUS_VAPI(void, OnSurfaceRecreated, SurfaceSourceDesc const& surface_source_desc);
+
+  // ----------------------------------------------------------------------------------------------
+  // Presentation.
+
+  /// ## Post-conditions
+  /// - The swapchain's current backbuffer is acquired and ready for rendering.
+  _MNEXUS_VAPI(void, OnPresentPrologue);
+
+  /// ## Post-conditions
+  /// - The swapchain's current backbuffer is queued for presentation.
+  _MNEXUS_VAPI(void, OnPresentEpilogue);
+
+  // ----------------------------------------------------------------------------------------------
+  // Device
+
+  _MNEXUS_VAPI(IDevice*, GetDevice);
+
+protected:
+  INexus() = default;
+};
+
+class IDevice {
+public:
+  virtual ~IDevice() = default;
+
+  // ----------------------------------------------------------------------------------------------
+  // Queue
+  //
+
+  _MNEXUS_VAPI(uint32_t, GetQueueFamilyCount);
+
+  _MNEXUS_VAPI(MnBool32, GetQueueFamilyDesc,
+    uint32_t queue_family_index,
+    QueueFamilyDesc& out_desc
+  );
+
+  _MNEXUS_VAPI(void, QueueSubmitCommandList,
+    QueueId const& queue_id,
+    ICommandList* command_list
+  );
+
+  _MNEXUS_VAPI(void, QueueWriteBuffer,
+    QueueId const& queue_id,
+    BufferHandle buffer_handle,
+    uint32_t buffer_offset,
+    void const* data,
+    uint32_t data_size_in_bytes
+  );
+
+  // ----------------------------------------------------------------------------------------------
+  // Resource creation/acquisition.
+  //
+
+  //
+  // Command List
+  //
+
+  _MNEXUS_VAPI(ICommandList*, CreateCommandList, CommandListDesc const& desc);
+  _MNEXUS_VAPI(void, DiscardCommandList, ICommandList* command_list);
+
+  //
+  // Buffer
+  //
+
+  _MNEXUS_VAPI(BufferHandle, CreateBuffer,
+    BufferDesc const& desc
+  );
+  _MNEXUS_VAPI(void, DestroyBuffer,
+    BufferHandle buffer_handle
+  );
+
+  _MNEXUS_VAPI(void, GetBufferDesc,
+    BufferHandle buffer_handle,
+    BufferDesc& out_desc
+  );
+
+  //
+  // Texture
+  //
+
+  _MNEXUS_VAPI(TextureHandle, GetSwapchainTexture);
+
+  _MNEXUS_VAPI(TextureHandle, CreateTexture,
+    TextureDesc const& desc
+  );
+  _MNEXUS_VAPI(void, DestroyTexture,
+    TextureHandle texture_handle
+  );
+
+  _MNEXUS_VAPI(void, GetTextureDesc,
+    TextureHandle texture_handle,
+    TextureDesc& out_desc
+  );
+
+  //
+  // ShaderModule
+  //
+
+  _MNEXUS_VAPI(ShaderModuleHandle, CreateShaderModule,
+    ShaderModuleDesc const& desc
+  );
+  _MNEXUS_VAPI(void, DestroyShaderModule,
+    ShaderModuleHandle shader_module_handle
+  );
+
+  //
+  // Program
+  //
+
+  _MNEXUS_VAPI(ProgramHandle, CreateProgram,
+    ProgramDesc const& desc
+  );
+  _MNEXUS_VAPI(void, DestroyProgram,
+    ProgramHandle program_handle
+  );
+
+  //
+  // ComputePipeline
+  //
+
+  _MNEXUS_VAPI(ComputePipelineHandle, CreateComputePipeline,
+    ComputePipelineDesc const& desc
+  );
+  _MNEXUS_VAPI(void, DestroyComputePipeline,
+    ComputePipelineHandle compute_pipeline_handle
+  );
+
+  //
+  // RenderPipeline
+  //
+
+  _MNEXUS_VAPI(RenderPipelineHandle, CreateRenderPipeline,
+    RenderPipelineDesc const& desc
+  );
+
+protected:
+  IDevice() = default;
+};
+
+class ICommandList {
+public:
+  virtual ~ICommandList() = default;
+
+  _MNEXUS_VAPI(void, End);
+
+  //
+  // Compute
+  //
+
+  _MNEXUS_VAPI(void, BindComputePipeline, ComputePipelineHandle compute_pipeline_handle);
+  _MNEXUS_VAPI(void, DispatchCompute,
+    uint32_t workgroup_count_x,
+    uint32_t workgroup_count_y,
+    uint32_t workgroup_count_z
+  );
+
+  //
+  // Transfer
+  //
+
+  _MNEXUS_VAPI(void, ClearTexture,
+    TextureHandle texture_handle,
+    TextureSubresourceRange const& subresource_range,
+    ClearValue const& clear_value
+  );
+
+protected:
+  ICommandList() = default;
+};
+
+//
+// Wrappers around handles to provide easy access to resource descriptions etc.
+//
+
+class Texture final {
+public:
+  static Texture Create(IDevice* device, TextureDesc const& desc) {
+    TextureHandle handle = device->CreateTexture(desc);
+    return Texture(device, handle);
+  }
+
+  explicit Texture(IDevice* device, TextureHandle handle) : device_(device), handle_(handle) {
+    device_->GetTextureDesc(handle_, desc_);
+  }
+  ~Texture() = default;
+
+  bool IsValid() const { return handle_.IsValid(); }
+
+  void Destroy() {
+    if (this->IsValid()) {
+      device_->DestroyTexture(handle_);
+      handle_ = TextureHandle::Invalid();
+    }
+  }
+
+  TextureHandle GetHandle() const { return handle_; }
+  TextureDesc const& GetDesc() { return desc_; }
+
+private:
+  IDevice* device_ = nullptr;
+  TextureHandle handle_;
+  TextureDesc desc_;
+};
+
+} // namespace mnexus
+
+#endif // defined(__cplusplus)
