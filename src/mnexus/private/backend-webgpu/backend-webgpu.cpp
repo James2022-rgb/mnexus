@@ -2,7 +2,9 @@
 #include "backend-webgpu/backend-webgpu.h"
 
 // c++ headers ------------------------------------------
-#include <mutex>  
+#include <cstring>
+#include <mutex>
+#include <vector>
 
 // platform detection header ----------------------------
 #include "mbase/public/platform.h"
@@ -200,24 +202,50 @@ public:
     return MnBoolTrue;
   }
 
-  IMPL_VAPI(void, QueueSubmitCommandList,
+  IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueSubmitCommandList,
     mnexus::QueueId const& queue_id,
     mnexus::ICommandList* command_list
   ) {
     MBASE_ASSERT_MSG(queue_id.queue_family_index == 0 && queue_id.queue_index == 0, "WebGPU backend only supports a single queue");
 
+    mbase::LockGuard queue_lock(queue_mutex_);
+
+    this->PollPendingOps();
+
     // Downcast to our command list implementation.
     MnexusCommandListWebGpu* webgpu_command_list = dynamic_cast<MnexusCommandListWebGpu*>(command_list);
-    
+
     wgpu::CommandBuffer wgpu_command_buffer = webgpu_command_list->GetWgpuCommandEncoder().Finish();
 
     wgpu::Queue wgpu_queue = wgpu_device_.GetQueue();
     wgpu_queue.Submit(1, &wgpu_command_buffer);
 
     this->DiscardCommandList(command_list);
+
+    // Track GPU-side completion via OnSubmittedWorkDone.
+    wgpu::Future work_done_future = wgpu_queue.OnSubmittedWorkDone(
+      wgpu::CallbackMode::WaitAnyOnly,
+      [](wgpu::QueueWorkDoneStatus status, wgpu::StringView) {
+        if (status != wgpu::QueueWorkDoneStatus::Success) {
+          MBASE_LOG_ERROR("OnSubmittedWorkDone failed: {}", static_cast<uint32_t>(status));
+        }
+      }
+    );
+
+    mnexus::IntraQueueSubmissionId const id = this->AdvanceTimeline();
+
+    pending_ops_.emplace_back(
+      PendingOp {
+        .timeline_value = id.Get(),
+        .future = work_done_future,
+      }
+    );
+
+    this->UpdateCompletedValue();
+    return id;
   }
 
-  IMPL_VAPI(void, QueueWriteBuffer,
+  IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueWriteBuffer,
     mnexus::QueueId const& queue_id,
     mnexus::BufferHandle buffer_handle,
     uint32_t buffer_offset,
@@ -225,6 +253,8 @@ public:
     uint32_t data_size_in_bytes
   ) {
     MBASE_ASSERT_MSG(queue_id.queue_family_index == 0 && queue_id.queue_index == 0, "WebGPU backend only supports a single queue");
+
+    mbase::LockGuard queue_lock(queue_mutex_);
 
     auto pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
 
@@ -238,6 +268,142 @@ public:
       data,
       data_size_in_bytes
     );
+
+    mnexus::IntraQueueSubmissionId const id = this->AdvanceTimeline();
+    this->UpdateCompletedValue();
+    return id;
+  }
+
+  IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueReadBuffer,
+    mnexus::QueueId const& queue_id,
+    mnexus::BufferHandle buffer_handle,
+    uint32_t buffer_offset,
+    void* dst,
+    uint32_t size_in_bytes
+  ) {
+    MBASE_ASSERT_MSG(queue_id.queue_family_index == 0 && queue_id.queue_index == 0, "WebGPU backend only supports a single queue");
+    MBASE_ASSERT_MSG((buffer_offset % 4) == 0, "buffer_offset must be 4-byte aligned");
+    MBASE_ASSERT_MSG((size_in_bytes % 4) == 0, "size_in_bytes must be 4-byte aligned");
+
+    mbase::LockGuard queue_lock(queue_mutex_);
+
+    auto pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+    auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
+
+    // Create a staging buffer for the readback.
+    wgpu::BufferDescriptor staging_desc {
+      .usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst,
+      .size = size_in_bytes,
+    };
+    wgpu::Buffer staging_buffer = wgpu_device_.CreateBuffer(&staging_desc);
+
+    // Encode copy from source buffer to staging buffer.
+    wgpu::CommandEncoder encoder = wgpu_device_.CreateCommandEncoder();
+    encoder.CopyBufferToBuffer(hot.wgpu_buffer, buffer_offset, staging_buffer, 0, size_in_bytes);
+    wgpu::CommandBuffer command_buffer = encoder.Finish();
+
+    wgpu::Queue wgpu_queue = wgpu_device_.GetQueue();
+    wgpu_queue.Submit(1, &command_buffer);
+
+    // Initiate async map.
+    wgpu::Future map_future = staging_buffer.MapAsync(
+      wgpu::MapMode::Read, 0, size_in_bytes,
+      wgpu::CallbackMode::WaitAnyOnly,
+      [](wgpu::MapAsyncStatus status, wgpu::StringView message) {
+        if (status != wgpu::MapAsyncStatus::Success) {
+          MBASE_LOG_ERROR("MapAsync failed: {}", message);
+        }
+      }
+    );
+
+    mnexus::IntraQueueSubmissionId const id = this->AdvanceTimeline();
+
+    pending_readbacks_.emplace_back(
+      PendingReadback {
+        .timeline_value = id.Get(),
+        .staging_buffer = std::move(staging_buffer),
+        .map_future = map_future,
+        .dst = dst,
+        .size_in_bytes = size_in_bytes,
+      }
+    );
+
+    this->UpdateCompletedValue();
+    return id;
+  }
+
+  IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueCompletedValue,
+    mnexus::QueueId const& queue_id
+  ) {
+    MBASE_ASSERT_MSG(queue_id.queue_family_index == 0 && queue_id.queue_index == 0, "WebGPU backend only supports a single queue");
+
+    mbase::LockGuard queue_lock(queue_mutex_);
+
+    this->PollPendingOps();
+    this->UpdateCompletedValue();
+    return mnexus::IntraQueueSubmissionId { completed_value_ };
+  }
+
+  IMPL_VAPI(void, QueueWait,
+    mnexus::QueueId const& queue_id,
+    mnexus::IntraQueueSubmissionId value
+  ) {
+    MBASE_ASSERT_MSG(queue_id.queue_family_index == 0 && queue_id.queue_index == 0, "WebGPU backend only supports a single queue");
+
+    mbase::LockGuard queue_lock(queue_mutex_);
+
+    uint64_t const target = value.Get();
+
+    while (completed_value_ < target) {
+      bool found_pending = false;
+
+      // Block on pending submit/write ops.
+      for (size_t i = 0; i < pending_ops_.size(); ) {
+        PendingOp& op = pending_ops_[i];
+        if (op.timeline_value <= target) {
+          found_pending = true;
+
+          wgpu::WaitStatus wait_status = wgpu_instance_.WaitAny(op.future, UINT64_MAX);
+          if (wait_status == wgpu::WaitStatus::Success) {
+            pending_ops_.erase(pending_ops_.begin() + static_cast<ptrdiff_t>(i));
+          } else {
+            MBASE_LOG_ERROR("WaitAny failed during QueueWait (pending op)");
+            ++i;
+          }
+        } else {
+          ++i;
+        }
+      }
+
+      // Block on pending readbacks.
+      for (size_t i = 0; i < pending_readbacks_.size(); ) {
+        PendingReadback& rb = pending_readbacks_[i];
+        if (rb.timeline_value <= target) {
+          found_pending = true;
+
+          wgpu::WaitStatus wait_status = wgpu_instance_.WaitAny(rb.map_future, UINT64_MAX);
+          if (wait_status == wgpu::WaitStatus::Success) {
+            void const* mapped = rb.staging_buffer.GetConstMappedRange(0, rb.size_in_bytes);
+            MBASE_ASSERT(mapped != nullptr);
+            std::memcpy(rb.dst, mapped, rb.size_in_bytes);
+            rb.staging_buffer.Unmap();
+
+            pending_readbacks_.erase(pending_readbacks_.begin() + static_cast<ptrdiff_t>(i));
+          } else {
+            MBASE_LOG_ERROR("WaitAny failed during QueueWait (pending readback)");
+            ++i;
+          }
+        } else {
+          ++i;
+        }
+      }
+
+      this->UpdateCompletedValue();
+
+      if (!found_pending) {
+        break;
+      }
+    }
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -463,11 +629,13 @@ public:
   //
 
   void Initialize(
+    wgpu::Instance wgpu_instance,
     wgpu::Device wgpu_device,
     ResourceStorage* resource_storage
   ) {
     MBASE_ASSERT(!wgpu_device_);
 
+    wgpu_instance_ = std::move(wgpu_instance);
     wgpu_device_ = std::move(wgpu_device);
     resource_storage_ = resource_storage;
 
@@ -480,9 +648,24 @@ public:
   }
 
   void Shutdown() {
+    {
+      mbase::LockGuard queue_lock(queue_mutex_);
+
+      if (!pending_ops_.empty() || !pending_readbacks_.empty()) {
+        MBASE_LOG_WARN(
+          "Shutting down with {} pending op(s) and {} pending readback(s)",
+          pending_ops_.size(), pending_readbacks_.size()
+        );
+      }
+
+      pending_ops_.clear();
+      pending_readbacks_.clear();
+    }
+
     ShutdownShaderSubsystem();
     resource_storage_ = nullptr;
     wgpu_device_ = nullptr;
+    wgpu_instance_ = nullptr;
   }
 
   void OnWgpuSurfaceConfigured(wgpu::SurfaceConfiguration const& surface_config) {
@@ -535,8 +718,80 @@ public:
   }
 
 private:
+  // Tracks GPU-side completion of queue submissions (via OnSubmittedWorkDone).
+  struct PendingOp {
+    uint64_t timeline_value;
+    wgpu::Future future;
+  };
+
+  // Tracks a GPU->CPU readback (staging buffer map + memcpy).
+  struct PendingReadback {
+    uint64_t timeline_value;
+    wgpu::Buffer staging_buffer;
+    wgpu::Future map_future;
+    void* dst;
+    uint32_t size_in_bytes;
+  };
+
+  mnexus::IntraQueueSubmissionId AdvanceTimeline() MBASE_REQUIRES(queue_mutex_) {
+    return mnexus::IntraQueueSubmissionId { next_timeline_value_++ };
+  }
+
+  void UpdateCompletedValue() MBASE_REQUIRES(queue_mutex_) {
+    uint64_t min_pending = next_timeline_value_;
+
+    for (auto const& op : pending_ops_) {
+      if (op.timeline_value < min_pending) {
+        min_pending = op.timeline_value;
+      }
+    }
+    for (auto const& rb : pending_readbacks_) {
+      if (rb.timeline_value < min_pending) {
+        min_pending = rb.timeline_value;
+      }
+    }
+
+    completed_value_ = min_pending - 1;
+  }
+
+  void PollPendingOps() MBASE_REQUIRES(queue_mutex_) {
+    for (size_t i = 0; i < pending_ops_.size(); ) {
+      PendingOp& op = pending_ops_[i];
+
+      wgpu::WaitStatus status = wgpu_instance_.WaitAny(op.future, 0);
+      if (status == wgpu::WaitStatus::Success) {
+        pending_ops_.erase(pending_ops_.begin() + static_cast<ptrdiff_t>(i));
+      } else {
+        ++i;
+      }
+    }
+
+    for (size_t i = 0; i < pending_readbacks_.size(); ) {
+      PendingReadback& rb = pending_readbacks_[i];
+
+      wgpu::WaitStatus status = wgpu_instance_.WaitAny(rb.map_future, 0);
+      if (status == wgpu::WaitStatus::Success) {
+        void const* mapped = rb.staging_buffer.GetConstMappedRange(0, rb.size_in_bytes);
+        MBASE_ASSERT(mapped != nullptr);
+        std::memcpy(rb.dst, mapped, rb.size_in_bytes);
+        rb.staging_buffer.Unmap();
+
+        pending_readbacks_.erase(pending_readbacks_.begin() + static_cast<ptrdiff_t>(i));
+      } else {
+        ++i;
+      }
+    }
+  }
+
+  wgpu::Instance wgpu_instance_;
   wgpu::Device wgpu_device_;
   ResourceStorage* resource_storage_ = nullptr;
+
+  mbase::Lockable<std::mutex> queue_mutex_;
+  uint64_t next_timeline_value_ MBASE_GUARDED_BY(queue_mutex_) = 1;
+  uint64_t completed_value_ MBASE_GUARDED_BY(queue_mutex_) = 0;
+  std::vector<PendingOp> pending_ops_ MBASE_GUARDED_BY(queue_mutex_);
+  std::vector<PendingReadback> pending_readbacks_ MBASE_GUARDED_BY(queue_mutex_);
 };
 
 
@@ -551,7 +806,7 @@ public:
     adapter_(std::move(adapter)),
     device_(std::move(device))
   {
-    mnexus_device_.Initialize(device_, &resource_storage_);
+    mnexus_device_.Initialize(instance_, device_, &resource_storage_);
   }
   ~BackendWebGpu() override {
     mnexus_device_.Shutdown();

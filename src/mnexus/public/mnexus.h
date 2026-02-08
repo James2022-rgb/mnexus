@@ -75,17 +75,49 @@ public:
     QueueFamilyDesc& out_desc
   );
 
-  _MNEXUS_VAPI(void, QueueSubmitCommandList,
+  _MNEXUS_VAPI(IntraQueueSubmissionId, QueueSubmitCommandList,
     QueueId const& queue_id,
     ICommandList* command_list
   );
 
-  _MNEXUS_VAPI(void, QueueWriteBuffer,
+  _MNEXUS_VAPI(IntraQueueSubmissionId, QueueWriteBuffer,
     QueueId const& queue_id,
     BufferHandle buffer_handle,
     uint32_t buffer_offset,
     void const* data,
     uint32_t data_size_in_bytes
+  );
+
+  /// Reads data from a GPU buffer into a CPU-accessible destination.
+  ///
+  /// - `buffer_handle`: Source buffer. Must have `kTransferSrc` or `kStorage` usage.
+  /// - `buffer_offset`: Byte offset into the source buffer. Must be 4-byte aligned.
+  /// - `dst`: Destination pointer. Must remain valid until
+  ///   `QueueCompletedValue() >= returned value`.
+  /// - `size_in_bytes`: Number of bytes to read. Must be 4-byte aligned.
+  /// - Returns: Timeline value. Data at `dst` is valid once
+  ///   `QueueCompletedValue() >= returned value`.
+  _MNEXUS_VAPI(IntraQueueSubmissionId, QueueReadBuffer,
+    QueueId const& queue_id,
+    BufferHandle buffer_handle,
+    uint32_t buffer_offset,
+    void* dst,
+    uint32_t size_in_bytes
+  );
+
+  /// Returns the highest completed timeline value on the given queue.
+  /// All operations that returned an `IntraQueueSubmissionId` <= this value
+  /// have completed and their side-effects are visible.
+  _MNEXUS_VAPI(IntraQueueSubmissionId, QueueCompletedValue,
+    QueueId const& queue_id
+  );
+
+  /// Blocks until the given timeline value has completed on the queue.
+  /// Guarantees all operations with `IntraQueueSubmissionId` <= `value`
+  /// are complete when this returns.
+  _MNEXUS_VAPI(void, QueueWait,
+    QueueId const& queue_id,
+    IntraQueueSubmissionId value
   );
 
   // ----------------------------------------------------------------------------------------------

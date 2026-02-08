@@ -42,6 +42,11 @@ wgpu::BufferUsage ToWgpuBufferUsage(mnexus::BufferUsageFlags usage) {
     result |= wgpu::BufferUsage::CopyDst;
   }
 
+  // Auto-add CopySrc for Storage buffers to enable ReadBuffer.
+  if (usage & mnexus::BufferUsageFlagBits::kStorage) {
+    result |= wgpu::BufferUsage::CopySrc;
+  }
+
   return result;
 }
 
