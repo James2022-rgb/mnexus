@@ -179,12 +179,12 @@ public:
   // Queue
   //
 
-  IMPL_VAPI(uint32_t, GetQueueFamilyCount) {
+  IMPL_VAPI(uint32_t, QueueGetFamilyCount) {
     // Only one queue family is supported.
     return 1;
   }
 
-  IMPL_VAPI(MnBool32, GetQueueFamilyDesc,
+  IMPL_VAPI(MnBool32, QueueGetFamilyDesc,
     uint32_t queue_family_index,
     mnexus::QueueFamilyDesc& out_desc
   ) {

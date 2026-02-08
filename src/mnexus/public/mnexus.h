@@ -68,9 +68,9 @@ public:
   // Queue
   //
 
-  _MNEXUS_VAPI(uint32_t, GetQueueFamilyCount);
+  _MNEXUS_VAPI(uint32_t, QueueGetFamilyCount);
 
-  _MNEXUS_VAPI(MnBool32, GetQueueFamilyDesc,
+  _MNEXUS_VAPI(MnBool32, QueueGetFamilyDesc,
     uint32_t queue_family_index,
     QueueFamilyDesc& out_desc
   );
