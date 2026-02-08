@@ -86,4 +86,7 @@ Files follow a consistent header ordering:
 
 - `mbase` - Base utilities (logging, assertions, `SmallVector`, `ArrayProxy`, thread safety annotations, platform detection, `BitFlags`)
 - `thirdparty/dawn` - Google Dawn WebGPU implementation (native platforms only). Tint (SPIR-V to WGSL compiler) from Dawn is also used on Emscripten builds, since browser WebGPU only accepts WGSL
+  - **Warning:** Dawn pulls in ~78 recursive submodules (ANGLE, SwiftShader, Vulkan SDK, Chromium infra, etc.). ANGLE's sub-submodules reference `chrome-internal.googlesource.com` which requires Google-internal credentials and will hang or prompt for auth.
+  - To skip ANGLE (not needed for WebGPU): set `submodule.third_party/angle.update none` in **Dawn's** local git config, then run `GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= git submodule update --recursive`.
+  - Fork (Git client): "Update submodules after checkout" should be OFF to avoid automatic submodule updates on branch switch.
 - `thirdparty/SPIRV-Reflect` - SPIR-V reflection library for extracting bind group layouts and decorations from shader modules
