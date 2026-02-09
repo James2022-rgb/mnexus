@@ -93,10 +93,10 @@ public:
   /// - `buffer_handle`: Source buffer. Must have `kTransferSrc` or `kStorage` usage.
   /// - `buffer_offset`: Byte offset into the source buffer. Must be 4-byte aligned.
   /// - `dst`: Destination pointer. Must remain valid until
-  ///   `QueueCompletedValue() >= returned value`.
+  ///   `QueueGetCompletedValue() >= returned value`.
   /// - `size_in_bytes`: Number of bytes to read. Must be 4-byte aligned.
   /// - Returns: Timeline value. Data at `dst` is valid once
-  ///   `QueueCompletedValue() >= returned value`.
+  ///   `QueueGetCompletedValue() >= returned value`.
   _MNEXUS_VAPI(IntraQueueSubmissionId, QueueReadBuffer,
     QueueId const& queue_id,
     BufferHandle buffer_handle,
@@ -108,7 +108,7 @@ public:
   /// Returns the highest completed timeline value on the given queue.
   /// All operations that returned an `IntraQueueSubmissionId` <= this value
   /// have completed and their side-effects are visible.
-  _MNEXUS_VAPI(IntraQueueSubmissionId, QueueCompletedValue,
+  _MNEXUS_VAPI(IntraQueueSubmissionId, QueueGetCompletedValue,
     QueueId const& queue_id
   );
 

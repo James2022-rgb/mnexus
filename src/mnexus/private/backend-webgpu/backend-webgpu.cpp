@@ -332,7 +332,7 @@ public:
     return id;
   }
 
-  IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueCompletedValue,
+  IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueGetCompletedValue,
     mnexus::QueueId const& queue_id
   ) {
     MBASE_ASSERT_MSG(queue_id.queue_family_index == 0 && queue_id.queue_index == 0, "WebGPU backend only supports a single queue");
