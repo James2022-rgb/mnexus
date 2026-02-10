@@ -33,6 +33,7 @@
 #include "backend-webgpu/include_dawn.h"
 #include "backend-webgpu/types_bridge.h"
 #include "backend-webgpu/backend-webgpu-compute_pipeline.h"
+#include "backend-webgpu/backend-webgpu-binding.h"
 #include "backend-webgpu/backend-webgpu-buffer.h"
 #include "backend-webgpu/backend-webgpu-layout.h"
 #include "backend-webgpu/backend-webgpu-shader.h"
@@ -59,9 +60,11 @@ class MnexusCommandListWebGpu : public mnexus::ICommandList {
 public:
   explicit MnexusCommandListWebGpu(
     ResourceStorage* resource_storage,
+    wgpu::Device wgpu_device,
     wgpu::CommandEncoder wgpu_command_encoder
   ) :
     resource_storage_(resource_storage),
+    wgpu_device_(std::move(wgpu_device)),
     wgpu_command_encoder_(std::move(wgpu_command_encoder))
   {}
   ~MnexusCommandListWebGpu() override = default;
@@ -149,7 +152,8 @@ public:
       current_compute_pass_ = std::move(pass);
     }
 
-    current_compute_pass_->SetPipeline(hot.wgpu_compute_pipeline);
+    current_compute_pipeline_ = hot.wgpu_compute_pipeline;
+    current_compute_pass_->SetPipeline(current_compute_pipeline_);
   }
 
   IMPL_VAPI(void, DispatchCompute,
@@ -158,15 +162,56 @@ public:
     uint32_t workgroup_count_z
   ) {
     MBASE_ASSERT(current_compute_pass_.has_value());
-    
+
+    ResolveAndSetBindGroups(
+      wgpu_device_,
+      *current_compute_pass_,
+      current_compute_pipeline_,
+      bind_group_state_tracker_,
+      resource_storage_->buffers
+    );
+
     current_compute_pass_->DispatchWorkgroups(workgroup_count_x, workgroup_count_y, workgroup_count_z);
+  }
+
+  //
+  // Resource Binding
+  //
+
+  IMPL_VAPI(void, BindUniformBuffer,
+    mnexus::BindingId const& id,
+    mnexus::BufferHandle buffer_handle,
+    uint64_t offset,
+    uint64_t size
+  ) {
+    bind_group_state_tracker_.SetBuffer(
+      id.group, id.binding, id.array_element,
+      mnexus::BindGroupLayoutEntryType::kUniformBuffer,
+      buffer_handle, offset, size
+    );
+  }
+
+  IMPL_VAPI(void, BindStorageBuffer,
+    mnexus::BindingId const& id,
+    mnexus::BufferHandle buffer_handle,
+    uint64_t offset,
+    uint64_t size
+  ) {
+    bind_group_state_tracker_.SetBuffer(
+      id.group, id.binding, id.array_element,
+      mnexus::BindGroupLayoutEntryType::kStorageBuffer,
+      buffer_handle, offset, size
+    );
   }
 
 private:
   ResourceStorage* resource_storage_ = nullptr;
+  wgpu::Device wgpu_device_;
   wgpu::CommandEncoder wgpu_command_encoder_;
 
   std::optional<wgpu::ComputePassEncoder> current_compute_pass_;
+  wgpu::ComputePipeline current_compute_pipeline_;
+  binding::BindGroupStateTracker bind_group_state_tracker_;
 };
 
 class MnexusDeviceWebGpu : public mnexus::IDevice {
@@ -419,7 +464,7 @@ public:
 
     wgpu::CommandEncoder wgpu_command_encoder = wgpu_device_.CreateCommandEncoder();
 
-    return new MnexusCommandListWebGpu(resource_storage_, std::move(wgpu_command_encoder));
+    return new MnexusCommandListWebGpu(resource_storage_, wgpu_device_, std::move(wgpu_command_encoder));
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL DiscardCommandList(mnexus::ICommandList* command_list) override {

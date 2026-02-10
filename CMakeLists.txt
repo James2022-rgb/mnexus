@@ -342,6 +342,8 @@ if(${_enable_backend_webgpu})
   set(_sources_private_backend_webgpu
     ${_private_backend_webgpu_dir}/backend-webgpu.cpp
     ${_private_backend_webgpu_dir}/backend-webgpu.h
+    ${_private_backend_webgpu_dir}/backend-webgpu-binding.cpp
+    ${_private_backend_webgpu_dir}/backend-webgpu-binding.h
     ${_private_backend_webgpu_dir}/backend-webgpu-buffer.cpp
     ${_private_backend_webgpu_dir}/backend-webgpu-buffer.h
     ${_private_backend_webgpu_dir}/backend-webgpu-compute_pipeline.cpp
@@ -370,6 +372,14 @@ set(_sources_private_container
 )
 source_group("Private/Container" FILES ${_sources_private_container})
 
+set(_private_binding_dir "${_private_root_dir}/binding")
+set(_sources_private_binding
+  ${_private_binding_dir}/state_tracker.cpp
+  ${_private_binding_dir}/state_tracker.h
+  ${_private_binding_dir}/cache_key.h
+)
+source_group("Private/Binding" FILES ${_sources_private_binding})
+
 set(_private_shader_dir "${_private_root_dir}/shader")
 set(_sources_private_shader
   ${_private_shader_dir}/reflection.cpp
@@ -383,6 +393,7 @@ target_sources(${TARGET_NAME} PRIVATE
   ${_sources_private_root}
   ${_sources_private_backend_iface}
   ${_sources_private_backend_webgpu}
+  ${_sources_private_binding}
   ${_sources_private_container}
   ${_sources_private_shader}
 )

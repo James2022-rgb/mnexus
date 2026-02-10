@@ -285,6 +285,16 @@ struct MnBindGroupLayoutEntry final {
 };
 
 // ----------------------------------------------------------------------------------------------------
+// BindingId
+
+struct MnBindingId final {
+  uint32_t group = 0;
+  uint32_t binding = 0;
+  uint32_t array_element = 0;
+  // N.B.: See `mnexus::BindingId`.
+};
+
+// ----------------------------------------------------------------------------------------------------
 // ComputePipeline
 //
 
@@ -551,6 +561,17 @@ struct BindGroupLayoutEntry final {
   uint32_t count = 1;
 };
 _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(BindGroupLayoutEntry, MnBindGroupLayoutEntry);
+
+// ----------------------------------------------------------------------------------------------------
+// BindingId
+//
+
+struct BindingId final {
+  uint32_t group = 0;
+  uint32_t binding = 0;
+  uint32_t array_element = 0;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(BindingId, MnBindingId);
 
 // ----------------------------------------------------------------------------------------------------
 // ComputePipeline

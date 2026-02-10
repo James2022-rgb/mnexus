@@ -228,6 +228,24 @@ public:
   );
 
   //
+  // Resource Binding
+  //
+
+  _MNEXUS_VAPI(void, BindUniformBuffer,
+    BindingId const& id,
+    BufferHandle buffer_handle,
+    uint64_t offset,
+    uint64_t size
+  );
+
+  _MNEXUS_VAPI(void, BindStorageBuffer,
+    BindingId const& id,
+    BufferHandle buffer_handle,
+    uint64_t offset,
+    uint64_t size
+  );
+
+  //
   // Transfer
   //
 
