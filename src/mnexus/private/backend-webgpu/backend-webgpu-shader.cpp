@@ -3,17 +3,15 @@
 
 // c++ headers ------------------------------------------
 #include <optional>
-#include <string>
 #include <vector>
-
-// external headers -------------------------------------
-#if MNEXUS_INTERNAL_USE_TINT
-# include <tint/tint.h>
-#endif
 
 // public project headers -------------------------------
 #include "mbase/public/platform.h"
 #include "mbase/public/assert.h"
+
+// project headers --------------------------------------
+#include "backend-webgpu/shader_module.h"
+#include "shader/wgsl.h"
 
 namespace mnexus_backend::webgpu {
 
@@ -22,89 +20,12 @@ namespace mnexus_backend::webgpu {
 //
 
 void InitializeShaderSubsystem() {
-#if MNEXUS_INTERNAL_USE_TINT
-  tint::Initialize();
-#endif
+  shader::InitializeWgslConverter();
 }
 
 void ShutdownShaderSubsystem() {
-#if MNEXUS_INTERNAL_USE_TINT
-  tint::Shutdown();
-#endif
+  shader::ShutdownWgslConverter();
 }
-
-namespace {
-
-// SPIR-V to WGSL conversion via Tint (available on both native Dawn and Emscripten with Tint)
-#if MNEXUS_INTERNAL_USE_TINT
-std::optional<std::string> ConvertSpirvToWgsl(std::vector<uint32_t> const& spirv) {
-  tint::wgsl::writer::Options wgsl_options;
-  tint::Result<std::string> result = tint::SpirvToWgsl(spirv, wgsl_options);
-  if (result != tint::Success) {
-    return std::nullopt;
-  }
-  return std::move(result.Move());
-}
-
-std::optional<std::string> ConvertSpirvToWgsl(uint32_t const* spirv, uint32_t spirv_word_count) {
-  std::vector<uint32_t> spirv_vector(spirv, spirv + spirv_word_count);
-  return ConvertSpirvToWgsl(spirv_vector);
-}
-#endif // MNEXUS_INTERNAL_USE_TINT
-
-wgpu::ShaderModule CreateWgpuShaderModule(
-  wgpu::Device const& wgpu_device,
-  mnexus::ShaderModuleDesc const& shader_module_desc
-) {
-  MBASE_ASSERT_MSG(
-    shader_module_desc.source_language == mnexus::ShaderSourceLanguage::kSpirV,
-    "Only SPIR-V is supported in CreateWgpuShaderModule2"
-  );
-
-  wgpu::ShaderModuleDescriptor wgpu_shader_module_desc {};
-
-#if MNEXUS_INTERNAL_USE_DAWN
-  // Native with Dawn: Can pass SPIR-V directly to Dawn
-  wgpu::ShaderSourceSPIRV shader_source_spirv {};
-
-  if (shader_module_desc.source_language == mnexus::ShaderSourceLanguage::kSpirV) {
-    shader_source_spirv.code = reinterpret_cast<uint32_t const*>(shader_module_desc.code_ptr);
-    shader_source_spirv.codeSize = shader_module_desc.code_size_in_bytes / sizeof(uint32_t);
-
-    wgpu_shader_module_desc.nextInChain = &shader_source_spirv;
-  }
-  else {
-    MBASE_LOG_ERROR("Unsupported shader source language: {}", static_cast<uint32_t>(shader_module_desc.source_language));
-    mbase::Trap();
-  }
-#else // MNEXUS_INTERNAL_USE_DAWN
-  // Emscripten: WGSL only (SPIR-V must be converted to WGSL via Tint)
-  wgpu::ShaderSourceWGSL shader_source_wgsl {};
-  std::string wgsl_storage; // Storage for converted WGSL (must outlive the descriptor)
-
-# if MNEXUS_INTERNAL_USE_TINT
-  // Convert SPIR-V to WGSL using Tint
-  auto const* spirv = reinterpret_cast<uint32_t const*>(shader_module_desc.code_ptr);
-  auto spirv_word_count = shader_module_desc.code_size_in_bytes / sizeof(uint32_t);
-  auto wgsl = ConvertSpirvToWgsl(spirv, spirv_word_count);
-  MBASE_ASSERT_MSG(wgsl.has_value(), "Failed to convert SPIR-V to WGSL");
-  wgsl_storage = std::move(*wgsl);
-
-  shader_source_wgsl.code = wgpu::StringView{ wgsl_storage.data(), wgsl_storage.size() };
-  wgpu_shader_module_desc.nextInChain = &shader_source_wgsl;
-
-  MBASE_LOG_TRACE("Converted SPIR-V to WGSL:\n{}", wgsl_storage);
-# else
-  MBASE_ASSERT_MSG(false, "SPIR-V input requires Tint support");
-  mbase::Trap();
-# endif
-
-#endif // MNEXUS_INTERNAL_USE_DAWN
-
-  return wgpu_device.CreateShaderModule(&wgpu_shader_module_desc);
-}
-
-} // namespace
 
 container::ResourceHandle EmplaceShaderModuleResourcePool(
   ShaderModuleResourcePool& out_pool,

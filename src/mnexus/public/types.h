@@ -23,6 +23,12 @@ using MnBool32 = uint32_t;
 static const MnBool32 MnBoolFalse = 0;
 static const MnBool32 MnBoolTrue  = 1;
 
+struct MnExtent3d final {
+  uint32_t width = 0;
+  uint32_t height = 0;
+  uint32_t depth = 0;
+};
+
 // ----------------------------------------------------------------------------------------------------
 // Capability
 
@@ -234,6 +240,15 @@ enum class MnFormat : uint32_t {
   kASTC_12x12_SRGB_BLOCK,
 };
 
+/// Returns the size in bytes of a single texel (or compressed block) for the given format.
+/// Returns 0 for `kUndefined`.
+uint32_t MnGetFormatSizeInBytes(MnFormat value);
+
+/// Returns the texel block extent for the given format.
+/// For uncompressed formats, returns {1, 1, 1}.
+/// For block-compressed formats (BC, ETC2, ASTC), returns the block dimensions.
+MnExtent3d MnGetFormatTexelBlockExtent(MnFormat value);
+
 // ----------------------------------------------------------------------------------------------------
 // Shader
 //
@@ -319,6 +334,23 @@ struct MnRenderPipelineDesc final {
 namespace mnexus {
 
 // ----------------------------------------------------------------------------------------------------
+// Common Macros
+//
+
+#define _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(cxx_type, c_type)                                 \
+  static_assert(                                                                                \
+    sizeof(cxx_type) == sizeof(c_type) && alignof(cxx_type) == alignof(c_type),                 \
+    "ABI mismatch between " #cxx_type " and " #c_type                                           \
+  );
+
+struct Extent3d final {
+  uint32_t width = 0;
+  uint32_t height = 0;
+  uint32_t depth = 0;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(Extent3d, MnExtent3d);
+
+// ----------------------------------------------------------------------------------------------------
 // Surface
 //
 
@@ -362,16 +394,6 @@ _MNEXUS_DEFINE_TYPESAFE_HANDLE(ShaderModuleHandle);
 _MNEXUS_DEFINE_TYPESAFE_HANDLE(ProgramHandle);
 _MNEXUS_DEFINE_TYPESAFE_HANDLE(ComputePipelineHandle);
 _MNEXUS_DEFINE_TYPESAFE_HANDLE(RenderPipelineHandle);
-
-// ----------------------------------------------------------------------------------------------------
-// Common Macros
-//
-
-#define _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(cxx_type, c_type)                                 \
-  static_assert(                                                                                \
-    sizeof(cxx_type) == sizeof(c_type) && alignof(cxx_type) == alignof(c_type),                 \
-    "ABI mismatch between " #cxx_type " and " #c_type                                           \
-  );
 
 // ----------------------------------------------------------------------------------------------------
 // Queue
@@ -623,6 +645,12 @@ struct ClearValue final {
 std::string_view ToString(MnFormat value);
 std::string_view ToString(BindGroupLayoutEntryType value);
 std::string ToString(TextureUsageFlags value);
+
+inline uint32_t GetFormatSizeInBytes(MnFormat value) { return MnGetFormatSizeInBytes(value); }
+inline Extent3d GetFormatTexelBlockExtent(MnFormat value) {
+  MnExtent3d e = MnGetFormatTexelBlockExtent(value);
+  return Extent3d { e.width, e.height, e.depth };
+}
 
 } // namespace mnexus
 

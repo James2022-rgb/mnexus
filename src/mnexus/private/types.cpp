@@ -8,6 +8,199 @@
 #include "mbase/public/type_util.h"
 #include "mbase/public/algorithm/my_ostream_joiner.h"
 
+// ----------------------------------------------------------------------------------------------------
+// Format queries (C API)
+//
+
+uint32_t MnGetFormatSizeInBytes(MnFormat value) {
+  switch (value) {
+  case MnFormat::kUndefined:                  return 0;
+
+  // 16-bit packed.
+  case MnFormat::kR5G6B5_UNORM_PACK16:        return 2;
+  case MnFormat::kR5G5B5A1_UNORM_PACK16:      return 2;
+
+  // 8-bit per channel.
+  case MnFormat::kR8_UNORM:                   return 1;
+  case MnFormat::kR8G8_UNORM:                 return 2;
+  case MnFormat::kR8G8B8_UNORM:               return 3;
+  case MnFormat::kR8G8B8A8_UNORM:             return 4;
+  case MnFormat::kR8G8B8A8_SRGB:              return 4;
+  case MnFormat::kB8G8R8A8_UNORM:             return 4;
+  case MnFormat::kB8G8R8A8_SRGB:              return 4;
+
+  // 16-bit per channel.
+  case MnFormat::kR16_SFLOAT:                 return 2;
+  case MnFormat::kR16G16_SFLOAT:              return 4;
+  case MnFormat::kR16G16B16_SFLOAT:           return 6;
+  case MnFormat::kR16G16B16A16_UNORM:         return 8;
+  case MnFormat::kR16G16B16A16_UINT:          return 8;
+  case MnFormat::kR16G16B16A16_SFLOAT:        return 8;
+
+  // 32-bit per channel.
+  case MnFormat::kR32_SFLOAT:                 return 4;
+  case MnFormat::kR32G32_SFLOAT:              return 8;
+  case MnFormat::kR32G32B32_SFLOAT:           return 12;
+  case MnFormat::kR32G32B32A32_UINT:          return 16;
+  case MnFormat::kR32G32B32A32_SFLOAT:        return 16;
+
+  // 10/10/10/2 packed.
+  case MnFormat::kA2R10G10B10_UNORM_PACK32:   return 4;
+  case MnFormat::kA2R10G10B10_SNORM_PACK32:   return 4;
+  case MnFormat::kA2R10G10B10_USCALED_PACK32: return 4;
+  case MnFormat::kA2R10G10B10_SSCALED_PACK32: return 4;
+  case MnFormat::kA2R10G10B10_UINT_PACK32:    return 4;
+  case MnFormat::kA2R10G10B10_SINT_PACK32:    return 4;
+  case MnFormat::kA2B10G10R10_UNORM_PACK32:   return 4;
+  case MnFormat::kA2B10G10R10_SNORM_PACK32:   return 4;
+  case MnFormat::kA2B10G10R10_USCALED_PACK32: return 4;
+  case MnFormat::kA2B10G10R10_SSCALED_PACK32: return 4;
+  case MnFormat::kA2B10G10R10_UINT_PACK32:    return 4;
+  case MnFormat::kA2B10G10R10_SINT_PACK32:    return 4;
+
+  // Depth/stencil.
+  case MnFormat::kD16_UNORM:                  return 2;
+  case MnFormat::kD32_SFLOAT:                 return 4;
+  case MnFormat::kD16_UNORM_S8_UINT:          return 3;
+  case MnFormat::kD24_UNORM_S8_UINT:          return 4;
+  case MnFormat::kD32_SFLOAT_S8_UINT:         return 5;
+
+  // BC (block size = bytes per 4x4 block).
+  case MnFormat::kBC1_RGB_UNORM_BLOCK:        return 8;
+  case MnFormat::kBC1_RGB_SRGB_BLOCK:         return 8;
+  case MnFormat::kBC1_RGBA_UNORM_BLOCK:       return 8;
+  case MnFormat::kBC1_RGBA_SRGB_BLOCK:        return 8;
+  case MnFormat::kBC2_UNORM_BLOCK:            return 16;
+  case MnFormat::kBC2_SRGB_BLOCK:             return 16;
+  case MnFormat::kBC3_UNORM_BLOCK:            return 16;
+  case MnFormat::kBC3_SRGB_BLOCK:             return 16;
+  case MnFormat::kBC4_UNORM_BLOCK:            return 8;
+  case MnFormat::kBC4_SNORM_BLOCK:            return 8;
+  case MnFormat::kBC5_UNORM_BLOCK:            return 16;
+  case MnFormat::kBC5_SNORM_BLOCK:            return 16;
+
+  // ETC2/EAC (block size = bytes per 4x4 block).
+  case MnFormat::kETC2_R8G8B8_UNORM_BLOCK:    return 8;
+  case MnFormat::kETC2_R8G8B8_SRGB_BLOCK:     return 8;
+  case MnFormat::kETC2_R8G8B8A1_UNORM_BLOCK:  return 8;
+  case MnFormat::kETC2_R8G8B8A1_SRGB_BLOCK:   return 8;
+  case MnFormat::kETC2_R8G8B8A8_UNORM_BLOCK:  return 16;
+  case MnFormat::kETC2_R8G8B8A8_SRGB_BLOCK:   return 16;
+  case MnFormat::kEAC_R11_UNORM_BLOCK:        return 8;
+  case MnFormat::kEAC_R11_SNORM_BLOCK:        return 8;
+  case MnFormat::kEAC_R11G11_UNORM_BLOCK:     return 16;
+  case MnFormat::kEAC_R11G11_SNORM_BLOCK:     return 16;
+
+  // ASTC (all block sizes are 16 bytes per block).
+  case MnFormat::kASTC_4x4_UNORM_BLOCK:       return 16;
+  case MnFormat::kASTC_4x4_SRGB_BLOCK:        return 16;
+  case MnFormat::kASTC_5x4_UNORM_BLOCK:       return 16;
+  case MnFormat::kASTC_5x4_SRGB_BLOCK:        return 16;
+  case MnFormat::kASTC_5x5_UNORM_BLOCK:       return 16;
+  case MnFormat::kASTC_5x5_SRGB_BLOCK:        return 16;
+  case MnFormat::kASTC_6x5_UNORM_BLOCK:       return 16;
+  case MnFormat::kASTC_6x5_SRGB_BLOCK:        return 16;
+  case MnFormat::kASTC_6x6_UNORM_BLOCK:       return 16;
+  case MnFormat::kASTC_6x6_SRGB_BLOCK:        return 16;
+  case MnFormat::kASTC_8x5_UNORM_BLOCK:       return 16;
+  case MnFormat::kASTC_8x5_SRGB_BLOCK:        return 16;
+  case MnFormat::kASTC_8x6_UNORM_BLOCK:       return 16;
+  case MnFormat::kASTC_8x6_SRGB_BLOCK:        return 16;
+  case MnFormat::kASTC_8x8_UNORM_BLOCK:       return 16;
+  case MnFormat::kASTC_8x8_SRGB_BLOCK:        return 16;
+  case MnFormat::kASTC_10x5_UNORM_BLOCK:      return 16;
+  case MnFormat::kASTC_10x5_SRGB_BLOCK:       return 16;
+  case MnFormat::kASTC_10x6_UNORM_BLOCK:      return 16;
+  case MnFormat::kASTC_10x6_SRGB_BLOCK:       return 16;
+  case MnFormat::kASTC_10x8_UNORM_BLOCK:      return 16;
+  case MnFormat::kASTC_10x8_SRGB_BLOCK:       return 16;
+  case MnFormat::kASTC_10x10_UNORM_BLOCK:     return 16;
+  case MnFormat::kASTC_10x10_SRGB_BLOCK:      return 16;
+  case MnFormat::kASTC_12x10_UNORM_BLOCK:     return 16;
+  case MnFormat::kASTC_12x10_SRGB_BLOCK:      return 16;
+  case MnFormat::kASTC_12x12_UNORM_BLOCK:     return 16;
+  case MnFormat::kASTC_12x12_SRGB_BLOCK:      return 16;
+  }
+  return 0;
+}
+
+MnExtent3d MnGetFormatTexelBlockExtent(MnFormat value) {
+  switch (value) {
+  // BC formats: 4x4 blocks.
+  case MnFormat::kBC1_RGB_UNORM_BLOCK:
+  case MnFormat::kBC1_RGB_SRGB_BLOCK:
+  case MnFormat::kBC1_RGBA_UNORM_BLOCK:
+  case MnFormat::kBC1_RGBA_SRGB_BLOCK:
+  case MnFormat::kBC2_UNORM_BLOCK:
+  case MnFormat::kBC2_SRGB_BLOCK:
+  case MnFormat::kBC3_UNORM_BLOCK:
+  case MnFormat::kBC3_SRGB_BLOCK:
+  case MnFormat::kBC4_UNORM_BLOCK:
+  case MnFormat::kBC4_SNORM_BLOCK:
+  case MnFormat::kBC5_UNORM_BLOCK:
+  case MnFormat::kBC5_SNORM_BLOCK:
+  // ETC2/EAC formats: 4x4 blocks.
+  case MnFormat::kETC2_R8G8B8_UNORM_BLOCK:
+  case MnFormat::kETC2_R8G8B8_SRGB_BLOCK:
+  case MnFormat::kETC2_R8G8B8A1_UNORM_BLOCK:
+  case MnFormat::kETC2_R8G8B8A1_SRGB_BLOCK:
+  case MnFormat::kETC2_R8G8B8A8_UNORM_BLOCK:
+  case MnFormat::kETC2_R8G8B8A8_SRGB_BLOCK:
+  case MnFormat::kEAC_R11_UNORM_BLOCK:
+  case MnFormat::kEAC_R11_SNORM_BLOCK:
+  case MnFormat::kEAC_R11G11_UNORM_BLOCK:
+  case MnFormat::kEAC_R11G11_SNORM_BLOCK:
+  // ASTC 4x4.
+  case MnFormat::kASTC_4x4_UNORM_BLOCK:
+  case MnFormat::kASTC_4x4_SRGB_BLOCK:
+    return { 4, 4, 1 };
+
+  case MnFormat::kASTC_5x4_UNORM_BLOCK:
+  case MnFormat::kASTC_5x4_SRGB_BLOCK:
+    return { 5, 4, 1 };
+  case MnFormat::kASTC_5x5_UNORM_BLOCK:
+  case MnFormat::kASTC_5x5_SRGB_BLOCK:
+    return { 5, 5, 1 };
+  case MnFormat::kASTC_6x5_UNORM_BLOCK:
+  case MnFormat::kASTC_6x5_SRGB_BLOCK:
+    return { 6, 5, 1 };
+  case MnFormat::kASTC_6x6_UNORM_BLOCK:
+  case MnFormat::kASTC_6x6_SRGB_BLOCK:
+    return { 6, 6, 1 };
+  case MnFormat::kASTC_8x5_UNORM_BLOCK:
+  case MnFormat::kASTC_8x5_SRGB_BLOCK:
+    return { 8, 5, 1 };
+  case MnFormat::kASTC_8x6_UNORM_BLOCK:
+  case MnFormat::kASTC_8x6_SRGB_BLOCK:
+    return { 8, 6, 1 };
+  case MnFormat::kASTC_8x8_UNORM_BLOCK:
+  case MnFormat::kASTC_8x8_SRGB_BLOCK:
+    return { 8, 8, 1 };
+  case MnFormat::kASTC_10x5_UNORM_BLOCK:
+  case MnFormat::kASTC_10x5_SRGB_BLOCK:
+    return { 10, 5, 1 };
+  case MnFormat::kASTC_10x6_UNORM_BLOCK:
+  case MnFormat::kASTC_10x6_SRGB_BLOCK:
+    return { 10, 6, 1 };
+  case MnFormat::kASTC_10x8_UNORM_BLOCK:
+  case MnFormat::kASTC_10x8_SRGB_BLOCK:
+    return { 10, 8, 1 };
+  case MnFormat::kASTC_10x10_UNORM_BLOCK:
+  case MnFormat::kASTC_10x10_SRGB_BLOCK:
+    return { 10, 10, 1 };
+  case MnFormat::kASTC_12x10_UNORM_BLOCK:
+  case MnFormat::kASTC_12x10_SRGB_BLOCK:
+    return { 12, 10, 1 };
+  case MnFormat::kASTC_12x12_UNORM_BLOCK:
+  case MnFormat::kASTC_12x12_SRGB_BLOCK:
+    return { 12, 12, 1 };
+
+  // All uncompressed formats: 1x1x1.
+  default:
+    return { 1, 1, 1 };
+  }
+}
+
 namespace mnexus {
 
 //

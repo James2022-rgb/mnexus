@@ -255,6 +255,14 @@ public:
     ClearValue const& clear_value
   );
 
+  _MNEXUS_VAPI(void, CopyBufferToTexture,
+    BufferHandle src_buffer_handle,
+    uint32_t src_buffer_offset,
+    TextureHandle dst_texture_handle,
+    TextureSubresourceRange const& dst_subresource_range,
+    Extent3d const& copy_extent
+  );
+
 protected:
   ICommandList() = default;
 };

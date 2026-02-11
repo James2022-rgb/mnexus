@@ -30,14 +30,15 @@
 // project headers --------------------------------------
 #include "container/generational_pool.h"
 
-#include "backend-webgpu/include_dawn.h"
-#include "backend-webgpu/types_bridge.h"
 #include "backend-webgpu/backend-webgpu-compute_pipeline.h"
 #include "backend-webgpu/backend-webgpu-binding.h"
 #include "backend-webgpu/backend-webgpu-buffer.h"
 #include "backend-webgpu/backend-webgpu-layout.h"
 #include "backend-webgpu/backend-webgpu-shader.h"
 #include "backend-webgpu/backend-webgpu-texture.h"
+#include "backend-webgpu/include_dawn.h"
+#include "backend-webgpu/types_bridge.h"
+#include "backend-webgpu/builtin_shader.h"
 
 namespace mnexus_backend::webgpu {
 
@@ -137,6 +138,55 @@ public:
 
     wgpu::RenderPassEncoder pass = wgpu_command_encoder_.BeginRenderPass(&pass_desc);
     pass.End();
+  }
+
+  IMPL_VAPI(void, CopyBufferToTexture,
+    mnexus::BufferHandle src_buffer_handle,
+    uint32_t src_buffer_offset,
+    mnexus::TextureHandle dst_texture_handle,
+    mnexus::TextureSubresourceRange const& dst_subresource_range,
+    mnexus::Extent3d const& copy_extent
+  ) {
+    auto src_buffer_pool_handle = container::ResourceHandle::FromU64(src_buffer_handle.Get());
+    auto [src_buffer_hot, src_buffer_lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(src_buffer_pool_handle);
+
+    auto dst_texture_pool_handle = container::ResourceHandle::FromU64(dst_texture_handle.Get());
+    auto [dst_texture_hot, dst_texture_cold, dst_texture_lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(dst_texture_pool_handle);
+
+    // Swapchain texture hot handle can be null if not acquired this frame.
+    if (!dst_texture_hot.wgpu_texture) {
+      return;
+    }
+
+    uint32_t const format_size = MnGetFormatSizeInBytes(dst_texture_cold.desc.format);
+    MnExtent3d const block_extent = MnGetFormatTexelBlockExtent(dst_texture_cold.desc.format);
+
+    // Compute bytesPerRow: number of bytes per row of texel blocks, aligned to 256.
+    uint32_t const blocks_per_row = (copy_extent.width + block_extent.width - 1) / block_extent.width;
+    uint32_t const bytes_per_row_unaligned = blocks_per_row * format_size;
+    uint32_t const bytes_per_row = (bytes_per_row_unaligned + 255) & ~uint32_t(255);
+
+    uint32_t const rows_per_image = (copy_extent.height + block_extent.height - 1) / block_extent.height;
+
+    wgpu::TexelCopyBufferInfo src {};
+    src.buffer = src_buffer_hot.wgpu_buffer;
+    src.layout.offset = src_buffer_offset;
+    src.layout.bytesPerRow = bytes_per_row;
+    src.layout.rowsPerImage = rows_per_image;
+
+    wgpu::TexelCopyTextureInfo dst {};
+    dst.texture = dst_texture_hot.wgpu_texture;
+    dst.mipLevel = dst_subresource_range.base_mip_level;
+    dst.origin = { 0, 0, dst_subresource_range.base_array_layer };
+    dst.aspect = wgpu::TextureAspect::All;
+
+    wgpu::Extent3D wgpu_copy_size {
+      copy_extent.width,
+      copy_extent.height,
+      copy_extent.depth,
+    };
+
+    wgpu_command_encoder_.CopyBufferToTexture(&src, &dst, &wgpu_copy_size);
   }
 
   //
@@ -690,6 +740,7 @@ public:
     );
 
     InitializeShaderSubsystem();
+    builtin_shader::Initialize(wgpu_device_);
   }
 
   void Shutdown() {
@@ -707,6 +758,7 @@ public:
       pending_readbacks_.clear();
     }
 
+    builtin_shader::Shutdown();
     ShutdownShaderSubsystem();
     resource_storage_ = nullptr;
     wgpu_device_ = nullptr;

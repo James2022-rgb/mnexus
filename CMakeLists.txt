@@ -354,7 +354,11 @@ if(${_enable_backend_webgpu})
     ${_private_backend_webgpu_dir}/backend-webgpu-shader.h
     ${_private_backend_webgpu_dir}/backend-webgpu-texture.cpp
     ${_private_backend_webgpu_dir}/backend-webgpu-texture.h
+    ${_private_backend_webgpu_dir}/builtin_shader.cpp
+    ${_private_backend_webgpu_dir}/builtin_shader.h
     ${_private_backend_webgpu_dir}/include_dawn.h
+    ${_private_backend_webgpu_dir}/shader_module.cpp
+    ${_private_backend_webgpu_dir}/shader_module.h
     ${_private_backend_webgpu_dir}/types_bridge.cpp
     ${_private_backend_webgpu_dir}/types_bridge.h
     ${_private_backend_webgpu_dir}/webgpu_cpp_print.h
@@ -384,6 +388,8 @@ set(_private_shader_dir "${_private_root_dir}/shader")
 set(_sources_private_shader
   ${_private_shader_dir}/reflection.cpp
   ${_private_shader_dir}/reflection.h
+  ${_private_shader_dir}/wgsl.cpp
+  ${_private_shader_dir}/wgsl.h
 )
 source_group("Private/Shader" FILES ${_sources_private_shader})
 
