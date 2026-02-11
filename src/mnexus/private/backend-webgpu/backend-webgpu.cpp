@@ -39,6 +39,7 @@
 #include "backend-webgpu/include_dawn.h"
 #include "backend-webgpu/types_bridge.h"
 #include "backend-webgpu/builtin_shader.h"
+#include "backend-webgpu/buffer_row_repack.h"
 
 namespace mnexus_backend::webgpu {
 
@@ -80,10 +81,7 @@ public:
   //
 
   IMPL_VAPI(void, End) {
-    if (current_compute_pass_.has_value()) {
-      current_compute_pass_->End();
-      current_compute_pass_ = std::nullopt;
-    }
+    this->EndCurrentComputePass();
   }
 
   //
@@ -147,6 +145,9 @@ public:
     mnexus::TextureSubresourceRange const& dst_subresource_range,
     mnexus::Extent3d const& copy_extent
   ) {
+    // Transfer commands must not be recorded inside a compute pass.
+    this->EndCurrentComputePass();
+
     auto src_buffer_pool_handle = container::ResourceHandle::FromU64(src_buffer_handle.Get());
     auto [src_buffer_hot, src_buffer_lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(src_buffer_pool_handle);
 
@@ -164,15 +165,9 @@ public:
     // Compute bytesPerRow: number of bytes per row of texel blocks, aligned to 256.
     uint32_t const blocks_per_row = (copy_extent.width + block_extent.width - 1) / block_extent.width;
     uint32_t const bytes_per_row_unaligned = blocks_per_row * format_size;
-    uint32_t const bytes_per_row = (bytes_per_row_unaligned + 255) & ~uint32_t(255);
+    uint32_t const bytes_per_row_aligned = (bytes_per_row_unaligned + 255) & ~uint32_t(255);
 
     uint32_t const rows_per_image = (copy_extent.height + block_extent.height - 1) / block_extent.height;
-
-    wgpu::TexelCopyBufferInfo src {};
-    src.buffer = src_buffer_hot.wgpu_buffer;
-    src.layout.offset = src_buffer_offset;
-    src.layout.bytesPerRow = bytes_per_row;
-    src.layout.rowsPerImage = rows_per_image;
 
     wgpu::TexelCopyTextureInfo dst {};
     dst.texture = dst_texture_hot.wgpu_texture;
@@ -186,7 +181,51 @@ public:
       copy_extent.depth,
     };
 
-    wgpu_command_encoder_.CopyBufferToTexture(&src, &dst, &wgpu_copy_size);
+    if (bytes_per_row_unaligned == bytes_per_row_aligned) {
+      // Fast path: source data is already 256-byte aligned.
+      wgpu::TexelCopyBufferInfo src {};
+      src.buffer = src_buffer_hot.wgpu_buffer;
+      src.layout.offset = src_buffer_offset;
+      src.layout.bytesPerRow = bytes_per_row_aligned;
+      src.layout.rowsPerImage = rows_per_image;
+      wgpu_command_encoder_.CopyBufferToTexture(&src, &dst, &wgpu_copy_size);
+    } else if (bytes_per_row_unaligned % 4 == 0) {
+      // Compute repack path: use internal compute shader to repack rows into an aligned temp buffer.
+      wgpu::Buffer temp_buffer = buffer_row_repack::RepackRows(
+        wgpu_device_,
+        wgpu_command_encoder_,
+        src_buffer_hot.wgpu_buffer,
+        src_buffer_offset,
+        bytes_per_row_unaligned,
+        bytes_per_row_aligned,
+        rows_per_image
+      );
+      wgpu::TexelCopyBufferInfo src {};
+      src.buffer = temp_buffer;
+      src.layout.offset = 0;
+      src.layout.bytesPerRow = bytes_per_row_aligned;
+      src.layout.rowsPerImage = rows_per_image;
+      wgpu_command_encoder_.CopyBufferToTexture(&src, &dst, &wgpu_copy_size);
+    } else {
+      // Row-by-row fallback for formats where bytes_per_row is not 4-byte aligned (e.g. R8, RG8, R16).
+      for (uint32_t row = 0; row < rows_per_image; ++row) {
+        wgpu::TexelCopyBufferInfo src {};
+        src.buffer = src_buffer_hot.wgpu_buffer;
+        src.layout.offset = src_buffer_offset + row * bytes_per_row_unaligned;
+        src.layout.bytesPerRow = bytes_per_row_aligned;
+        src.layout.rowsPerImage = block_extent.height;
+
+        wgpu::TexelCopyTextureInfo row_dst = dst;
+        row_dst.origin.y = row * block_extent.height;
+
+        wgpu::Extent3D row_copy_size {
+          copy_extent.width,
+          block_extent.height,
+          copy_extent.depth,
+        };
+        wgpu_command_encoder_.CopyBufferToTexture(&src, &row_dst, &row_copy_size);
+      }
+    }
   }
 
   //
@@ -255,6 +294,13 @@ public:
   }
 
 private:
+  void EndCurrentComputePass() {
+    if (current_compute_pass_.has_value()) {
+      current_compute_pass_->End();
+      current_compute_pass_ = std::nullopt;
+    }
+  }
+
   ResourceStorage* resource_storage_ = nullptr;
   wgpu::Device wgpu_device_;
   wgpu::CommandEncoder wgpu_command_encoder_;
@@ -741,6 +787,7 @@ public:
 
     InitializeShaderSubsystem();
     builtin_shader::Initialize(wgpu_device_);
+    buffer_row_repack::Initialize(wgpu_device_);
   }
 
   void Shutdown() {
@@ -758,6 +805,7 @@ public:
       pending_readbacks_.clear();
     }
 
+    buffer_row_repack::Shutdown();
     builtin_shader::Shutdown();
     ShutdownShaderSubsystem();
     resource_storage_ = nullptr;

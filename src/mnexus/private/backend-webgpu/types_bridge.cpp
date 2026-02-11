@@ -47,6 +47,11 @@ wgpu::BufferUsage ToWgpuBufferUsage(mnexus::BufferUsageFlags usage) {
     result |= wgpu::BufferUsage::CopySrc;
   }
 
+  // Auto-add Storage for TransferSrc buffers to enable internal compute-based row repacking.
+  if (usage & mnexus::BufferUsageFlagBits::kTransferSrc) {
+    result |= wgpu::BufferUsage::Storage;
+  }
+
   return result;
 }
 

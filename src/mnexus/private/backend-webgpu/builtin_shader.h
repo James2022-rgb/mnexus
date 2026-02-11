@@ -10,5 +10,6 @@ void Shutdown();
 
 wgpu::ShaderModule GetFullScreenQuadVs();
 wgpu::ShaderModule GetBlit2dColorFs();
+wgpu::ShaderModule GetBufferRepackRowsCs();
 
 } // namespace mnexus_backend::webgpu::builtin_shader

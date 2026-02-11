@@ -354,6 +354,8 @@ if(${_enable_backend_webgpu})
     ${_private_backend_webgpu_dir}/backend-webgpu-shader.h
     ${_private_backend_webgpu_dir}/backend-webgpu-texture.cpp
     ${_private_backend_webgpu_dir}/backend-webgpu-texture.h
+    ${_private_backend_webgpu_dir}/buffer_row_repack.cpp
+    ${_private_backend_webgpu_dir}/buffer_row_repack.h
     ${_private_backend_webgpu_dir}/builtin_shader.cpp
     ${_private_backend_webgpu_dir}/builtin_shader.h
     ${_private_backend_webgpu_dir}/include_dawn.h

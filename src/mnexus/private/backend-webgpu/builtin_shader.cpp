@@ -7,6 +7,7 @@
 
 // project headers --------------------------------------
 #include "backend-webgpu/shader_module.h"
+#include "builtin_shader/buffer_repack_rows_spv.h"
 #include "builtin_shader/full_screen_quad_spv.h"
 #include "builtin_shader/blit_2d_color_spv.h"
 
@@ -14,6 +15,7 @@ namespace mnexus_backend::webgpu::builtin_shader {
 
 namespace {
 
+wgpu::ShaderModule s_buffer_repack_rows_cs;
 wgpu::ShaderModule s_full_screen_quad_vs;
 wgpu::ShaderModule s_blit_2d_color_fs;
 
@@ -32,6 +34,13 @@ wgpu::ShaderModule CreateFromSpirv(
 } // namespace
 
 void Initialize(wgpu::Device const& wgpu_device) {
+  s_buffer_repack_rows_cs = CreateFromSpirv(
+    wgpu_device,
+    ::builtin_shader::kBufferRepackRowsSpv,
+    ::builtin_shader::kBufferRepackRowsSpvSize
+  );
+  MBASE_ASSERT_MSG(bool(s_buffer_repack_rows_cs), "Failed to create builtin shader: buffer_repack_rows");
+
   s_full_screen_quad_vs = CreateFromSpirv(
     wgpu_device,
     ::builtin_shader::kFullScreenQuadSpv,
@@ -48,6 +57,7 @@ void Initialize(wgpu::Device const& wgpu_device) {
 }
 
 void Shutdown() {
+  s_buffer_repack_rows_cs = nullptr;
   s_blit_2d_color_fs = nullptr;
   s_full_screen_quad_vs = nullptr;
 }
@@ -60,6 +70,11 @@ wgpu::ShaderModule GetFullScreenQuadVs() {
 wgpu::ShaderModule GetBlit2dColorFs() {
   MBASE_ASSERT_MSG(bool(s_blit_2d_color_fs), "Builtin shaders not initialized");
   return s_blit_2d_color_fs;
+}
+
+wgpu::ShaderModule GetBufferRepackRowsCs() {
+  MBASE_ASSERT_MSG(bool(s_buffer_repack_rows_cs), "Builtin shaders not initialized");
+  return s_buffer_repack_rows_cs;
 }
 
 } // namespace mnexus_backend::webgpu::builtin_shader
