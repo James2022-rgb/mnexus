@@ -72,6 +72,17 @@ wgpu::TextureUsage ToWgpuTextureUsage(mnexus::TextureUsageFlags usage) {
   if (usage & mnexus::TextureUsageFlagBits::kTransferDst) {
     result |= wgpu::TextureUsage::CopyDst;
   }
+
+  // Auto-add TextureBinding for TransferSrc textures to enable internal blit sampling.
+  if (usage & mnexus::TextureUsageFlagBits::kTransferSrc) {
+    result |= wgpu::TextureUsage::TextureBinding;
+  }
+
+  // Auto-add RenderAttachment for TransferDst textures to enable render-pipeline-based BlitTexture.
+  if (usage & mnexus::TextureUsageFlagBits::kTransferDst) {
+    result |= wgpu::TextureUsage::RenderAttachment;
+  }
+
   return result;
 }
 

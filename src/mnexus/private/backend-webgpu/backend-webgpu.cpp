@@ -39,6 +39,7 @@
 #include "backend-webgpu/include_dawn.h"
 #include "backend-webgpu/types_bridge.h"
 #include "backend-webgpu/builtin_shader.h"
+#include "backend-webgpu/blit_texture.h"
 #include "backend-webgpu/buffer_row_repack.h"
 
 namespace mnexus_backend::webgpu {
@@ -226,6 +227,46 @@ public:
         wgpu_command_encoder_.CopyBufferToTexture(&src, &row_dst, &row_copy_size);
       }
     }
+  }
+
+  IMPL_VAPI(void, BlitTexture,
+    mnexus::TextureHandle src_texture_handle,
+    mnexus::TextureSubresourceRange const& src_subresource_range,
+    mnexus::Offset3d const& src_offset,
+    mnexus::Extent3d const& src_extent,
+    mnexus::TextureHandle dst_texture_handle,
+    mnexus::TextureSubresourceRange const& dst_subresource_range,
+    mnexus::Offset3d const& dst_offset,
+    mnexus::Extent3d const& dst_extent,
+    mnexus::Filter filter
+  ) {
+    // Internal compute pass conflicts with user's; end any active one.
+    this->EndCurrentComputePass();
+
+    auto src_pool_handle = container::ResourceHandle::FromU64(src_texture_handle.Get());
+    auto [src_hot, src_cold, src_lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(src_pool_handle);
+
+    auto dst_pool_handle = container::ResourceHandle::FromU64(dst_texture_handle.Get());
+    auto [dst_hot, dst_cold, dst_lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(dst_pool_handle);
+
+    if (!src_hot.wgpu_texture || !dst_hot.wgpu_texture) {
+      return;
+    }
+
+    wgpu::TextureFormat const src_format = ToWgpuTextureFormat(src_cold.desc.format);
+    wgpu::TextureFormat const dst_format = ToWgpuTextureFormat(dst_cold.desc.format);
+
+    blit_texture::BlitTexture2D(
+      wgpu_device_,
+      wgpu_command_encoder_,
+      src_hot.wgpu_texture, src_format, src_subresource_range,
+      src_offset.x, src_offset.y,
+      src_extent.width, src_extent.height,
+      dst_hot.wgpu_texture, dst_format, dst_subresource_range,
+      dst_offset.x, dst_offset.y,
+      dst_extent.width, dst_extent.height,
+      filter
+    );
   }
 
   //
@@ -788,6 +829,7 @@ public:
     InitializeShaderSubsystem();
     builtin_shader::Initialize(wgpu_device_);
     buffer_row_repack::Initialize(wgpu_device_);
+    blit_texture::Initialize(wgpu_device_);
   }
 
   void Shutdown() {
@@ -805,6 +847,7 @@ public:
       pending_readbacks_.clear();
     }
 
+    blit_texture::Shutdown();
     buffer_row_repack::Shutdown();
     builtin_shader::Shutdown();
     ShutdownShaderSubsystem();

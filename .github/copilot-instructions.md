@@ -15,6 +15,8 @@ e.g. `()`, `:`, `,`, `0-9`
 
 mnexus is a CMake-based C++23 static library. It is typically built as part of a parent project (e.g., wentos) rather than standalone.
 
+When adding source files to `CMakeLists.txt`, list them in alphabetical order within each `set(...)` block.
+
 Key CMake options:
 - `MNEXUS_ENABLE_BACKEND_WGPU` - Enable WebGPU backend (default: ON)
 - `MNEXUS_ENABLE_DAWN` - Enable Dawn for WebGPU on native platforms (default: ON, ignored on Emscripten)

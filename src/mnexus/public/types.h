@@ -29,6 +29,12 @@ struct MnExtent3d final {
   uint32_t depth = 0;
 };
 
+struct MnOffset3d final {
+  uint32_t x = 0;
+  uint32_t y = 0;
+  uint32_t z = 0;
+};
+
 // ----------------------------------------------------------------------------------------------------
 // Capability
 
@@ -124,6 +130,12 @@ enum MnTextureDimension {
   MnTextureDimension3D = 2,
   MnTextureDimensionCube = 3,
   MnTextureDimensionForce32 = 0x7FFFFFFF,
+};
+
+enum MnFilter {
+  MnFilterNearest = 0,
+  MnFilterLinear  = 1,
+  MnFilterForce32 = 0x7FFFFFFF,
 };
 
 struct MnTextureSubresourceRange final {
@@ -350,6 +362,13 @@ struct Extent3d final {
 };
 _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(Extent3d, MnExtent3d);
 
+struct Offset3d final {
+  uint32_t x = 0;
+  uint32_t y = 0;
+  uint32_t z = 0;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(Offset3d, MnOffset3d);
+
 // ----------------------------------------------------------------------------------------------------
 // Surface
 //
@@ -511,6 +530,11 @@ enum class TextureDimension : uint32_t {
   k2D    = MnTextureDimension2D,
   k3D    = MnTextureDimension3D,
   kCube  = MnTextureDimensionCube,
+};
+
+enum class Filter : uint32_t {
+  kNearest = MnFilterNearest,
+  kLinear  = MnFilterLinear,
 };
 
 struct TextureSubresourceRange final {

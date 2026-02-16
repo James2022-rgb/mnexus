@@ -263,6 +263,18 @@ public:
     Extent3d const& copy_extent
   );
 
+  _MNEXUS_VAPI(void, BlitTexture,
+    TextureHandle src_texture_handle,
+    TextureSubresourceRange const& src_subresource_range,
+    Offset3d const& src_offset,
+    Extent3d const& src_extent,
+    TextureHandle dst_texture_handle,
+    TextureSubresourceRange const& dst_subresource_range,
+    Offset3d const& dst_offset,
+    Extent3d const& dst_extent,
+    Filter filter
+  );
+
 protected:
   ICommandList() = default;
 };
