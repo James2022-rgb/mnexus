@@ -34,6 +34,7 @@
 #include "backend-webgpu/backend-webgpu-binding.h"
 #include "backend-webgpu/backend-webgpu-buffer.h"
 #include "backend-webgpu/backend-webgpu-layout.h"
+#include "backend-webgpu/backend-webgpu-render_pipeline.h"
 #include "backend-webgpu/backend-webgpu-shader.h"
 #include "backend-webgpu/backend-webgpu-texture.h"
 #include "backend-webgpu/include_dawn.h"
@@ -41,6 +42,9 @@
 #include "backend-webgpu/builtin_shader.h"
 #include "backend-webgpu/blit_texture.h"
 #include "backend-webgpu/buffer_row_repack.h"
+
+#include "pipeline/render_pipeline_cache.h"
+#include "pipeline/render_pipeline_state_tracker.h"
 
 namespace mnexus_backend::webgpu {
 
@@ -51,6 +55,8 @@ struct ResourceStorage final {
 
   BufferResourcePool buffers;
   TextureResourcePool textures;
+
+  pipeline::TRenderPipelineCache<wgpu::RenderPipeline> render_pipeline_cache;
 
   std::mutex swapchain_texture_mutex; // Protects `TextureHot` and `TextureCold`.
   container::ResourceHandle swapchain_texture_handle = container::ResourceHandle::Null(); // Not protected; set only during initialization.
@@ -82,6 +88,7 @@ public:
   //
 
   IMPL_VAPI(void, End) {
+    this->EndCurrentRenderPass();
     this->EndCurrentComputePass();
   }
 
@@ -146,7 +153,8 @@ public:
     mnexus::TextureSubresourceRange const& dst_subresource_range,
     mnexus::Extent3d const& copy_extent
   ) {
-    // Transfer commands must not be recorded inside a compute pass.
+    // Transfer commands must not be recorded inside any pass.
+    this->EndCurrentRenderPass();
     this->EndCurrentComputePass();
 
     auto src_buffer_pool_handle = container::ResourceHandle::FromU64(src_buffer_handle.Get());
@@ -240,7 +248,8 @@ public:
     mnexus::Extent3d const& dst_extent,
     mnexus::Filter filter
   ) {
-    // Internal compute pass conflicts with user's; end any active one.
+    // Internal pass conflicts with user's; end any active one.
+    this->EndCurrentRenderPass();
     this->EndCurrentComputePass();
 
     auto src_pool_handle = container::ResourceHandle::FromU64(src_texture_handle.Get());
@@ -273,7 +282,10 @@ public:
   // Compute
   //
 
-  IMPL_VAPI(void, BindComputePipeline, mnexus::ComputePipelineHandle compute_pipeline_handle) {
+  IMPL_VAPI(void, BindExplicitComputePipeline, mnexus::ComputePipelineHandle compute_pipeline_handle) {
+    // End any active render pass (mutual exclusion).
+    this->EndCurrentRenderPass();
+
     auto pool_handle = container::ResourceHandle::FromU64(compute_pipeline_handle.Get());
     auto [hot, lock] = resource_storage_->compute_pipelines.GetHotConstRefWithSharedLockGuard(pool_handle);
 
@@ -334,7 +346,266 @@ public:
     );
   }
 
+  //
+  // Explicit Pipeline Binding
+  //
+
+  IMPL_VAPI(void, BindExplicitRenderPipeline, mnexus::RenderPipelineHandle render_pipeline_handle) {
+    (void)render_pipeline_handle;
+    // Stub: explicit render pipeline binding is Phase 2.
+  }
+
+  //
+  // Render Pass
+  //
+
+  IMPL_VAPI(void, BeginRenderPass, mnexus::RenderPassDesc const& desc) {
+    // End any active compute pass (mutual exclusion).
+    this->EndCurrentComputePass();
+    // End any active render pass.
+    this->EndCurrentRenderPass();
+
+    // Build wgpu render pass descriptor.
+    mbase::SmallVector<wgpu::RenderPassColorAttachment, 4> wgpu_color_attachments;
+    wgpu_color_attachments.reserve(desc.color_attachments.size());
+
+    mbase::SmallVector<MnFormat, 4> color_formats;
+    color_formats.reserve(desc.color_attachments.size());
+
+    for (uint32_t i = 0; i < desc.color_attachments.size(); ++i) {
+      mnexus::ColorAttachmentDesc const& att = desc.color_attachments[i];
+
+      auto pool_handle = container::ResourceHandle::FromU64(att.texture.Get());
+      auto [hot, cold, lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(pool_handle);
+
+      if (!hot.wgpu_texture) {
+        continue;
+      }
+
+      wgpu::TextureFormat const wgpu_format = ToWgpuTextureFormat(cold.desc.format);
+      color_formats.emplace_back(cold.desc.format);
+
+      wgpu::TextureViewDescriptor view_desc = MakeWgpuTextureViewDesc(
+        wgpu_format,
+        wgpu::TextureViewDimension::e2D,
+        att.subresource_range,
+        wgpu::TextureAspect::All
+      );
+      wgpu::TextureView view = hot.wgpu_texture.CreateView(&view_desc);
+
+      wgpu_color_attachments.emplace_back(
+        wgpu::RenderPassColorAttachment {
+          .view = view,
+          .resolveTarget = nullptr,
+          .loadOp = ToWgpuLoadOp(att.load_op),
+          .storeOp = ToWgpuStoreOp(att.store_op),
+          .clearValue = {
+            att.clear_value.color.r,
+            att.clear_value.color.g,
+            att.clear_value.color.b,
+            att.clear_value.color.a,
+          },
+        }
+      );
+    }
+
+    MnFormat depth_stencil_format = MnFormat::kUndefined;
+
+    // Depth/stencil attachment (Phase 3; for now just pass through if provided).
+    wgpu::RenderPassDepthStencilAttachment wgpu_depth_stencil {};
+    bool has_depth_stencil = false;
+    if (desc.depth_stencil_attachment != nullptr) {
+      auto const& ds = *desc.depth_stencil_attachment;
+      auto pool_handle = container::ResourceHandle::FromU64(ds.texture.Get());
+      auto [hot, cold, lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(pool_handle);
+
+      if (hot.wgpu_texture) {
+        wgpu::TextureFormat const wgpu_format = ToWgpuTextureFormat(cold.desc.format);
+        depth_stencil_format = cold.desc.format;
+
+        wgpu::TextureViewDescriptor view_desc = MakeWgpuTextureViewDesc(
+          wgpu_format,
+          wgpu::TextureViewDimension::e2D,
+          ds.subresource_range,
+          wgpu::TextureAspect::All
+        );
+        wgpu::TextureView view = hot.wgpu_texture.CreateView(&view_desc);
+
+        wgpu_depth_stencil.view = view;
+        wgpu_depth_stencil.depthLoadOp = ToWgpuLoadOp(ds.depth_load_op);
+        wgpu_depth_stencil.depthStoreOp = ToWgpuStoreOp(ds.depth_store_op);
+        wgpu_depth_stencil.depthClearValue = ds.depth_clear_value;
+        wgpu_depth_stencil.stencilLoadOp = ToWgpuLoadOp(ds.stencil_load_op);
+        wgpu_depth_stencil.stencilStoreOp = ToWgpuStoreOp(ds.stencil_store_op);
+        wgpu_depth_stencil.stencilClearValue = ds.stencil_clear_value;
+        has_depth_stencil = true;
+      }
+    }
+
+    wgpu::RenderPassDescriptor pass_desc {
+      .colorAttachmentCount = wgpu_color_attachments.size(),
+      .colorAttachments = wgpu_color_attachments.data(),
+      .depthStencilAttachment = has_depth_stencil ? &wgpu_depth_stencil : nullptr,
+    };
+
+    current_render_pass_ = wgpu_command_encoder_.BeginRenderPass(&pass_desc);
+
+    // Configure state tracker with render target info.
+    render_pipeline_state_tracker_.SetRenderTargetConfig(
+      std::move(color_formats),
+      depth_stencil_format,
+      1 // sample_count (always 1 for now)
+    );
+  }
+
+  IMPL_VAPI(void, EndRenderPass) {
+    this->EndCurrentRenderPass();
+  }
+
+  //
+  // Render State (auto-generation path)
+  //
+
+  IMPL_VAPI(void, BindRenderProgram, mnexus::ProgramHandle program_handle) {
+    render_pipeline_state_tracker_.SetProgram(program_handle);
+  }
+
+  IMPL_VAPI(void, SetVertexInputLayout,
+    mnexus::container::ArrayProxy<mnexus::VertexInputBindingDesc const> bindings,
+    mnexus::container::ArrayProxy<mnexus::VertexInputAttributeDesc const> attributes
+  ) {
+    mbase::SmallVector<mnexus::VertexInputBindingDesc, 4> bindings_vec;
+    bindings_vec.reserve(bindings.size());
+    for (uint32_t i = 0; i < bindings.size(); ++i) {
+      bindings_vec.emplace_back(bindings[i]);
+    }
+
+    mbase::SmallVector<mnexus::VertexInputAttributeDesc, 8> attributes_vec;
+    attributes_vec.reserve(attributes.size());
+    for (uint32_t i = 0; i < attributes.size(); ++i) {
+      attributes_vec.emplace_back(attributes[i]);
+    }
+
+    render_pipeline_state_tracker_.SetVertexInputLayout(
+      std::move(bindings_vec),
+      std::move(attributes_vec)
+    );
+  }
+
+  IMPL_VAPI(void, BindVertexBuffer,
+    uint32_t binding,
+    mnexus::BufferHandle buffer_handle,
+    uint64_t offset
+  ) {
+    // Store vertex buffer binding for use at draw time.
+    if (binding >= bound_vertex_buffers_.size()) {
+      bound_vertex_buffers_.resize(binding + 1);
+    }
+    bound_vertex_buffers_[binding] = BoundVertexBuffer {
+      .buffer_handle = buffer_handle,
+      .offset = offset,
+    };
+  }
+
+  IMPL_VAPI(void, BindIndexBuffer,
+    mnexus::BufferHandle buffer_handle,
+    uint64_t offset,
+    mnexus::IndexType index_type
+  ) {
+    bound_index_buffer_ = BoundIndexBuffer {
+      .buffer_handle = buffer_handle,
+      .offset = offset,
+      .index_type = index_type,
+    };
+  }
+
+  IMPL_VAPI(void, SetPrimitiveTopology, mnexus::PrimitiveTopology topology) {
+    render_pipeline_state_tracker_.SetPrimitiveTopology(topology);
+  }
+
+  IMPL_VAPI(void, SetPolygonMode, mnexus::PolygonMode mode) {
+    // WebGPU only supports Fill. Assert on non-Fill values.
+    MBASE_ASSERT_MSG(
+      mode == mnexus::PolygonMode::kFill,
+      "WebGPU backend only supports PolygonMode::kFill"
+    );
+    render_pipeline_state_tracker_.SetPolygonMode(mode);
+  }
+
+  IMPL_VAPI(void, SetCullMode, mnexus::CullMode cull_mode) {
+    render_pipeline_state_tracker_.SetCullMode(cull_mode);
+  }
+
+  IMPL_VAPI(void, SetFrontFace, mnexus::FrontFace front_face) {
+    render_pipeline_state_tracker_.SetFrontFace(front_face);
+  }
+
+  //
+  // Draw
+  //
+
+  IMPL_VAPI(void, Draw,
+    uint32_t vertex_count,
+    uint32_t instance_count,
+    uint32_t first_vertex,
+    uint32_t first_instance
+  ) {
+    MBASE_ASSERT_MSG(current_render_pass_.has_value(), "Draw called outside of a render pass");
+
+    this->ResolveRenderPipelineAndBindState();
+
+    current_render_pass_->Draw(vertex_count, instance_count, first_vertex, first_instance);
+  }
+
+  IMPL_VAPI(void, DrawIndexed,
+    uint32_t index_count,
+    uint32_t instance_count,
+    uint32_t first_index,
+    int32_t vertex_offset,
+    uint32_t first_instance
+  ) {
+    MBASE_ASSERT_MSG(current_render_pass_.has_value(), "DrawIndexed called outside of a render pass");
+
+    this->ResolveRenderPipelineAndBindState();
+
+    current_render_pass_->DrawIndexed(index_count, instance_count, first_index, vertex_offset, first_instance);
+  }
+
+  //
+  // Viewport / Scissor
+  //
+
+  IMPL_VAPI(void, SetViewport,
+    float x, float y, float width, float height,
+    float min_depth, float max_depth
+  ) {
+    MBASE_ASSERT_MSG(current_render_pass_.has_value(), "SetViewport called outside of a render pass");
+    current_render_pass_->SetViewport(x, y, width, height, min_depth, max_depth);
+  }
+
+  IMPL_VAPI(void, SetScissor,
+    int32_t x, int32_t y, uint32_t width, uint32_t height
+  ) {
+    MBASE_ASSERT_MSG(current_render_pass_.has_value(), "SetScissor called outside of a render pass");
+    current_render_pass_->SetScissorRect(
+      static_cast<uint32_t>(x),
+      static_cast<uint32_t>(y),
+      width,
+      height
+    );
+  }
+
 private:
+  struct BoundVertexBuffer {
+    mnexus::BufferHandle buffer_handle;
+    uint64_t offset = 0;
+  };
+
+  struct BoundIndexBuffer {
+    mnexus::BufferHandle buffer_handle;
+    uint64_t offset = 0;
+    mnexus::IndexType index_type = mnexus::IndexType::kUint32;
+  };
   void EndCurrentComputePass() {
     if (current_compute_pass_.has_value()) {
       current_compute_pass_->End();
@@ -342,12 +613,85 @@ private:
     }
   }
 
+  void EndCurrentRenderPass() {
+    if (current_render_pass_.has_value()) {
+      current_render_pass_->End();
+      current_render_pass_ = std::nullopt;
+    }
+  }
+
+  /// Resolves the render pipeline from the state tracker, binds it and any dirty bind groups/vertex buffers.
+  void ResolveRenderPipelineAndBindState() {
+    MBASE_ASSERT(current_render_pass_.has_value());
+
+    if (render_pipeline_state_tracker_.IsDirty()) {
+      pipeline::RenderPipelineCacheKey key = render_pipeline_state_tracker_.BuildCacheKey();
+      render_pipeline_state_tracker_.MarkClean();
+
+      wgpu::RenderPipeline* cached = resource_storage_->render_pipeline_cache.Find(key);
+      if (cached != nullptr) {
+        current_render_pipeline_ = *cached;
+      } else {
+        wgpu::RenderPipeline new_pipeline = CreateWgpuRenderPipelineFromCacheKey(
+          wgpu_device_,
+          key,
+          resource_storage_->programs,
+          resource_storage_->shader_modules
+        );
+        current_render_pipeline_ = new_pipeline;
+        resource_storage_->render_pipeline_cache.Insert(std::move(key), std::move(new_pipeline));
+      }
+
+      current_render_pass_->SetPipeline(current_render_pipeline_);
+    }
+
+    // Resolve and set bind groups.
+    ResolveAndSetBindGroups(
+      wgpu_device_,
+      *current_render_pass_,
+      current_render_pipeline_,
+      bind_group_state_tracker_,
+      resource_storage_->buffers
+    );
+
+    // Set vertex buffers.
+    for (size_t i = 0; i < bound_vertex_buffers_.size(); ++i) {
+      auto const& vb = bound_vertex_buffers_[i];
+      if (!vb.buffer_handle.IsValid()) {
+        continue;
+      }
+      auto pool_handle = container::ResourceHandle::FromU64(vb.buffer_handle.Get());
+      auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
+      current_render_pass_->SetVertexBuffer(static_cast<uint32_t>(i), hot.wgpu_buffer, vb.offset);
+    }
+
+    // Set index buffer (if bound).
+    if (bound_index_buffer_.buffer_handle.IsValid()) {
+      auto pool_handle = container::ResourceHandle::FromU64(bound_index_buffer_.buffer_handle.Get());
+      auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
+      current_render_pass_->SetIndexBuffer(
+        hot.wgpu_buffer,
+        ToWgpuIndexFormat(bound_index_buffer_.index_type),
+        bound_index_buffer_.offset
+      );
+    }
+  }
+
   ResourceStorage* resource_storage_ = nullptr;
   wgpu::Device wgpu_device_;
   wgpu::CommandEncoder wgpu_command_encoder_;
 
+  // Compute pass state.
   std::optional<wgpu::ComputePassEncoder> current_compute_pass_;
   wgpu::ComputePipeline current_compute_pipeline_;
+
+  // Render pass state.
+  std::optional<wgpu::RenderPassEncoder> current_render_pass_;
+  wgpu::RenderPipeline current_render_pipeline_;
+  pipeline::RenderPipelineStateTracker render_pipeline_state_tracker_;
+  mbase::SmallVector<BoundVertexBuffer, 4> bound_vertex_buffers_;
+  BoundIndexBuffer bound_index_buffer_;
+
   binding::BindGroupStateTracker bind_group_state_tracker_;
 };
 

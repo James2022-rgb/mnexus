@@ -217,10 +217,16 @@ public:
   _MNEXUS_VAPI(void, End);
 
   //
+  // Explicit Pipeline Binding
+  //
+
+  _MNEXUS_VAPI(void, BindExplicitComputePipeline, ComputePipelineHandle compute_pipeline_handle);
+  _MNEXUS_VAPI(void, BindExplicitRenderPipeline, RenderPipelineHandle render_pipeline_handle);
+
+  //
   // Compute
   //
 
-  _MNEXUS_VAPI(void, BindComputePipeline, ComputePipelineHandle compute_pipeline_handle);
   _MNEXUS_VAPI(void, DispatchCompute,
     uint32_t workgroup_count_x,
     uint32_t workgroup_count_y,
@@ -243,6 +249,73 @@ public:
     BufferHandle buffer_handle,
     uint64_t offset,
     uint64_t size
+  );
+
+  //
+  // Render Pass
+  //
+
+  _MNEXUS_VAPI(void, BeginRenderPass, RenderPassDesc const& desc);
+  _MNEXUS_VAPI(void, EndRenderPass);
+
+  //
+  // Render State (auto-generation path)
+  //
+
+  _MNEXUS_VAPI(void, BindRenderProgram, ProgramHandle program_handle);
+
+  _MNEXUS_VAPI(void, SetVertexInputLayout,
+    container::ArrayProxy<VertexInputBindingDesc const> bindings,
+    container::ArrayProxy<VertexInputAttributeDesc const> attributes
+  );
+
+  _MNEXUS_VAPI(void, BindVertexBuffer,
+    uint32_t binding,
+    BufferHandle buffer_handle,
+    uint64_t offset
+  );
+
+  _MNEXUS_VAPI(void, BindIndexBuffer,
+    BufferHandle buffer_handle,
+    uint64_t offset,
+    IndexType index_type
+  );
+
+  _MNEXUS_VAPI(void, SetPrimitiveTopology, PrimitiveTopology topology);
+  _MNEXUS_VAPI(void, SetPolygonMode, PolygonMode mode);
+  _MNEXUS_VAPI(void, SetCullMode, CullMode cull_mode);
+  _MNEXUS_VAPI(void, SetFrontFace, FrontFace front_face);
+
+  //
+  // Draw (triggers implicit PSO resolution in auto-generation mode)
+  //
+
+  _MNEXUS_VAPI(void, Draw,
+    uint32_t vertex_count,
+    uint32_t instance_count,
+    uint32_t first_vertex,
+    uint32_t first_instance
+  );
+
+  _MNEXUS_VAPI(void, DrawIndexed,
+    uint32_t index_count,
+    uint32_t instance_count,
+    uint32_t first_index,
+    int32_t vertex_offset,
+    uint32_t first_instance
+  );
+
+  //
+  // Viewport / Scissor
+  //
+
+  _MNEXUS_VAPI(void, SetViewport,
+    float x, float y, float width, float height,
+    float min_depth, float max_depth
+  );
+
+  _MNEXUS_VAPI(void, SetScissor,
+    int32_t x, int32_t y, uint32_t width, uint32_t height
   );
 
   //

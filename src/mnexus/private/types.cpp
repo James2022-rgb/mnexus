@@ -420,4 +420,132 @@ std::string ToString(TextureUsageFlags value) {
   return DescribeFlagBits(value, kTable);
 }
 
+std::string_view ToString(PrimitiveTopology value) {
+  switch (value) {
+  case PrimitiveTopology::kPointList:     return "PointList";
+  case PrimitiveTopology::kLineList:      return "LineList";
+  case PrimitiveTopology::kLineStrip:     return "LineStrip";
+  case PrimitiveTopology::kTriangleList:  return "TriangleList";
+  case PrimitiveTopology::kTriangleStrip: return "TriangleStrip";
+  }
+  return "N/A";
+}
+
+std::string_view ToString(PolygonMode value) {
+  switch (value) {
+  case PolygonMode::kFill:  return "Fill";
+  case PolygonMode::kLine:  return "Line";
+  case PolygonMode::kPoint: return "Point";
+  }
+  return "N/A";
+}
+
+std::string_view ToString(CullMode value) {
+  switch (value) {
+  case CullMode::kNone:  return "None";
+  case CullMode::kFront: return "Front";
+  case CullMode::kBack:  return "Back";
+  }
+  return "N/A";
+}
+
+std::string_view ToString(FrontFace value) {
+  switch (value) {
+  case FrontFace::kCounterClockwise: return "CounterClockwise";
+  case FrontFace::kClockwise:        return "Clockwise";
+  }
+  return "N/A";
+}
+
+std::string_view ToString(CompareOp value) {
+  switch (value) {
+  case CompareOp::kNever:        return "Never";
+  case CompareOp::kLess:         return "Less";
+  case CompareOp::kEqual:        return "Equal";
+  case CompareOp::kLessEqual:    return "LessEqual";
+  case CompareOp::kGreater:      return "Greater";
+  case CompareOp::kNotEqual:     return "NotEqual";
+  case CompareOp::kGreaterEqual: return "GreaterEqual";
+  case CompareOp::kAlways:       return "Always";
+  }
+  return "N/A";
+}
+
+std::string_view ToString(StencilOp value) {
+  switch (value) {
+  case StencilOp::kKeep:           return "Keep";
+  case StencilOp::kZero:           return "Zero";
+  case StencilOp::kReplace:        return "Replace";
+  case StencilOp::kIncrementClamp: return "IncrementClamp";
+  case StencilOp::kDecrementClamp: return "DecrementClamp";
+  case StencilOp::kInvert:         return "Invert";
+  case StencilOp::kIncrementWrap:  return "IncrementWrap";
+  case StencilOp::kDecrementWrap:  return "DecrementWrap";
+  }
+  return "N/A";
+}
+
+std::string_view ToString(BlendFactor value) {
+  switch (value) {
+  case BlendFactor::kZero:             return "Zero";
+  case BlendFactor::kOne:              return "One";
+  case BlendFactor::kSrcColor:         return "SrcColor";
+  case BlendFactor::kOneMinusSrcColor: return "OneMinusSrcColor";
+  case BlendFactor::kSrcAlpha:         return "SrcAlpha";
+  case BlendFactor::kOneMinusSrcAlpha: return "OneMinusSrcAlpha";
+  case BlendFactor::kDstColor:         return "DstColor";
+  case BlendFactor::kOneMinusDstColor: return "OneMinusDstColor";
+  case BlendFactor::kDstAlpha:         return "DstAlpha";
+  case BlendFactor::kOneMinusDstAlpha: return "OneMinusDstAlpha";
+  case BlendFactor::kSrcAlphaSaturated: return "SrcAlphaSaturated";
+  case BlendFactor::kConstant:         return "Constant";
+  case BlendFactor::kOneMinusConstant: return "OneMinusConstant";
+  }
+  return "N/A";
+}
+
+std::string_view ToString(BlendOp value) {
+  switch (value) {
+  case BlendOp::kAdd:             return "Add";
+  case BlendOp::kSubtract:        return "Subtract";
+  case BlendOp::kReverseSubtract: return "ReverseSubtract";
+  case BlendOp::kMin:             return "Min";
+  case BlendOp::kMax:             return "Max";
+  }
+  return "N/A";
+}
+
+std::string_view ToString(IndexType value) {
+  switch (value) {
+  case IndexType::kUint16: return "Uint16";
+  case IndexType::kUint32: return "Uint32";
+  }
+  return "N/A";
+}
+
+std::string_view ToString(VertexStepMode value) {
+  switch (value) {
+  case VertexStepMode::kVertex:   return "Vertex";
+  case VertexStepMode::kInstance: return "Instance";
+  }
+  return "N/A";
+}
+
+std::string_view ToString(LoadOp value) {
+  switch (value) {
+  case LoadOp::kLoad:     return "Load";
+  case LoadOp::kClear:    return "Clear";
+  case LoadOp::kDontCare: return "DontCare";
+  }
+  return "N/A";
+}
+
+std::string_view ToString(StoreOp value) {
+  switch (value) {
+  case StoreOp::kStore:    return "Store";
+  case StoreOp::kDontCare: return "DontCare";
+  }
+  return "N/A";
+}
+
 } // namespace mnexus

@@ -18,4 +18,18 @@ wgpu::TextureDimension ToWgpuTextureDimension(mnexus::TextureDimension value);
 wgpu::TextureFormat ToWgpuTextureFormat(MnFormat value);
 MnFormat FromWgpuTextureFormat(wgpu::TextureFormat value);
 
+// Render state conversions.
+wgpu::PrimitiveTopology ToWgpuPrimitiveTopology(mnexus::PrimitiveTopology value);
+wgpu::CullMode ToWgpuCullMode(mnexus::CullMode value);
+wgpu::FrontFace ToWgpuFrontFace(mnexus::FrontFace value);
+wgpu::IndexFormat ToWgpuIndexFormat(mnexus::IndexType value);
+wgpu::VertexStepMode ToWgpuVertexStepMode(mnexus::VertexStepMode value);
+wgpu::VertexFormat ToWgpuVertexFormat(MnFormat value);
+wgpu::LoadOp ToWgpuLoadOp(mnexus::LoadOp value);
+wgpu::StoreOp ToWgpuStoreOp(mnexus::StoreOp value);
+wgpu::CompareFunction ToWgpuCompareFunction(mnexus::CompareOp value);
+wgpu::BlendFactor ToWgpuBlendFactor(mnexus::BlendFactor value);
+wgpu::BlendOperation ToWgpuBlendOperation(mnexus::BlendOp value);
+wgpu::ColorWriteMask ToWgpuColorWriteMask(mnexus::ColorWriteMask value);
+
 } // namespace mnexus_backend::webgpu

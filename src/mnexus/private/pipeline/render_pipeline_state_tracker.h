@@ -1,0 +1,84 @@
+#pragma once
+
+// c++ headers ------------------------------------------
+#include <cstdint>
+
+// public project headers -------------------------------
+#include "mbase/public/container.h"
+
+#include "mnexus/public/types.h"
+
+// project headers --------------------------------------
+#include "pipeline/render_pipeline_cache_key.h"
+#include "pipeline/render_pipeline_fixed_function.h"
+
+namespace pipeline {
+
+/// Tracks mutable render pipeline state on a command list.
+/// When any state changes, the dirty flag is set. At Draw time, if dirty,
+/// `BuildCacheKey()` assembles a `RenderPipelineCacheKey` for pipeline lookup/creation.
+class RenderPipelineStateTracker final {
+public:
+  // -----------------------------------------------------------------------
+  // Program
+
+  void SetProgram(mnexus::ProgramHandle program);
+
+  // -----------------------------------------------------------------------
+  // Vertex input
+
+  void SetVertexInputLayout(
+    mbase::SmallVector<mnexus::VertexInputBindingDesc, 4> bindings,
+    mbase::SmallVector<mnexus::VertexInputAttributeDesc, 8> attributes
+  );
+
+  // -----------------------------------------------------------------------
+  // Fixed-function state
+
+  void SetPrimitiveTopology(mnexus::PrimitiveTopology topology);
+  void SetPolygonMode(mnexus::PolygonMode mode);
+  void SetCullMode(mnexus::CullMode cull_mode);
+  void SetFrontFace(mnexus::FrontFace front_face);
+
+  // -----------------------------------------------------------------------
+  // Render target configuration (called by backend at BeginRenderPass)
+
+  void SetRenderTargetConfig(
+    mbase::SmallVector<MnFormat, 4> color_formats,
+    MnFormat depth_stencil_format,
+    uint32_t sample_count
+  );
+
+  // -----------------------------------------------------------------------
+  // Dirty tracking
+
+  [[nodiscard]] bool IsDirty() const { return dirty_; }
+
+  void MarkClean() { dirty_ = false; }
+
+  // -----------------------------------------------------------------------
+  // Cache key assembly
+
+  [[nodiscard]] RenderPipelineCacheKey BuildCacheKey() const;
+
+  // -----------------------------------------------------------------------
+  // Reset
+
+  void Reset();
+
+private:
+  bool dirty_ = true;
+
+  mnexus::ProgramHandle program_;
+  PerDrawFixedFunctionStaticState per_draw_;
+  mbase::SmallVector<PerAttachmentFixedFunctionStaticState, 4> per_attachment_;
+  mbase::SmallVector<mnexus::VertexInputBindingDesc, 4> vertex_bindings_;
+  mbase::SmallVector<mnexus::VertexInputAttributeDesc, 8> vertex_attributes_;
+
+  // Render target configuration (set at BeginRenderPass).
+  mbase::SmallVector<MnFormat, 4> color_formats_;
+  MnFormat depth_stencil_format_ = MnFormat::kUndefined;
+  uint32_t sample_count_ = 1;
+};
+
+} // namespace pipeline

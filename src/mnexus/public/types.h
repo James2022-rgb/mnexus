@@ -40,6 +40,8 @@ struct MnOffset3d final {
 
 struct MnDeviceCapability final {
   MnBool32 vertex_shader_storage_write = MnBoolFalse;
+  MnBool32 polygon_mode_line = MnBoolFalse;
+  MnBool32 polygon_mode_point = MnBoolFalse;
   // N.B.: See `mnexus::DeviceCapability`.
 };
 
@@ -341,6 +343,183 @@ struct MnRenderPipelineDesc final {
   // N.B.: See `mnexus::RenderPipelineDesc`.
 };
 
+// ----------------------------------------------------------------------------------------------------
+// Render State Enums (C layer)
+//
+
+enum MnPrimitiveTopology : uint8_t {
+  MnPrimitiveTopologyPointList = 0,
+  MnPrimitiveTopologyLineList,
+  MnPrimitiveTopologyLineStrip,
+  MnPrimitiveTopologyTriangleList,
+  MnPrimitiveTopologyTriangleStrip,
+};
+
+enum MnPolygonMode : uint8_t {
+  MnPolygonModeFill = 0,
+  MnPolygonModeLine,
+  MnPolygonModePoint,
+};
+
+enum MnCullMode : uint8_t {
+  MnCullModeNone = 0,
+  MnCullModeFront,
+  MnCullModeBack,
+};
+
+enum MnFrontFace : uint8_t {
+  MnFrontFaceCounterClockwise = 0,
+  MnFrontFaceClockwise,
+};
+
+enum MnCompareOp : uint8_t {
+  MnCompareOpNever = 0,
+  MnCompareOpLess,
+  MnCompareOpEqual,
+  MnCompareOpLessEqual,
+  MnCompareOpGreater,
+  MnCompareOpNotEqual,
+  MnCompareOpGreaterEqual,
+  MnCompareOpAlways,
+};
+
+enum MnStencilOp : uint8_t {
+  MnStencilOpKeep = 0,
+  MnStencilOpZero,
+  MnStencilOpReplace,
+  MnStencilOpIncrementClamp,
+  MnStencilOpDecrementClamp,
+  MnStencilOpInvert,
+  MnStencilOpIncrementWrap,
+  MnStencilOpDecrementWrap,
+};
+
+enum MnBlendFactor : uint8_t {
+  MnBlendFactorZero = 0,
+  MnBlendFactorOne,
+  MnBlendFactorSrcColor,
+  MnBlendFactorOneMinusSrcColor,
+  MnBlendFactorSrcAlpha,
+  MnBlendFactorOneMinusSrcAlpha,
+  MnBlendFactorDstColor,
+  MnBlendFactorOneMinusDstColor,
+  MnBlendFactorDstAlpha,
+  MnBlendFactorOneMinusDstAlpha,
+  MnBlendFactorSrcAlphaSaturated,
+  MnBlendFactorConstant,
+  MnBlendFactorOneMinusConstant,
+};
+
+enum MnBlendOp : uint8_t {
+  MnBlendOpAdd = 0,
+  MnBlendOpSubtract,
+  MnBlendOpReverseSubtract,
+  MnBlendOpMin,
+  MnBlendOpMax,
+};
+
+enum MnIndexType : uint8_t {
+  MnIndexTypeUint16 = 0,
+  MnIndexTypeUint32,
+};
+
+enum MnVertexStepMode : uint8_t {
+  MnVertexStepModeVertex = 0,
+  MnVertexStepModeInstance,
+};
+
+enum MnLoadOp : uint8_t {
+  MnLoadOpLoad = 0,
+  MnLoadOpClear,
+  MnLoadOpDontCare,
+};
+
+enum MnStoreOp : uint8_t {
+  MnStoreOpStore = 0,
+  MnStoreOpDontCare,
+};
+
+enum MnColorWriteMaskBits : uint8_t {
+  MnColorWriteMaskBitNone  = 0,
+  MnColorWriteMaskBitRed   = 1 << 0,
+  MnColorWriteMaskBitGreen = 1 << 1,
+  MnColorWriteMaskBitBlue  = 1 << 2,
+  MnColorWriteMaskBitAlpha = 1 << 3,
+  MnColorWriteMaskBitAll   = 0x0F,
+};
+typedef uint8_t MnColorWriteMaskFlags;
+
+// ----------------------------------------------------------------------------------------------------
+// Vertex Input (C layer)
+//
+
+struct MnVertexInputBindingDesc final {
+  uint32_t binding = 0;
+  uint32_t stride = 0;
+  MnVertexStepMode step_mode = MnVertexStepModeVertex;
+  // N.B.: See `mnexus::VertexInputBindingDesc`.
+};
+
+struct MnVertexInputAttributeDesc final {
+  uint32_t location = 0;
+  uint32_t binding = 0;
+  MnFormat format = MnFormat::kUndefined;
+  uint32_t offset = 0;
+  // N.B.: See `mnexus::VertexInputAttributeDesc`.
+};
+
+// ----------------------------------------------------------------------------------------------------
+// Clear Value (C layer)
+//
+
+struct MnClearValue final {
+  union {
+    struct {
+      float r;
+      float g;
+      float b;
+      float a;
+    } color;
+    struct {
+      float depth;
+      uint32_t stencil;
+    } depth_stencil;
+  };
+  // N.B.: See `mnexus::ClearValue`.
+};
+
+// ----------------------------------------------------------------------------------------------------
+// Render Pass (C layer)
+//
+
+struct MnColorAttachmentDesc final {
+  MnResourceHandle texture = MnInvalidResourceHandle;
+  MnTextureSubresourceRange subresource_range;
+  MnLoadOp load_op = MnLoadOpClear;
+  MnStoreOp store_op = MnStoreOpStore;
+  MnClearValue clear_value = {};
+  // N.B.: See `mnexus::ColorAttachmentDesc`.
+};
+
+struct MnDepthStencilAttachmentDesc final {
+  MnResourceHandle texture = MnInvalidResourceHandle;
+  MnTextureSubresourceRange subresource_range;
+  MnLoadOp depth_load_op = MnLoadOpClear;
+  MnStoreOp depth_store_op = MnStoreOpStore;
+  float depth_clear_value = 1.0f;
+  MnLoadOp stencil_load_op = MnLoadOpDontCare;
+  MnStoreOp stencil_store_op = MnStoreOpDontCare;
+  uint32_t stencil_clear_value = 0;
+  // N.B.: See `mnexus::DepthStencilAttachmentDesc`.
+};
+
+struct MnRenderPassDesc final {
+  MnColorAttachmentDesc const* color_attachments = nullptr;
+  uint32_t color_attachment_count = 0;
+  MnDepthStencilAttachmentDesc const* depth_stencil_attachment = nullptr;
+  // N.B.: See `mnexus::RenderPassDesc`.
+};
+
 #if defined(__cplusplus)
 
 namespace mnexus {
@@ -395,9 +574,12 @@ struct SurfaceSourceDesc final {
 // Capability
 
 struct DeviceCapability final {
-  bool vertex_shader_storage_write = false;
+  MnBool32 vertex_shader_storage_write = MnBoolFalse;
+  MnBool32 polygon_mode_line = MnBoolFalse;
+  MnBool32 polygon_mode_point = MnBoolFalse;
   // N.B.: See `MnDeviceCapability`.
 };
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(DeviceCapability, MnDeviceCapability);
 
 // ----------------------------------------------------------------------------------------------------
 // Handles
@@ -640,7 +822,132 @@ struct RenderPipelineDesc final {
 _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(RenderPipelineDesc, MnRenderPipelineDesc);
 
 // ----------------------------------------------------------------------------------------------------
-// Misc
+// Render State Enums
+//
+
+enum class PrimitiveTopology : uint8_t {
+  kPointList     = MnPrimitiveTopologyPointList,
+  kLineList      = MnPrimitiveTopologyLineList,
+  kLineStrip     = MnPrimitiveTopologyLineStrip,
+  kTriangleList  = MnPrimitiveTopologyTriangleList,
+  kTriangleStrip = MnPrimitiveTopologyTriangleStrip,
+};
+
+enum class PolygonMode : uint8_t {
+  kFill  = MnPolygonModeFill,
+  kLine  = MnPolygonModeLine,
+  kPoint = MnPolygonModePoint,
+};
+
+enum class CullMode : uint8_t {
+  kNone  = MnCullModeNone,
+  kFront = MnCullModeFront,
+  kBack  = MnCullModeBack,
+};
+
+enum class FrontFace : uint8_t {
+  kCounterClockwise = MnFrontFaceCounterClockwise,
+  kClockwise        = MnFrontFaceClockwise,
+};
+
+enum class CompareOp : uint8_t {
+  kNever        = MnCompareOpNever,
+  kLess         = MnCompareOpLess,
+  kEqual        = MnCompareOpEqual,
+  kLessEqual    = MnCompareOpLessEqual,
+  kGreater      = MnCompareOpGreater,
+  kNotEqual     = MnCompareOpNotEqual,
+  kGreaterEqual = MnCompareOpGreaterEqual,
+  kAlways       = MnCompareOpAlways,
+};
+
+enum class StencilOp : uint8_t {
+  kKeep           = MnStencilOpKeep,
+  kZero           = MnStencilOpZero,
+  kReplace        = MnStencilOpReplace,
+  kIncrementClamp = MnStencilOpIncrementClamp,
+  kDecrementClamp = MnStencilOpDecrementClamp,
+  kInvert         = MnStencilOpInvert,
+  kIncrementWrap  = MnStencilOpIncrementWrap,
+  kDecrementWrap  = MnStencilOpDecrementWrap,
+};
+
+enum class BlendFactor : uint8_t {
+  kZero             = MnBlendFactorZero,
+  kOne              = MnBlendFactorOne,
+  kSrcColor         = MnBlendFactorSrcColor,
+  kOneMinusSrcColor = MnBlendFactorOneMinusSrcColor,
+  kSrcAlpha         = MnBlendFactorSrcAlpha,
+  kOneMinusSrcAlpha = MnBlendFactorOneMinusSrcAlpha,
+  kDstColor         = MnBlendFactorDstColor,
+  kOneMinusDstColor = MnBlendFactorOneMinusDstColor,
+  kDstAlpha         = MnBlendFactorDstAlpha,
+  kOneMinusDstAlpha = MnBlendFactorOneMinusDstAlpha,
+  kSrcAlphaSaturated = MnBlendFactorSrcAlphaSaturated,
+  kConstant         = MnBlendFactorConstant,
+  kOneMinusConstant = MnBlendFactorOneMinusConstant,
+};
+
+enum class BlendOp : uint8_t {
+  kAdd             = MnBlendOpAdd,
+  kSubtract        = MnBlendOpSubtract,
+  kReverseSubtract = MnBlendOpReverseSubtract,
+  kMin             = MnBlendOpMin,
+  kMax             = MnBlendOpMax,
+};
+
+enum class IndexType : uint8_t {
+  kUint16 = MnIndexTypeUint16,
+  kUint32 = MnIndexTypeUint32,
+};
+
+enum class VertexStepMode : uint8_t {
+  kVertex   = MnVertexStepModeVertex,
+  kInstance = MnVertexStepModeInstance,
+};
+
+enum class LoadOp : uint8_t {
+  kLoad     = MnLoadOpLoad,
+  kClear    = MnLoadOpClear,
+  kDontCare = MnLoadOpDontCare,
+};
+
+enum class StoreOp : uint8_t {
+  kStore    = MnStoreOpStore,
+  kDontCare = MnStoreOpDontCare,
+};
+
+enum class ColorWriteMask : uint8_t {
+  kNone  = MnColorWriteMaskBitNone,
+  kRed   = MnColorWriteMaskBitRed,
+  kGreen = MnColorWriteMaskBitGreen,
+  kBlue  = MnColorWriteMaskBitBlue,
+  kAlpha = MnColorWriteMaskBitAlpha,
+  kAll   = MnColorWriteMaskBitAll,
+};
+MBASE_DEFINE_ENUM_CLASS_BITFLAGS_OPERATORS(ColorWriteMask);
+
+// ----------------------------------------------------------------------------------------------------
+// Vertex Input
+//
+
+struct VertexInputBindingDesc final {
+  uint32_t binding = 0;
+  uint32_t stride = 0;
+  VertexStepMode step_mode = VertexStepMode::kVertex;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(VertexInputBindingDesc, MnVertexInputBindingDesc);
+
+struct VertexInputAttributeDesc final {
+  uint32_t location = 0;
+  uint32_t binding = 0;
+  MnFormat format = MnFormat::kUndefined;
+  uint32_t offset = 0;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(VertexInputAttributeDesc, MnVertexInputAttributeDesc);
+
+// ----------------------------------------------------------------------------------------------------
+// Clear Value
 //
 
 struct ClearValue final {
@@ -657,6 +964,38 @@ struct ClearValue final {
     } depth_stencil;
   };
 };
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(ClearValue, MnClearValue);
+
+// ----------------------------------------------------------------------------------------------------
+// Render Pass
+//
+
+struct ColorAttachmentDesc final {
+  TextureHandle texture;
+  TextureSubresourceRange subresource_range;
+  LoadOp load_op = LoadOp::kClear;
+  StoreOp store_op = StoreOp::kStore;
+  ClearValue clear_value = {};
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(ColorAttachmentDesc, MnColorAttachmentDesc);
+
+struct DepthStencilAttachmentDesc final {
+  TextureHandle texture;
+  TextureSubresourceRange subresource_range;
+  LoadOp depth_load_op = LoadOp::kClear;
+  StoreOp depth_store_op = StoreOp::kStore;
+  float depth_clear_value = 1.0f;
+  LoadOp stencil_load_op = LoadOp::kDontCare;
+  StoreOp stencil_store_op = StoreOp::kDontCare;
+  uint32_t stencil_clear_value = 0;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(DepthStencilAttachmentDesc, MnDepthStencilAttachmentDesc);
+
+struct RenderPassDesc final {
+  container::ArrayProxy<ColorAttachmentDesc const> color_attachments;
+  DepthStencilAttachmentDesc const* depth_stencil_attachment = nullptr;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(RenderPassDesc, MnRenderPassDesc);
 
 // ----------------------------------------------------------------------------------------------------
 // Utilities
@@ -669,6 +1008,19 @@ struct ClearValue final {
 std::string_view ToString(MnFormat value);
 std::string_view ToString(BindGroupLayoutEntryType value);
 std::string ToString(TextureUsageFlags value);
+
+std::string_view ToString(PrimitiveTopology value);
+std::string_view ToString(PolygonMode value);
+std::string_view ToString(CullMode value);
+std::string_view ToString(FrontFace value);
+std::string_view ToString(CompareOp value);
+std::string_view ToString(StencilOp value);
+std::string_view ToString(BlendFactor value);
+std::string_view ToString(BlendOp value);
+std::string_view ToString(IndexType value);
+std::string_view ToString(VertexStepMode value);
+std::string_view ToString(LoadOp value);
+std::string_view ToString(StoreOp value);
 
 inline uint32_t GetFormatSizeInBytes(MnFormat value) { return MnGetFormatSizeInBytes(value); }
 inline Extent3d GetFormatTexelBlockExtent(MnFormat value) {

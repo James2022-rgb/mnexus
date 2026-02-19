@@ -4,6 +4,8 @@
 #include <functional>
 
 // public project headers -------------------------------
+#include "mbase/public/container.h"
+
 #include "mnexus/public/types.h"
 
 // project headers --------------------------------------
@@ -45,7 +47,7 @@ struct ProgramHot final {
   wgpu::PipelineLayout wgpu_pipeline_layout;
 };
 struct ProgramCold final {
-  // Placeholder for future use.
+  mbase::SmallVector<mnexus::ShaderModuleHandle, 2> shader_module_handles;
 };
 
 using ProgramResourcePool = container::TResourceGenerationalPool<ProgramHot, ProgramCold>;

@@ -172,7 +172,12 @@ container::ResourceHandle EmplaceProgramResourcePool(
   wgpu::PipelineLayout pipeline_layout = wgpu_device.CreatePipelineLayout(&pipeline_layout_desc);
 
   ProgramHot hot { .wgpu_pipeline_layout = std::move(pipeline_layout) };
+
   ProgramCold cold {};
+  cold.shader_module_handles.reserve(program_desc.shader_modules.size());
+  for (uint32_t i = 0; i < program_desc.shader_modules.size(); ++i) {
+    cold.shader_module_handles.emplace_back(program_desc.shader_modules[i]);
+  }
 
   return out_pool.Emplace(
     std::forward_as_tuple(std::move(hot)),

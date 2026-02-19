@@ -350,6 +350,8 @@ if(${_enable_backend_webgpu})
     ${_private_backend_webgpu_dir}/backend-webgpu-compute_pipeline.h
     ${_private_backend_webgpu_dir}/backend-webgpu-layout.cpp
     ${_private_backend_webgpu_dir}/backend-webgpu-layout.h
+    ${_private_backend_webgpu_dir}/backend-webgpu-render_pipeline.cpp
+    ${_private_backend_webgpu_dir}/backend-webgpu-render_pipeline.h
     ${_private_backend_webgpu_dir}/backend-webgpu-shader.cpp
     ${_private_backend_webgpu_dir}/backend-webgpu-shader.h
     ${_private_backend_webgpu_dir}/backend-webgpu-texture.cpp
@@ -382,11 +384,23 @@ source_group("Private/Container" FILES ${_sources_private_container})
 
 set(_private_binding_dir "${_private_root_dir}/binding")
 set(_sources_private_binding
+  ${_private_binding_dir}/cache_key.h
   ${_private_binding_dir}/state_tracker.cpp
   ${_private_binding_dir}/state_tracker.h
-  ${_private_binding_dir}/cache_key.h
 )
 source_group("Private/Binding" FILES ${_sources_private_binding})
+
+set(_private_pipeline_dir "${_private_root_dir}/pipeline")
+set(_sources_private_pipeline
+  ${_private_pipeline_dir}/render_pipeline_cache.h
+  ${_private_pipeline_dir}/render_pipeline_cache_key.cpp
+  ${_private_pipeline_dir}/render_pipeline_cache_key.h
+  ${_private_pipeline_dir}/render_pipeline_diagnostics.h
+  ${_private_pipeline_dir}/render_pipeline_fixed_function.h
+  ${_private_pipeline_dir}/render_pipeline_state_tracker.cpp
+  ${_private_pipeline_dir}/render_pipeline_state_tracker.h
+)
+source_group("Private/Pipeline" FILES ${_sources_private_pipeline})
 
 set(_private_shader_dir "${_private_root_dir}/shader")
 set(_sources_private_shader
@@ -405,6 +419,7 @@ target_sources(${TARGET_NAME} PRIVATE
   ${_sources_private_backend_webgpu}
   ${_sources_private_binding}
   ${_sources_private_container}
+  ${_sources_private_pipeline}
   ${_sources_private_shader}
 )
 
