@@ -628,19 +628,17 @@ private:
       pipeline::RenderPipelineCacheKey key = render_pipeline_state_tracker_.BuildCacheKey();
       render_pipeline_state_tracker_.MarkClean();
 
-      std::optional<wgpu::RenderPipeline> cached = resource_storage_->render_pipeline_cache.Find(key);
-      if (cached.has_value()) {
-        current_render_pipeline_ = *cached;
-      } else {
-        wgpu::RenderPipeline new_pipeline = CreateWgpuRenderPipelineFromCacheKey(
-          wgpu_device_,
-          key,
-          resource_storage_->programs,
-          resource_storage_->shader_modules
-        );
-        current_render_pipeline_ = new_pipeline;
-        resource_storage_->render_pipeline_cache.Insert(std::move(key), std::move(new_pipeline));
-      }
+      current_render_pipeline_ = resource_storage_->render_pipeline_cache.FindOrInsert(
+        key,
+        [&](pipeline::RenderPipelineCacheKey const& k) {
+          return CreateWgpuRenderPipelineFromCacheKey(
+            wgpu_device_,
+            k,
+            resource_storage_->programs,
+            resource_storage_->shader_modules
+          );
+        }
+      );
 
       current_render_pass_->SetPipeline(current_render_pipeline_);
     }

@@ -4,7 +4,6 @@
 #include <cstdint>
 
 #include <atomic>
-#include <optional>
 #include <shared_mutex>
 #include <unordered_map>
 
@@ -19,30 +18,37 @@ namespace pipeline {
 
 /// Thread-safe pipeline cache keyed by `RenderPipelineCacheKey`.
 /// Backends instantiate with their pipeline type (e.g. `wgpu::RenderPipeline`).
-///
-/// - `Find()` takes a shared lock (concurrent reads from multiple command lists).
-/// - `Insert()` takes an exclusive lock (cache miss → pipeline creation).
 template<typename TPipeline>
 class TRenderPipelineCache final {
 public:
-  /// Returns a copy of the cached pipeline, or std::nullopt on miss.
-  /// Returning by value avoids dangling pointer after the shared lock is released.
-  std::optional<TPipeline> Find(RenderPipelineCacheKey const& key) MBASE_EXCLUDES(mutex_) {
-    mbase::SharedLockGuard lock(mutex_);
-    total_lookups_.fetch_add(1, std::memory_order_relaxed);
-    auto it = cache_.find(key);
-    if (it != cache_.end()) {
+  /// Looks up `key` in the cache. On hit, returns the cached pipeline.
+  /// On miss, calls `factory(key)` to create a new pipeline, inserts it, and returns it.
+  /// The factory is only invoked while the exclusive lock is held, so at most one
+  /// thread creates a pipeline for any given key.
+  template<typename TFactory>
+  TPipeline FindOrInsert(RenderPipelineCacheKey const& key, TFactory&& factory) MBASE_EXCLUDES(mutex_) {
+    // Fast path: shared lock for concurrent reads.
+    {
+      mbase::SharedLockGuard shared_lock(mutex_);
+      total_lookups_.fetch_add(1, std::memory_order_relaxed);
+      auto it = cache_.find(key);
+      if (it != cache_.end()) {
+        cache_hits_.fetch_add(1, std::memory_order_relaxed);
+        return it->second;
+      }
+    }
+
+    // Slow path: exclusive lock, double-check, then create.
+    mbase::LockGuard exclusive_lock(mutex_);
+    auto [it, inserted] = cache_.emplace(key, TPipeline{});
+    if (!inserted) {
+      // Another thread inserted between our shared unlock and exclusive lock.
       cache_hits_.fetch_add(1, std::memory_order_relaxed);
       return it->second;
     }
     cache_misses_.fetch_add(1, std::memory_order_relaxed);
-    return std::nullopt;
-  }
-
-  /// Inserts a new pipeline into the cache. Caller must ensure the key is not already present.
-  void Insert(RenderPipelineCacheKey key, TPipeline pipeline) MBASE_EXCLUDES(mutex_) {
-    mbase::LockGuard lock(mutex_);
-    cache_.emplace(std::move(key), std::move(pipeline));
+    it->second = factory(key);
+    return it->second;
   }
 
   [[nodiscard]] RenderPipelineCacheDiagnostics GetDiagnostics() const MBASE_EXCLUDES(mutex_) {
