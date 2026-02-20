@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include <atomic>
+#include <optional>
 #include <shared_mutex>
 #include <unordered_map>
 
@@ -24,17 +25,18 @@ namespace pipeline {
 template<typename TPipeline>
 class TRenderPipelineCache final {
 public:
-  /// Returns a pointer to the cached pipeline, or nullptr on miss.
-  TPipeline* Find(RenderPipelineCacheKey const& key) MBASE_EXCLUDES(mutex_) {
+  /// Returns a copy of the cached pipeline, or std::nullopt on miss.
+  /// Returning by value avoids dangling pointer after the shared lock is released.
+  std::optional<TPipeline> Find(RenderPipelineCacheKey const& key) MBASE_EXCLUDES(mutex_) {
     mbase::SharedLockGuard lock(mutex_);
     total_lookups_.fetch_add(1, std::memory_order_relaxed);
     auto it = cache_.find(key);
     if (it != cache_.end()) {
       cache_hits_.fetch_add(1, std::memory_order_relaxed);
-      return &it->second;
+      return it->second;
     }
     cache_misses_.fetch_add(1, std::memory_order_relaxed);
-    return nullptr;
+    return std::nullopt;
   }
 
   /// Inserts a new pipeline into the cache. Caller must ensure the key is not already present.

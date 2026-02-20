@@ -10,6 +10,7 @@
 // public project headers -------------------------------
 #include "mbase/public/platform.h"
 #include "mbase/public/assert.h"
+#include "mbase/public/log.h"
 
 namespace mnexus_backend::webgpu {
 
@@ -54,7 +55,9 @@ wgpu::ShaderModule CreateWgpuShaderModule(
   shader_source_wgsl.code = wgpu::StringView{ wgsl_storage.data(), wgsl_storage.size() };
   wgpu_shader_module_desc.nextInChain = &shader_source_wgsl;
 
-  MBASE_LOG_TRACE("Converted SPIR-V to WGSL:\n{}", wgsl_storage);
+  // NOTE: Logging the full WGSL text here can crash on Emscripten due to
+  // heap corruption from Slang runtime. Log only the size.
+  MBASE_LOG_TRACE("Converted SPIR-V to WGSL ({} bytes)", wgsl_storage.size());
 # else
   MBASE_ASSERT_MSG(false, "SPIR-V input requires Tint support");
   mbase::Trap();

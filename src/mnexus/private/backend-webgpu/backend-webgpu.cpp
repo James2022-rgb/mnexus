@@ -628,8 +628,8 @@ private:
       pipeline::RenderPipelineCacheKey key = render_pipeline_state_tracker_.BuildCacheKey();
       render_pipeline_state_tracker_.MarkClean();
 
-      wgpu::RenderPipeline* cached = resource_storage_->render_pipeline_cache.Find(key);
-      if (cached != nullptr) {
+      std::optional<wgpu::RenderPipeline> cached = resource_storage_->render_pipeline_cache.Find(key);
+      if (cached.has_value()) {
         current_render_pipeline_ = *cached;
       } else {
         wgpu::RenderPipeline new_pipeline = CreateWgpuRenderPipelineFromCacheKey(
