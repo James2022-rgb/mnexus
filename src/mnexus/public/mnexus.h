@@ -80,6 +80,8 @@ public:
     ICommandList* command_list
   );
 
+  /// Writes data from CPU memory into a GPU buffer.
+  /// - `data_size_in_bytes`: **MUST** be a multiple of 4 bytes.
   _MNEXUS_VAPI(IntraQueueSubmissionId, QueueWriteBuffer,
     QueueId const& queue_id,
     BufferHandle buffer_handle,

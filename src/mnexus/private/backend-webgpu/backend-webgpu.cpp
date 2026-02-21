@@ -415,7 +415,7 @@ public:
 
     MnFormat depth_stencil_format = MnFormat::kUndefined;
 
-    // Depth/stencil attachment (Phase 3; for now just pass through if provided).
+    // Depth/stencil attachment.
     wgpu::RenderPassDepthStencilAttachment wgpu_depth_stencil {};
     bool has_depth_stencil = false;
     if (desc.depth_stencil_attachment != nullptr) {
