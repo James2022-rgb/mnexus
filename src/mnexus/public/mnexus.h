@@ -294,6 +294,10 @@ public:
   //
   // Render State (auto-generation path)
   //
+  // These setters configure fixed-function pipeline state for the auto-generation path.
+  // State is accumulated and resolved into a pipeline object at the next Draw/DrawIndexed call.
+  // Default values are documented below; only call a setter when you need a non-default value.
+  //
 
   _MNEXUS_VAPI(void, BindRenderProgram, ProgramHandle program_handle);
 
@@ -314,29 +318,43 @@ public:
     IndexType index_type
   );
 
+  // Rasterization
+  // Default: `kTriangleList`.
   _MNEXUS_VAPI(void, SetPrimitiveTopology, PrimitiveTopology topology);
+  // Default: `kFill`.
   _MNEXUS_VAPI(void, SetPolygonMode, PolygonMode mode);
+  // Default: `kNone`.
   _MNEXUS_VAPI(void, SetCullMode, CullMode cull_mode);
+  // Default: `kCounterClockwise`.
   _MNEXUS_VAPI(void, SetFrontFace, FrontFace front_face);
 
   // Depth
+  // Default: `false`.
   _MNEXUS_VAPI(void, SetDepthTestEnabled, bool enabled);
+  // Default: `false`.
   _MNEXUS_VAPI(void, SetDepthWriteEnabled, bool enabled);
+  // Default: `kAlways`.
   _MNEXUS_VAPI(void, SetDepthCompareOp, CompareOp op);
 
   // Stencil
+  // Default: `false`.
   _MNEXUS_VAPI(void, SetStencilTestEnabled, bool enabled);
+  // Default: all ops = `kKeep`, compare = `kAlways`.
   _MNEXUS_VAPI(void, SetStencilFrontOps,
     StencilOp fail, StencilOp pass, StencilOp depth_fail, CompareOp compare);
+  // Default: all ops = `kKeep`, compare = `kAlways`.
   _MNEXUS_VAPI(void, SetStencilBackOps,
     StencilOp fail, StencilOp pass, StencilOp depth_fail, CompareOp compare);
 
   // Per-attachment blend
+  // Default: `false`.
   _MNEXUS_VAPI(void, SetBlendEnabled, uint32_t attachment, bool enabled);
+  // Default: src = `kOne`, dst = `kZero`, op = `kAdd` (both color and alpha).
   _MNEXUS_VAPI(void, SetBlendFactors,
     uint32_t attachment,
     BlendFactor src_color, BlendFactor dst_color, BlendOp color_op,
     BlendFactor src_alpha, BlendFactor dst_alpha, BlendOp alpha_op);
+  // Default: `kAll`.
   _MNEXUS_VAPI(void, SetColorWriteMask, uint32_t attachment, ColorWriteMask mask);
 
   //
