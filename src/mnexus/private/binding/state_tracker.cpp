@@ -9,33 +9,17 @@
 
 namespace binding {
 
-void BindGroupStateTracker::SetBuffer(
-  uint32_t group, uint32_t binding, uint32_t array_element,
-  mnexus::BindGroupLayoutEntryType type,
-  mnexus::BufferHandle buffer, uint64_t offset, uint64_t size
-) {
+void BindGroupStateTracker::UpsertEntry(uint32_t group, BoundEntry entry) {
   MBASE_ASSERT(group < kMaxGroups);
 
   Group& g = groups_[group];
 
-  // Find existing entry with matching (binding, array_element).
   auto it = std::find_if(
     g.entries.begin(), g.entries.end(),
-    [binding, array_element](BoundEntry const& e) {
-      return e.binding == binding && e.array_element == array_element;
+    [&entry](BoundEntry const& e) {
+      return e.binding == entry.binding && e.array_element == entry.array_element;
     }
   );
-
-  BoundEntry entry {
-    .binding = binding,
-    .array_element = array_element,
-    .type = type,
-    .buffer = BoundBuffer {
-      .buffer = buffer,
-      .offset = offset,
-      .size = size,
-    },
-  };
 
   if (it != g.entries.end()) {
     *it = entry;
@@ -55,92 +39,52 @@ void BindGroupStateTracker::SetBuffer(
   g.dirty = true;
 }
 
+void BindGroupStateTracker::SetBuffer(
+  uint32_t group, uint32_t binding, uint32_t array_element,
+  mnexus::BindGroupLayoutEntryType type,
+  mnexus::BufferHandle buffer, uint64_t offset, uint64_t size
+) {
+  UpsertEntry(group, BoundEntry {
+    .binding = binding,
+    .array_element = array_element,
+    .type = type,
+    .buffer = BoundBuffer {
+      .buffer = buffer,
+      .offset = offset,
+      .size = size,
+    },
+  });
+}
+
 void BindGroupStateTracker::SetTexture(
   uint32_t group, uint32_t binding, uint32_t array_element,
   mnexus::BindGroupLayoutEntryType type,
   mnexus::TextureHandle texture,
   mnexus::TextureSubresourceRange const& subresource_range
 ) {
-  MBASE_ASSERT(group < kMaxGroups);
-
-  Group& g = groups_[group];
-
-  auto it = std::find_if(
-    g.entries.begin(), g.entries.end(),
-    [binding, array_element](BoundEntry const& e) {
-      return e.binding == binding && e.array_element == array_element;
-    }
-  );
-
-  BoundEntry entry {
+  UpsertEntry(group, BoundEntry {
     .binding = binding,
     .array_element = array_element,
     .type = type,
-    .buffer = {},
     .texture = BoundTexture {
       .texture = texture,
       .subresource_range = subresource_range,
     },
-  };
-
-  if (it != g.entries.end()) {
-    *it = entry;
-  } else {
-    g.entries.emplace_back(entry);
-
-    std::sort(
-      g.entries.begin(), g.entries.end(),
-      [](BoundEntry const& a, BoundEntry const& b) {
-        if (a.binding != b.binding) return a.binding < b.binding;
-        return a.array_element < b.array_element;
-      }
-    );
-  }
-
-  g.dirty = true;
+  });
 }
 
 void BindGroupStateTracker::SetSampler(
   uint32_t group, uint32_t binding, uint32_t array_element,
   mnexus::SamplerHandle sampler
 ) {
-  MBASE_ASSERT(group < kMaxGroups);
-
-  Group& g = groups_[group];
-
-  auto it = std::find_if(
-    g.entries.begin(), g.entries.end(),
-    [binding, array_element](BoundEntry const& e) {
-      return e.binding == binding && e.array_element == array_element;
-    }
-  );
-
-  BoundEntry entry {
+  UpsertEntry(group, BoundEntry {
     .binding = binding,
     .array_element = array_element,
     .type = mnexus::BindGroupLayoutEntryType::kSampler,
-    .buffer = {},
-    .texture = {},
     .sampler = BoundSampler {
       .sampler = sampler,
     },
-  };
-
-  if (it != g.entries.end()) {
-    *it = entry;
-  } else {
-    g.entries.emplace_back(entry);
-
-    std::sort(
-      g.entries.begin(), g.entries.end(),
-      [](BoundEntry const& a, BoundEntry const& b) {
-        if (a.binding != b.binding) return a.binding < b.binding;
-        return a.array_element < b.array_element;
-      }
-    );
-  }
-
-  g.dirty = true;
+  });
 }
 
 bool BindGroupStateTracker::IsGroupDirty(uint32_t group) const {

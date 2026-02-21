@@ -72,6 +72,9 @@ private:
     bool dirty = false;
   };
 
+  /// Upsert `entry` into the group, keep sorted, mark dirty.
+  void UpsertEntry(uint32_t group, BoundEntry entry);
+
   Group groups_[kMaxGroups];
 };
 
