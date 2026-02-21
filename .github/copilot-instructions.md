@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Commit messages
+
+See @.github/git-commit-instructions.md
+
 ## Language
 
 All code comments MUST be written in English.
