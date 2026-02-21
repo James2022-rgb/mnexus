@@ -206,6 +206,12 @@ public:
     RenderPipelineDesc const& desc
   );
 
+  //
+  // Device Capability
+  //
+
+  _MNEXUS_VAPI(DeviceCapability, GetDeviceCapability);
+
 protected:
   IDevice() = default;
 };
@@ -285,6 +291,26 @@ public:
   _MNEXUS_VAPI(void, SetPolygonMode, PolygonMode mode);
   _MNEXUS_VAPI(void, SetCullMode, CullMode cull_mode);
   _MNEXUS_VAPI(void, SetFrontFace, FrontFace front_face);
+
+  // Depth
+  _MNEXUS_VAPI(void, SetDepthTestEnabled, bool enabled);
+  _MNEXUS_VAPI(void, SetDepthWriteEnabled, bool enabled);
+  _MNEXUS_VAPI(void, SetDepthCompareOp, CompareOp op);
+
+  // Stencil
+  _MNEXUS_VAPI(void, SetStencilTestEnabled, bool enabled);
+  _MNEXUS_VAPI(void, SetStencilFrontOps,
+    StencilOp fail, StencilOp pass, StencilOp depth_fail, CompareOp compare);
+  _MNEXUS_VAPI(void, SetStencilBackOps,
+    StencilOp fail, StencilOp pass, StencilOp depth_fail, CompareOp compare);
+
+  // Per-attachment blend
+  _MNEXUS_VAPI(void, SetBlendEnabled, uint32_t attachment, bool enabled);
+  _MNEXUS_VAPI(void, SetBlendFactors,
+    uint32_t attachment,
+    BlendFactor src_color, BlendFactor dst_color, BlendOp color_op,
+    BlendFactor src_alpha, BlendFactor dst_alpha, BlendOp alpha_op);
+  _MNEXUS_VAPI(void, SetColorWriteMask, uint32_t attachment, ColorWriteMask mask);
 
   //
   // Draw (triggers implicit PSO resolution in auto-generation mode)

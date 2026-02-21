@@ -40,6 +40,25 @@ public:
   void SetCullMode(mnexus::CullMode cull_mode);
   void SetFrontFace(mnexus::FrontFace front_face);
 
+  // Depth
+  void SetDepthTestEnabled(bool enabled);
+  void SetDepthWriteEnabled(bool enabled);
+  void SetDepthCompareOp(mnexus::CompareOp op);
+
+  // Stencil
+  void SetStencilTestEnabled(bool enabled);
+  void SetStencilFrontOps(mnexus::StencilOp fail, mnexus::StencilOp pass,
+                          mnexus::StencilOp depth_fail, mnexus::CompareOp compare);
+  void SetStencilBackOps(mnexus::StencilOp fail, mnexus::StencilOp pass,
+                         mnexus::StencilOp depth_fail, mnexus::CompareOp compare);
+
+  // Per-attachment blend
+  void SetBlendEnabled(uint32_t attachment, bool enabled);
+  void SetBlendFactors(uint32_t attachment,
+                       mnexus::BlendFactor src_color, mnexus::BlendFactor dst_color, mnexus::BlendOp color_op,
+                       mnexus::BlendFactor src_alpha, mnexus::BlendFactor dst_alpha, mnexus::BlendOp alpha_op);
+  void SetColorWriteMask(uint32_t attachment, mnexus::ColorWriteMask mask);
+
   // -----------------------------------------------------------------------
   // Render target configuration (called by backend at BeginRenderPass)
 

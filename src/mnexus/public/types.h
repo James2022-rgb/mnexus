@@ -334,16 +334,6 @@ struct MnComputePipelineDesc final {
 };
 
 // ----------------------------------------------------------------------------------------------------
-// RenderPipeline
-//
-
-struct MnRenderPipelineDesc final {
-  uint32_t dummy = 0;
-  // N.B.: Placeholder for future expansion.
-  // N.B.: See `mnexus::RenderPipelineDesc`.
-};
-
-// ----------------------------------------------------------------------------------------------------
 // Render State Enums (C layer)
 //
 
@@ -466,6 +456,36 @@ struct MnVertexInputAttributeDesc final {
   MnFormat format = MnFormat::kUndefined;
   uint32_t offset = 0;
   // N.B.: See `mnexus::VertexInputAttributeDesc`.
+};
+
+// ----------------------------------------------------------------------------------------------------
+// RenderPipeline (C layer)
+//
+
+struct MnRenderPipelineDesc final {
+  MnResourceHandle program = MnInvalidResourceHandle;
+  // vertex_bindings: ArrayProxy-compatible layout (count, pad, ptr).
+  uint32_t vertex_binding_count = 0;
+  uint32_t _pad0 = 0;
+  MnVertexInputBindingDesc const* vertex_bindings = nullptr;
+  // vertex_attributes: ArrayProxy-compatible layout.
+  uint32_t vertex_attribute_count = 0;
+  uint32_t _pad1 = 0;
+  MnVertexInputAttributeDesc const* vertex_attributes = nullptr;
+  // color_formats: ArrayProxy-compatible layout.
+  uint32_t color_format_count = 0;
+  uint32_t _pad2 = 0;
+  MnFormat const* color_formats = nullptr;
+  // Scalar fields.
+  MnFormat depth_stencil_format = MnFormat::kUndefined;
+  uint32_t sample_count = 1;
+  MnPrimitiveTopology topology = MnPrimitiveTopologyTriangleList;
+  MnCullMode cull_mode = MnCullModeNone;
+  MnFrontFace front_face = MnFrontFaceCounterClockwise;
+  MnCompareOp depth_compare_op = MnCompareOpAlways;
+  MnBool32 depth_test_enabled = MnBoolFalse;
+  MnBool32 depth_write_enabled = MnBoolFalse;
+  // N.B.: See `mnexus::RenderPipelineDesc`.
 };
 
 // ----------------------------------------------------------------------------------------------------
@@ -812,16 +832,6 @@ struct ComputePipelineDesc final {
 _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(ComputePipelineDesc, MnComputePipelineDesc);
 
 // ----------------------------------------------------------------------------------------------------
-// RenderPipeline
-//
-
-struct RenderPipelineDesc final {
-  uint32_t dummy = 0;
-  // N.B.: Placeholder for future expansion.
-};
-_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(RenderPipelineDesc, MnRenderPipelineDesc);
-
-// ----------------------------------------------------------------------------------------------------
 // Render State Enums
 //
 
@@ -945,6 +955,26 @@ struct VertexInputAttributeDesc final {
   uint32_t offset = 0;
 };
 _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(VertexInputAttributeDesc, MnVertexInputAttributeDesc);
+
+// ----------------------------------------------------------------------------------------------------
+// RenderPipeline
+//
+
+struct RenderPipelineDesc final {
+  ProgramHandle program;
+  container::ArrayProxy<VertexInputBindingDesc const> vertex_bindings;
+  container::ArrayProxy<VertexInputAttributeDesc const> vertex_attributes;
+  container::ArrayProxy<MnFormat const> color_formats;
+  MnFormat depth_stencil_format = MnFormat::kUndefined;
+  uint32_t sample_count = 1;
+  PrimitiveTopology topology = PrimitiveTopology::kTriangleList;
+  CullMode cull_mode = CullMode::kNone;
+  FrontFace front_face = FrontFace::kCounterClockwise;
+  CompareOp depth_compare_op = CompareOp::kAlways;
+  MnBool32 depth_test_enabled = MnBoolFalse;
+  MnBool32 depth_write_enabled = MnBoolFalse;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(RenderPipelineDesc, MnRenderPipelineDesc);
 
 // ----------------------------------------------------------------------------------------------------
 // Clear Value

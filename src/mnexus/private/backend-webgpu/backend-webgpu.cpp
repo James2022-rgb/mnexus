@@ -52,6 +52,7 @@ struct ResourceStorage final {
   ShaderModuleResourcePool shader_modules;
   ProgramResourcePool programs;
   ComputePipelineResourcePool compute_pipelines;
+  RenderPipelineResourcePool render_pipelines;
 
   BufferResourcePool buffers;
   TextureResourcePool textures;
@@ -351,8 +352,11 @@ public:
   //
 
   IMPL_VAPI(void, BindExplicitRenderPipeline, mnexus::RenderPipelineHandle render_pipeline_handle) {
-    (void)render_pipeline_handle;
-    // Stub: explicit render pipeline binding is Phase 2.
+    auto pool_handle = container::ResourceHandle::FromU64(render_pipeline_handle.Get());
+    auto [hot, lock] = resource_storage_->render_pipelines.GetHotConstRefWithSharedLockGuard(pool_handle);
+    current_render_pipeline_ = hot.wgpu_render_pipeline;
+    explicit_render_pipeline_bound_ = true;
+    render_pipeline_state_tracker_.MarkClean();
   }
 
   //
@@ -467,6 +471,7 @@ public:
   //
 
   IMPL_VAPI(void, BindRenderProgram, mnexus::ProgramHandle program_handle) {
+    explicit_render_pipeline_bound_ = false;
     render_pipeline_state_tracker_.SetProgram(program_handle);
   }
 
@@ -524,11 +529,6 @@ public:
   }
 
   IMPL_VAPI(void, SetPolygonMode, mnexus::PolygonMode mode) {
-    // WebGPU only supports Fill. Assert on non-Fill values.
-    MBASE_ASSERT_MSG(
-      mode == mnexus::PolygonMode::kFill,
-      "WebGPU backend only supports PolygonMode::kFill"
-    );
     render_pipeline_state_tracker_.SetPolygonMode(mode);
   }
 
@@ -538,6 +538,60 @@ public:
 
   IMPL_VAPI(void, SetFrontFace, mnexus::FrontFace front_face) {
     render_pipeline_state_tracker_.SetFrontFace(front_face);
+  }
+
+  // Depth
+
+  IMPL_VAPI(void, SetDepthTestEnabled, bool enabled) {
+    render_pipeline_state_tracker_.SetDepthTestEnabled(enabled);
+  }
+
+  IMPL_VAPI(void, SetDepthWriteEnabled, bool enabled) {
+    render_pipeline_state_tracker_.SetDepthWriteEnabled(enabled);
+  }
+
+  IMPL_VAPI(void, SetDepthCompareOp, mnexus::CompareOp op) {
+    render_pipeline_state_tracker_.SetDepthCompareOp(op);
+  }
+
+  // Stencil
+
+  IMPL_VAPI(void, SetStencilTestEnabled, bool enabled) {
+    render_pipeline_state_tracker_.SetStencilTestEnabled(enabled);
+  }
+
+  IMPL_VAPI(void, SetStencilFrontOps,
+    mnexus::StencilOp fail, mnexus::StencilOp pass,
+    mnexus::StencilOp depth_fail, mnexus::CompareOp compare
+  ) {
+    render_pipeline_state_tracker_.SetStencilFrontOps(fail, pass, depth_fail, compare);
+  }
+
+  IMPL_VAPI(void, SetStencilBackOps,
+    mnexus::StencilOp fail, mnexus::StencilOp pass,
+    mnexus::StencilOp depth_fail, mnexus::CompareOp compare
+  ) {
+    render_pipeline_state_tracker_.SetStencilBackOps(fail, pass, depth_fail, compare);
+  }
+
+  // Per-attachment blend
+
+  IMPL_VAPI(void, SetBlendEnabled, uint32_t attachment, bool enabled) {
+    render_pipeline_state_tracker_.SetBlendEnabled(attachment, enabled);
+  }
+
+  IMPL_VAPI(void, SetBlendFactors,
+    uint32_t attachment,
+    mnexus::BlendFactor src_color, mnexus::BlendFactor dst_color, mnexus::BlendOp color_op,
+    mnexus::BlendFactor src_alpha, mnexus::BlendFactor dst_alpha, mnexus::BlendOp alpha_op
+  ) {
+    render_pipeline_state_tracker_.SetBlendFactors(
+      attachment, src_color, dst_color, color_op, src_alpha, dst_alpha, alpha_op
+    );
+  }
+
+  IMPL_VAPI(void, SetColorWriteMask, uint32_t attachment, mnexus::ColorWriteMask mask) {
+    render_pipeline_state_tracker_.SetColorWriteMask(attachment, mask);
   }
 
   //
@@ -624,7 +678,10 @@ private:
   void ResolveRenderPipelineAndBindState() {
     MBASE_ASSERT(current_render_pass_.has_value());
 
-    if (render_pipeline_state_tracker_.IsDirty()) {
+    if (explicit_render_pipeline_bound_) {
+      // Explicit pipeline: just set it on the pass (once).
+      current_render_pass_->SetPipeline(current_render_pipeline_);
+    } else if (render_pipeline_state_tracker_.IsDirty()) {
       pipeline::RenderPipelineCacheKey key = render_pipeline_state_tracker_.BuildCacheKey();
       render_pipeline_state_tracker_.MarkClean();
 
@@ -686,6 +743,7 @@ private:
   // Render pass state.
   std::optional<wgpu::RenderPassEncoder> current_render_pass_;
   wgpu::RenderPipeline current_render_pipeline_;
+  bool explicit_render_pipeline_bound_ = false;
   pipeline::RenderPipelineStateTracker render_pipeline_state_tracker_;
   mbase::SmallVector<BoundVertexBuffer, 4> bound_vertex_buffers_;
   BoundIndexBuffer bound_index_buffer_;
@@ -1144,8 +1202,58 @@ public:
   IMPL_VAPI(mnexus::RenderPipelineHandle, CreateRenderPipeline,
     mnexus::RenderPipelineDesc const& desc
   ) {
-    (void)desc; // Unused for now.
-    return mnexus::RenderPipelineHandle::Invalid();
+    // Build a cache key from the descriptor.
+    pipeline::RenderPipelineCacheKey key;
+    key.program = desc.program;
+
+    key.vertex_bindings.assign(desc.vertex_bindings.begin(), desc.vertex_bindings.end());
+    key.vertex_attributes.assign(desc.vertex_attributes.begin(), desc.vertex_attributes.end());
+    key.color_formats.assign(desc.color_formats.begin(), desc.color_formats.end());
+    key.depth_stencil_format = desc.depth_stencil_format;
+    key.sample_count = desc.sample_count;
+
+    // Per-draw fixed-function state from desc.
+    key.per_draw.ia_primitive_topology   = static_cast<uint8_t>(desc.topology);
+    key.per_draw.raster_cull_mode        = static_cast<uint8_t>(desc.cull_mode);
+    key.per_draw.raster_front_face       = static_cast<uint8_t>(desc.front_face);
+    key.per_draw.depth_test_enabled      = desc.depth_test_enabled ? 1 : 0;
+    key.per_draw.depth_write_enabled     = desc.depth_write_enabled ? 1 : 0;
+    key.per_draw.depth_compare_op        = static_cast<uint8_t>(desc.depth_compare_op);
+
+    // Per-attachment: default blend state for each color attachment.
+    key.per_attachment.resize(desc.color_formats.size());
+
+    // Look up or create the wgpu pipeline via the cache.
+    wgpu::RenderPipeline wgpu_pipeline = resource_storage_->render_pipeline_cache.FindOrInsert(
+      key,
+      [&](pipeline::RenderPipelineCacheKey const& k) {
+        return CreateWgpuRenderPipelineFromCacheKey(
+          wgpu_device_,
+          k,
+          resource_storage_->programs,
+          resource_storage_->shader_modules
+        );
+      }
+    );
+
+    if (!wgpu_pipeline) {
+      return mnexus::RenderPipelineHandle::Invalid();
+    }
+
+    container::ResourceHandle pool_handle = resource_storage_->render_pipelines.Emplace(
+      std::forward_as_tuple(RenderPipelineHot { std::move(wgpu_pipeline) }),
+      std::forward_as_tuple(RenderPipelineCold { })
+    );
+
+    return mnexus::RenderPipelineHandle { pool_handle.AsU64() };
+  }
+
+  //
+  // Device Capability
+  //
+
+  IMPL_VAPI(mnexus::DeviceCapability, GetDeviceCapability) {
+    return device_capability_;
   }
 
   //
@@ -1316,6 +1424,7 @@ private:
   wgpu::Instance wgpu_instance_;
   wgpu::Device wgpu_device_;
   ResourceStorage* resource_storage_ = nullptr;
+  mnexus::DeviceCapability device_capability_;
 
   mbase::Lockable<std::mutex> queue_mutex_;
   uint64_t next_timeline_value_ MBASE_GUARDED_BY(queue_mutex_) = 1;

@@ -47,4 +47,13 @@ struct PerAttachmentFixedFunctionStaticState final {
 static_assert(std::is_trivially_copyable_v<PerAttachmentFixedFunctionStaticState>);
 static_assert(sizeof(PerAttachmentFixedFunctionStaticState) == 8);
 
+/// Returns per-draw state suitable for opaque geometry (depth test+write, no stencil).
+inline PerDrawFixedFunctionStaticState MakeOpaquePerDrawState() {
+  PerDrawFixedFunctionStaticState s;
+  s.depth_test_enabled = 1;
+  s.depth_write_enabled = 1;
+  s.depth_compare_op = static_cast<uint8_t>(mnexus::CompareOp::kLess);
+  return s;
+}
+
 } // namespace pipeline
