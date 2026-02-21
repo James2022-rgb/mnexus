@@ -18,6 +18,11 @@ wgpu::TextureDimension ToWgpuTextureDimension(mnexus::TextureDimension value);
 wgpu::TextureFormat ToWgpuTextureFormat(MnFormat value);
 MnFormat FromWgpuTextureFormat(wgpu::TextureFormat value);
 
+// Sampler conversions.
+wgpu::FilterMode ToWgpuFilterMode(mnexus::Filter value);
+wgpu::MipmapFilterMode ToWgpuMipmapFilterMode(mnexus::Filter value);
+wgpu::AddressMode ToWgpuAddressMode(mnexus::AddressMode value);
+
 // Render state conversions.
 wgpu::PrimitiveTopology ToWgpuPrimitiveTopology(mnexus::PrimitiveTopology value);
 wgpu::CullMode ToWgpuCullMode(mnexus::CullMode value);

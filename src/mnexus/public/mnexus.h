@@ -131,6 +131,9 @@ public:
   //
 
   _MNEXUS_VAPI(ICommandList*, CreateCommandList, CommandListDesc const& desc);
+
+  /// Discards an `ICommandList` that was created but not submitted.
+  /// **MUST NOT** be called on a command list that has already been submitted.
   _MNEXUS_VAPI(void, DiscardCommandList, ICommandList* command_list);
 
   //
@@ -165,6 +168,17 @@ public:
   _MNEXUS_VAPI(void, GetTextureDesc,
     TextureHandle texture_handle,
     TextureDesc& out_desc
+  );
+
+  //
+  // Sampler
+  //
+
+  _MNEXUS_VAPI(SamplerHandle, CreateSampler,
+    SamplerDesc const& desc
+  );
+  _MNEXUS_VAPI(void, DestroySampler,
+    SamplerHandle sampler_handle
   );
 
   //
@@ -257,6 +271,17 @@ public:
     BufferHandle buffer_handle,
     uint64_t offset,
     uint64_t size
+  );
+
+  _MNEXUS_VAPI(void, BindSampledTexture,
+    BindingId const& id,
+    TextureHandle texture_handle,
+    TextureSubresourceRange const& subresource_range
+  );
+
+  _MNEXUS_VAPI(void, BindSampler,
+    BindingId const& id,
+    SamplerHandle sampler_handle
   );
 
   //

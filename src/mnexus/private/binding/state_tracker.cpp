@@ -55,6 +55,94 @@ void BindGroupStateTracker::SetBuffer(
   g.dirty = true;
 }
 
+void BindGroupStateTracker::SetTexture(
+  uint32_t group, uint32_t binding, uint32_t array_element,
+  mnexus::BindGroupLayoutEntryType type,
+  mnexus::TextureHandle texture,
+  mnexus::TextureSubresourceRange const& subresource_range
+) {
+  MBASE_ASSERT(group < kMaxGroups);
+
+  Group& g = groups_[group];
+
+  auto it = std::find_if(
+    g.entries.begin(), g.entries.end(),
+    [binding, array_element](BoundEntry const& e) {
+      return e.binding == binding && e.array_element == array_element;
+    }
+  );
+
+  BoundEntry entry {
+    .binding = binding,
+    .array_element = array_element,
+    .type = type,
+    .buffer = {},
+    .texture = BoundTexture {
+      .texture = texture,
+      .subresource_range = subresource_range,
+    },
+  };
+
+  if (it != g.entries.end()) {
+    *it = entry;
+  } else {
+    g.entries.emplace_back(entry);
+
+    std::sort(
+      g.entries.begin(), g.entries.end(),
+      [](BoundEntry const& a, BoundEntry const& b) {
+        if (a.binding != b.binding) return a.binding < b.binding;
+        return a.array_element < b.array_element;
+      }
+    );
+  }
+
+  g.dirty = true;
+}
+
+void BindGroupStateTracker::SetSampler(
+  uint32_t group, uint32_t binding, uint32_t array_element,
+  mnexus::SamplerHandle sampler
+) {
+  MBASE_ASSERT(group < kMaxGroups);
+
+  Group& g = groups_[group];
+
+  auto it = std::find_if(
+    g.entries.begin(), g.entries.end(),
+    [binding, array_element](BoundEntry const& e) {
+      return e.binding == binding && e.array_element == array_element;
+    }
+  );
+
+  BoundEntry entry {
+    .binding = binding,
+    .array_element = array_element,
+    .type = mnexus::BindGroupLayoutEntryType::kSampler,
+    .buffer = {},
+    .texture = {},
+    .sampler = BoundSampler {
+      .sampler = sampler,
+    },
+  };
+
+  if (it != g.entries.end()) {
+    *it = entry;
+  } else {
+    g.entries.emplace_back(entry);
+
+    std::sort(
+      g.entries.begin(), g.entries.end(),
+      [](BoundEntry const& a, BoundEntry const& b) {
+        if (a.binding != b.binding) return a.binding < b.binding;
+        return a.array_element < b.array_element;
+      }
+    );
+  }
+
+  g.dirty = true;
+}
+
 bool BindGroupStateTracker::IsGroupDirty(uint32_t group) const {
   MBASE_ASSERT(group < kMaxGroups);
   return groups_[group].dirty;

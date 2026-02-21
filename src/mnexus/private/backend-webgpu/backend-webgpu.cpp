@@ -36,6 +36,7 @@
 #include "backend-webgpu/backend-webgpu-layout.h"
 #include "backend-webgpu/backend-webgpu-render_pipeline.h"
 #include "backend-webgpu/backend-webgpu-shader.h"
+#include "backend-webgpu/backend-webgpu-sampler.h"
 #include "backend-webgpu/backend-webgpu-texture.h"
 #include "backend-webgpu/include_dawn.h"
 #include "backend-webgpu/types_bridge.h"
@@ -56,6 +57,7 @@ struct ResourceStorage final {
 
   BufferResourcePool buffers;
   TextureResourcePool textures;
+  SamplerResourcePool samplers;
 
   pipeline::TRenderPipelineCache<wgpu::RenderPipeline> render_pipeline_cache;
 
@@ -311,7 +313,9 @@ public:
       *current_compute_pass_,
       current_compute_pipeline_,
       bind_group_state_tracker_,
-      resource_storage_->buffers
+      resource_storage_->buffers,
+      resource_storage_->textures,
+      resource_storage_->samplers
     );
 
     current_compute_pass_->DispatchWorkgroups(workgroup_count_x, workgroup_count_y, workgroup_count_z);
@@ -344,6 +348,28 @@ public:
       id.group, id.binding, id.array_element,
       mnexus::BindGroupLayoutEntryType::kStorageBuffer,
       buffer_handle, offset, size
+    );
+  }
+
+  IMPL_VAPI(void, BindSampledTexture,
+    mnexus::BindingId const& id,
+    mnexus::TextureHandle texture_handle,
+    mnexus::TextureSubresourceRange const& subresource_range
+  ) {
+    bind_group_state_tracker_.SetTexture(
+      id.group, id.binding, id.array_element,
+      mnexus::BindGroupLayoutEntryType::kSampledTexture,
+      texture_handle, subresource_range
+    );
+  }
+
+  IMPL_VAPI(void, BindSampler,
+    mnexus::BindingId const& id,
+    mnexus::SamplerHandle sampler_handle
+  ) {
+    bind_group_state_tracker_.SetSampler(
+      id.group, id.binding, id.array_element,
+      sampler_handle
     );
   }
 
@@ -706,7 +732,9 @@ private:
       *current_render_pass_,
       current_render_pipeline_,
       bind_group_state_tracker_,
-      resource_storage_->buffers
+      resource_storage_->buffers,
+      resource_storage_->textures,
+      resource_storage_->samplers
     );
 
     // Set vertex buffers.
@@ -1102,6 +1130,38 @@ public:
 
       out_desc = cold.desc;
     }
+  }
+
+  //
+  // Sampler
+  //
+
+  IMPL_VAPI(mnexus::SamplerHandle, CreateSampler,
+    mnexus::SamplerDesc const& desc
+  ) {
+    wgpu::SamplerDescriptor wgpu_sampler_desc {};
+    wgpu_sampler_desc.minFilter    = ToWgpuFilterMode(desc.min_filter);
+    wgpu_sampler_desc.magFilter    = ToWgpuFilterMode(desc.mag_filter);
+    wgpu_sampler_desc.mipmapFilter = ToWgpuMipmapFilterMode(desc.mipmap_filter);
+    wgpu_sampler_desc.addressModeU = ToWgpuAddressMode(desc.address_mode_u);
+    wgpu_sampler_desc.addressModeV = ToWgpuAddressMode(desc.address_mode_v);
+    wgpu_sampler_desc.addressModeW = ToWgpuAddressMode(desc.address_mode_w);
+
+    wgpu::Sampler wgpu_sampler = wgpu_device_.CreateSampler(&wgpu_sampler_desc);
+
+    container::ResourceHandle pool_handle = resource_storage_->samplers.Emplace(
+      std::forward_as_tuple(SamplerHot { std::move(wgpu_sampler) }),
+      std::forward_as_tuple(SamplerCold { desc })
+    );
+
+    return mnexus::SamplerHandle { pool_handle.AsU64() };
+  }
+
+  IMPL_VAPI(void, DestroySampler,
+    mnexus::SamplerHandle sampler_handle
+  ) {
+    auto pool_handle = container::ResourceHandle::FromU64(sampler_handle.Get());
+    resource_storage_->samplers.Erase(pool_handle);
   }
 
   //

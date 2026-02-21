@@ -140,6 +140,23 @@ enum MnFilter {
   MnFilterForce32 = 0x7FFFFFFF,
 };
 
+enum MnAddressMode {
+  MnAddressModeRepeat       = 0,
+  MnAddressModeMirrorRepeat = 1,
+  MnAddressModeClampToEdge  = 2,
+  MnAddressModeForce32      = 0x7FFFFFFF,
+};
+
+struct MnSamplerDesc final {
+  MnFilter min_filter         = MnFilterNearest;
+  MnFilter mag_filter         = MnFilterNearest;
+  MnFilter mipmap_filter      = MnFilterNearest;
+  MnAddressMode address_mode_u = MnAddressModeClampToEdge;
+  MnAddressMode address_mode_v = MnAddressModeClampToEdge;
+  MnAddressMode address_mode_w = MnAddressModeClampToEdge;
+  // N.B.: See `mnexus::SamplerDesc`.
+};
+
 struct MnTextureSubresourceRange final {
   MnTextureAspectFlagBits aspect_mask = MnTextureAspectFlagBits::MnTextureAspectFlagBitColor;
   uint32_t base_mip_level = 0;
@@ -615,6 +632,7 @@ _MNEXUS_DEFINE_TYPESAFE_HANDLE(ShaderModuleHandle);
 _MNEXUS_DEFINE_TYPESAFE_HANDLE(ProgramHandle);
 _MNEXUS_DEFINE_TYPESAFE_HANDLE(ComputePipelineHandle);
 _MNEXUS_DEFINE_TYPESAFE_HANDLE(RenderPipelineHandle);
+_MNEXUS_DEFINE_TYPESAFE_HANDLE(SamplerHandle);
 
 // ----------------------------------------------------------------------------------------------------
 // Queue
@@ -738,6 +756,22 @@ enum class Filter : uint32_t {
   kNearest = MnFilterNearest,
   kLinear  = MnFilterLinear,
 };
+
+enum class AddressMode : uint32_t {
+  kRepeat       = MnAddressModeRepeat,
+  kMirrorRepeat = MnAddressModeMirrorRepeat,
+  kClampToEdge  = MnAddressModeClampToEdge,
+};
+
+struct SamplerDesc final {
+  Filter min_filter         = Filter::kNearest;
+  Filter mag_filter         = Filter::kNearest;
+  Filter mipmap_filter      = Filter::kNearest;
+  AddressMode address_mode_u = AddressMode::kClampToEdge;
+  AddressMode address_mode_v = AddressMode::kClampToEdge;
+  AddressMode address_mode_w = AddressMode::kClampToEdge;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(SamplerDesc, MnSamplerDesc);
 
 struct TextureSubresourceRange final {
   TextureAspectFlags aspect_mask = TextureAspectFlagBits::kColor;

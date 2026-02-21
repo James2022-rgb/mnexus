@@ -311,6 +311,37 @@ MnFormat FromWgpuTextureFormat(wgpu::TextureFormat value) {
   }
 }
 
+wgpu::FilterMode ToWgpuFilterMode(mnexus::Filter value) {
+  switch (value) {
+  case mnexus::Filter::kNearest: return wgpu::FilterMode::Nearest;
+  case mnexus::Filter::kLinear:  return wgpu::FilterMode::Linear;
+  default:
+    MBASE_LOG_ERROR("Unknown Filter value {}", static_cast<uint32_t>(value));
+    return wgpu::FilterMode::Nearest;
+  }
+}
+
+wgpu::MipmapFilterMode ToWgpuMipmapFilterMode(mnexus::Filter value) {
+  switch (value) {
+  case mnexus::Filter::kNearest: return wgpu::MipmapFilterMode::Nearest;
+  case mnexus::Filter::kLinear:  return wgpu::MipmapFilterMode::Linear;
+  default:
+    MBASE_LOG_ERROR("Unknown Filter value {}", static_cast<uint32_t>(value));
+    return wgpu::MipmapFilterMode::Nearest;
+  }
+}
+
+wgpu::AddressMode ToWgpuAddressMode(mnexus::AddressMode value) {
+  switch (value) {
+  case mnexus::AddressMode::kRepeat:       return wgpu::AddressMode::Repeat;
+  case mnexus::AddressMode::kMirrorRepeat: return wgpu::AddressMode::MirrorRepeat;
+  case mnexus::AddressMode::kClampToEdge:  return wgpu::AddressMode::ClampToEdge;
+  default:
+    MBASE_LOG_ERROR("Unknown AddressMode value {}", static_cast<uint32_t>(value));
+    return wgpu::AddressMode::ClampToEdge;
+  }
+}
+
 wgpu::PrimitiveTopology ToWgpuPrimitiveTopology(mnexus::PrimitiveTopology value) {
   switch (value) {
   case mnexus::PrimitiveTopology::kPointList:     return wgpu::PrimitiveTopology::PointList;

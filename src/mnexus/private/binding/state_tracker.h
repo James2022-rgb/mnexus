@@ -18,11 +18,22 @@ struct BoundBuffer final {
   uint64_t size = 0;
 };
 
+struct BoundTexture final {
+  mnexus::TextureHandle texture;
+  mnexus::TextureSubresourceRange subresource_range;
+};
+
+struct BoundSampler final {
+  mnexus::SamplerHandle sampler;
+};
+
 struct BoundEntry final {
   uint32_t binding = 0;
   uint32_t array_element = 0;
   mnexus::BindGroupLayoutEntryType type = mnexus::BindGroupLayoutEntryType::kUniformBuffer;
-  BoundBuffer buffer;
+  BoundBuffer buffer;    // Valid when type == kUniformBuffer or kStorageBuffer.
+  BoundTexture texture;  // Valid when type == kSampledTexture.
+  BoundSampler sampler;  // Valid when type == kSampler.
 };
 
 /// Tracks the current bind group state across all groups.
@@ -33,6 +44,18 @@ public:
     uint32_t group, uint32_t binding, uint32_t array_element,
     mnexus::BindGroupLayoutEntryType type,
     mnexus::BufferHandle buffer, uint64_t offset, uint64_t size
+  );
+
+  void SetTexture(
+    uint32_t group, uint32_t binding, uint32_t array_element,
+    mnexus::BindGroupLayoutEntryType type,
+    mnexus::TextureHandle texture,
+    mnexus::TextureSubresourceRange const& subresource_range
+  );
+
+  void SetSampler(
+    uint32_t group, uint32_t binding, uint32_t array_element,
+    mnexus::SamplerHandle sampler
   );
 
   [[nodiscard]] bool IsGroupDirty(uint32_t group) const;
