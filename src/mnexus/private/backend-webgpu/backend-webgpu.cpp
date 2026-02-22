@@ -1312,8 +1312,8 @@ public:
   // Device Capability
   //
 
-  IMPL_VAPI(mnexus::DeviceCapability, GetDeviceCapability) {
-    return device_capability_;
+  IMPL_VAPI(mnexus::AdapterCapability, GetAdapterCapability) {
+    return adapter_capability_;
   }
 
   IMPL_VAPI(void, GetAdapterInfo, mnexus::AdapterInfo& out_info) {
@@ -1512,7 +1512,7 @@ private:
   wgpu::Instance wgpu_instance_;
   wgpu::Device wgpu_device_;
   ResourceStorage* resource_storage_ = nullptr;
-  mnexus::DeviceCapability device_capability_;
+  mnexus::AdapterCapability adapter_capability_;
   mnexus::AdapterInfo adapter_info_;
 
   mbase::Lockable<std::mutex> queue_mutex_;

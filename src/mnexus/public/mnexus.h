@@ -230,7 +230,7 @@ public:
   // Device Capability
   //
 
-  _MNEXUS_VAPI(DeviceCapability, GetDeviceCapability);
+  _MNEXUS_VAPI(AdapterCapability, GetAdapterCapability);
 
   _MNEXUS_VAPI(void, GetAdapterInfo, AdapterInfo& out_info);
 

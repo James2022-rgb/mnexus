@@ -38,11 +38,11 @@ struct MnOffset3d final {
 // ----------------------------------------------------------------------------------------------------
 // Capability
 
-struct MnDeviceCapability final {
+struct MnAdapterCapability final {
   MnBool32 vertex_shader_storage_write = MnBoolFalse;
   MnBool32 polygon_mode_line = MnBoolFalse;
   MnBool32 polygon_mode_point = MnBoolFalse;
-  // N.B.: See `mnexus::DeviceCapability`.
+  // N.B.: See `mnexus::AdapterCapability`.
 };
 
 // ----------------------------------------------------------------------------------------------------
@@ -610,13 +610,13 @@ struct SurfaceSourceDesc final {
 // ----------------------------------------------------------------------------------------------------
 // Capability
 
-struct DeviceCapability final {
+struct AdapterCapability final {
   MnBool32 vertex_shader_storage_write = MnBoolFalse;
   MnBool32 polygon_mode_line = MnBoolFalse;
   MnBool32 polygon_mode_point = MnBoolFalse;
-  // N.B.: See `MnDeviceCapability`.
+  // N.B.: See `MnAdapterCapability`.
 };
-_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(DeviceCapability, MnDeviceCapability);
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(AdapterCapability, MnAdapterCapability);
 
 struct AdapterInfo final {
   char device_name[256] = {};
