@@ -442,3 +442,22 @@ target_compile_definitions(${TARGET_NAME} PRIVATE
   MNEXUS_INTERNAL_USE_DAWN=$<BOOL:${_enable_dawn}>
   MNEXUS_INTERNAL_USE_TINT=$<BOOL:${_enable_tint}>
 )
+
+# --------------------------------------------------------------------------------
+# Solution folder
+#
+
+set_target_properties(${TARGET_NAME} PROPERTIES FOLDER "mnexus")
+
+# --------------------------------------------------------------------------------
+# Tests
+#
+
+option(MNEXUS_BUILD_TESTS "Build mnexus tests" OFF)
+
+if(MNEXUS_BUILD_TESTS)
+  set(_old_folder "${CMAKE_FOLDER}")
+  set(CMAKE_FOLDER "mnexus/tests")
+  add_subdirectory(tests)
+  set(CMAKE_FOLDER "${_old_folder}")
+endif()

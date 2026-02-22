@@ -618,6 +618,15 @@ struct DeviceCapability final {
 };
 _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(DeviceCapability, MnDeviceCapability);
 
+struct AdapterInfo final {
+  char device_name[256] = {};
+  char vendor[256] = {};
+  char architecture[256] = {};
+  char description[256] = {};
+  uint32_t vendor_id = 0;
+  uint32_t device_id = 0;
+};
+
 // ----------------------------------------------------------------------------------------------------
 // Handles
 //

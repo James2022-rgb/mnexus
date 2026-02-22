@@ -1316,12 +1316,17 @@ public:
     return device_capability_;
   }
 
+  IMPL_VAPI(void, GetAdapterInfo, mnexus::AdapterInfo& out_info) {
+    out_info = adapter_info_;
+  }
+
   //
   // Module local
   //
 
   void Initialize(
     wgpu::Instance wgpu_instance,
+    wgpu::Adapter wgpu_adapter,
     wgpu::Device wgpu_device,
     ResourceStorage* resource_storage
   ) {
@@ -1330,6 +1335,29 @@ public:
     wgpu_instance_ = std::move(wgpu_instance);
     wgpu_device_ = std::move(wgpu_device);
     resource_storage_ = resource_storage;
+
+    // Populate adapter info.
+    {
+      wgpu::AdapterInfo info {};
+      wgpu_adapter.GetInfo(&info);
+
+      auto copy_string_view = [](char* dst, size_t dst_size, wgpu::StringView sv) {
+        if (sv.data == nullptr || sv.length == 0) {
+          dst[0] = '\0';
+          return;
+        }
+        size_t len = (sv.length < dst_size - 1) ? sv.length : dst_size - 1;
+        std::memcpy(dst, sv.data, len);
+        dst[len] = '\0';
+      };
+
+      copy_string_view(adapter_info_.device_name, sizeof(adapter_info_.device_name), info.device);
+      copy_string_view(adapter_info_.vendor, sizeof(adapter_info_.vendor), info.vendor);
+      copy_string_view(adapter_info_.architecture, sizeof(adapter_info_.architecture), info.architecture);
+      copy_string_view(adapter_info_.description, sizeof(adapter_info_.description), info.description);
+      adapter_info_.vendor_id = info.vendorID;
+      adapter_info_.device_id = info.deviceID;
+    }
 
     resource_storage_->swapchain_texture_handle = resource_storage_->textures.Emplace(
       std::forward_as_tuple(TextureHot {}),
@@ -1485,6 +1513,7 @@ private:
   wgpu::Device wgpu_device_;
   ResourceStorage* resource_storage_ = nullptr;
   mnexus::DeviceCapability device_capability_;
+  mnexus::AdapterInfo adapter_info_;
 
   mbase::Lockable<std::mutex> queue_mutex_;
   uint64_t next_timeline_value_ MBASE_GUARDED_BY(queue_mutex_) = 1;
@@ -1505,7 +1534,7 @@ public:
     adapter_(std::move(adapter)),
     device_(std::move(device))
   {
-    mnexus_device_.Initialize(instance_, device_, &resource_storage_);
+    mnexus_device_.Initialize(instance_, adapter_, device_, &resource_storage_);
   }
   ~BackendWebGpu() override {
     mnexus_device_.Shutdown();
