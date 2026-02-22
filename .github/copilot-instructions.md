@@ -55,6 +55,14 @@ nexus->Destroy();
 - Surface/presentation methods (`OnSurfaceRecreated`, `OnSurfaceDestroyed`, `OnPresentPrologue`, `OnPresentEpilogue`) must NOT be called on a headless instance (guarded by assertions).
 - `OnDisplayChanged` is a silent no-op in headless mode.
 
+### Surface Resize
+
+On desktop platforms, `OnSurfaceDestroyed()` + `OnSurfaceRecreated()` is called on every window resize. The WebGPU backend keeps the `wgpu::Surface` alive across this sequence when the native window handle hasn't changed (i.e. the same HWND). Only the surface configuration (dimensions) is updated. This avoids destroying and recreating the underlying DXGI swapchain on every resize, which can fail on Dawn's D3D12 backend if the old swapchain hasn't been fully released yet.
+
+When the native window handle differs (e.g. Android background/foreground cycle where the `ANativeWindow` is destroyed), the old surface is destroyed and a new one is created.
+
+Surface dimensions are clamped to a minimum of 1x1 to prevent invalid WebGPU surface configuration (e.g. if `GetClientRect` returns 0x0 during a minimize transition).
+
 ### C/C++ FFI Type Layer (`src/mnexus/public/types.h`)
 
 Types are defined in two layers for FFI compatibility:
