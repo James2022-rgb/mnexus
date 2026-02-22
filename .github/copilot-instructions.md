@@ -104,6 +104,22 @@ Files follow a consistent header ordering:
 // project headers --------------------------------------
 ```
 
+### Tests
+
+Test executables live under `tests/`, each in its own subdirectory. Controlled by the `MNEXUS_BUILD_TESTS` CMake option (default: OFF).
+
+`tests/CMakeLists.txt` provides a helper function:
+
+```cmake
+mnexus_add_test(<target_name> <source_file> ...)
+```
+
+This handles linking to `mnexus`, setting C++23, and copying backend-dependent DLLs (e.g., `d3dcompiler_47.dll` on Windows) to the executable output directory. Individual test `CMakeLists.txt` files should use this helper instead of manually configuring each target.
+
+Test targets are grouped under the `mnexus/tests` solution folder in Visual Studio.
+
+**Important:** Tests must call `mbase::Logger::Initialize()` before any mnexus API call, and `mbase::Logger::Shutdown()` at exit.
+
 ### Dependencies
 
 - `mbase` - Base utilities (logging, assertions, `SmallVector`, `ArrayProxy`, thread safety annotations, platform detection, `BitFlags`)
