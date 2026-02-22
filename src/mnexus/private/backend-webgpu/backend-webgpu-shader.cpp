@@ -80,7 +80,8 @@ container::ResourceHandle EmplaceProgramResourcePool(
   wgpu::Device const& wgpu_device,
   mnexus::ProgramDesc const& program_desc,
   ShaderModuleResourcePool const& shader_module_pool,
-  std::function<container::ResourceHandle(mnexus::ShaderModuleHandle)> get_shader_module_pool_handle
+  std::function<container::ResourceHandle(mnexus::ShaderModuleHandle)> get_shader_module_pool_handle,
+  pipeline::TPipelineLayoutCache<wgpu::PipelineLayout>& pipeline_layout_cache
 ) {
   // Phase 1: Merge bind group layouts from all shader modules.
   shader::MergedPipelineLayout merged_pipeline_layout;
@@ -102,75 +103,83 @@ container::ResourceHandle EmplaceProgramResourcePool(
 
   mbase::ArrayProxy<shader::BindGroupLayout const> merged_layouts = merged_pipeline_layout.GetBindGroupLayouts();
 
-  // Phase 2: Convert merged layouts to WebGPU bind group layouts.
+  // Phase 2: Look up or create the pipeline layout via cache.
+  pipeline::PipelineLayoutCacheKey layout_key = pipeline::BuildPipelineLayoutCacheKey(merged_layouts);
 
-  std::vector<wgpu::BindGroupLayout> wgpu_bind_group_layouts;
-  wgpu_bind_group_layouts.reserve(merged_layouts.size());
+  wgpu::PipelineLayout pipeline_layout = pipeline_layout_cache.FindOrInsert(
+    layout_key,
+    [&](pipeline::PipelineLayoutCacheKey const&) {
+      // Convert merged layouts to WebGPU bind group layouts.
+      std::vector<wgpu::BindGroupLayout> wgpu_bind_group_layouts;
+      wgpu_bind_group_layouts.reserve(merged_layouts.size());
 
-  for (uint32_t set_index = 0; set_index < merged_layouts.size(); ++set_index) {
-    shader::BindGroupLayout const& merged_bgl = merged_layouts[set_index];
+      for (uint32_t set_index = 0; set_index < merged_layouts.size(); ++set_index) {
+        shader::BindGroupLayout const& merged_bgl = merged_layouts[set_index];
 
-    mbase::SmallVector<wgpu::BindGroupLayoutEntry, 4> wgpu_entries;
-    wgpu_entries.reserve(merged_bgl.entries.size());
+        mbase::SmallVector<wgpu::BindGroupLayoutEntry, 4> wgpu_entries;
+        wgpu_entries.reserve(merged_bgl.entries.size());
 
-    for (uint32_t entry_index = 0; entry_index < merged_bgl.entries.size(); ++entry_index) {
-      shader::BindGroupLayoutEntry const& entry = merged_bgl.entries[entry_index];
+        for (uint32_t entry_index = 0; entry_index < merged_bgl.entries.size(); ++entry_index) {
+          shader::BindGroupLayoutEntry const& entry = merged_bgl.entries[entry_index];
 
-      wgpu::BindGroupLayoutEntry& wgpu_entry = wgpu_entries.emplace_back();
+          wgpu::BindGroupLayoutEntry& wgpu_entry = wgpu_entries.emplace_back();
 
-      wgpu_entry.binding = entry.binding;
-      wgpu_entry.visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment | wgpu::ShaderStage::Compute;
+          wgpu_entry.binding = entry.binding;
+          wgpu_entry.visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment | wgpu::ShaderStage::Compute;
 
-      switch (entry.type) {
-        case mnexus::BindGroupLayoutEntryType::kUniformBuffer:
-          wgpu_entry.buffer.type = wgpu::BufferBindingType::Uniform;
-          break;
-        case mnexus::BindGroupLayoutEntryType::kStorageBuffer:
-          if (entry.writable) {
-            wgpu_entry.buffer.type = wgpu::BufferBindingType::Storage;
-            wgpu_entry.visibility = wgpu::ShaderStage::Fragment | wgpu::ShaderStage::Compute;
-          } else {
-            wgpu_entry.buffer.type = wgpu::BufferBindingType::ReadOnlyStorage;
+          switch (entry.type) {
+            case mnexus::BindGroupLayoutEntryType::kUniformBuffer:
+              wgpu_entry.buffer.type = wgpu::BufferBindingType::Uniform;
+              break;
+            case mnexus::BindGroupLayoutEntryType::kStorageBuffer:
+              if (entry.writable) {
+                wgpu_entry.buffer.type = wgpu::BufferBindingType::Storage;
+                wgpu_entry.visibility = wgpu::ShaderStage::Fragment | wgpu::ShaderStage::Compute;
+              } else {
+                wgpu_entry.buffer.type = wgpu::BufferBindingType::ReadOnlyStorage;
+              }
+              break;
+            case mnexus::BindGroupLayoutEntryType::kSampledTexture:
+              wgpu_entry.texture.sampleType = wgpu::TextureSampleType::Float;
+              wgpu_entry.texture.viewDimension = wgpu::TextureViewDimension::e2D;
+              wgpu_entry.texture.multisampled = false;
+              break;
+            case mnexus::BindGroupLayoutEntryType::kSampler:
+              wgpu_entry.sampler.type = wgpu::SamplerBindingType::Filtering;
+              break;
+            case mnexus::BindGroupLayoutEntryType::kStorageTexture:
+              wgpu_entry.storageTexture.access = wgpu::StorageTextureAccess::ReadWrite;
+              wgpu_entry.storageTexture.format = wgpu::TextureFormat::RGBA8Unorm;
+              wgpu_entry.storageTexture.viewDimension = wgpu::TextureViewDimension::e2D;
+              break;
+            case mnexus::BindGroupLayoutEntryType::kCombinedTextureSampler:
+              wgpu_entry.texture.sampleType = wgpu::TextureSampleType::Float;
+              wgpu_entry.texture.viewDimension = wgpu::TextureViewDimension::e2D;
+              wgpu_entry.texture.multisampled = false;
+              wgpu_entry.sampler.type = wgpu::SamplerBindingType::Filtering;
+              break;
+            default:
+              MBASE_LOG_ERROR("Unsupported BindGroupLayoutEntryType in EmplaceProgramResourcePool: {}", static_cast<uint32_t>(entry.type));
+              mbase::Trap();
+              break;
           }
-          break;
-        case mnexus::BindGroupLayoutEntryType::kSampledTexture:
-          wgpu_entry.texture.sampleType = wgpu::TextureSampleType::Float;
-          wgpu_entry.texture.viewDimension = wgpu::TextureViewDimension::e2D;
-          wgpu_entry.texture.multisampled = false;
-          break;
-        case mnexus::BindGroupLayoutEntryType::kSampler:
-          wgpu_entry.sampler.type = wgpu::SamplerBindingType::Filtering;
-          break;
-        case mnexus::BindGroupLayoutEntryType::kStorageTexture:
-          wgpu_entry.storageTexture.access = wgpu::StorageTextureAccess::ReadWrite;
-          wgpu_entry.storageTexture.format = wgpu::TextureFormat::RGBA8Unorm;
-          wgpu_entry.storageTexture.viewDimension = wgpu::TextureViewDimension::e2D;
-          break;
-        case mnexus::BindGroupLayoutEntryType::kCombinedTextureSampler:
-          wgpu_entry.texture.sampleType = wgpu::TextureSampleType::Float;
-          wgpu_entry.texture.viewDimension = wgpu::TextureViewDimension::e2D;
-          wgpu_entry.texture.multisampled = false;
-          wgpu_entry.sampler.type = wgpu::SamplerBindingType::Filtering;
-          break;
-        default:
-          MBASE_LOG_ERROR("Unsupported BindGroupLayoutEntryType in EmplaceProgramResourcePool: {}", static_cast<uint32_t>(entry.type));
-          mbase::Trap();
-          break;
+        }
+
+        wgpu::BindGroupLayoutDescriptor wgpu_bgl_desc {};
+        wgpu_bgl_desc.entryCount = wgpu_entries.size();
+        wgpu_bgl_desc.entries = wgpu_entries.data();
+        wgpu_bind_group_layouts.push_back(wgpu_device.CreateBindGroupLayout(&wgpu_bgl_desc));
       }
+
+      // Create PipelineLayout from bind group layouts.
+      wgpu::PipelineLayoutDescriptor pipeline_layout_desc {};
+      pipeline_layout_desc.bindGroupLayoutCount = wgpu_bind_group_layouts.size();
+      pipeline_layout_desc.bindGroupLayouts = wgpu_bind_group_layouts.data();
+      return wgpu_device.CreatePipelineLayout(&pipeline_layout_desc);
     }
+  );
 
-    wgpu::BindGroupLayoutDescriptor wgpu_bgl_desc {};
-    wgpu_bgl_desc.entryCount = wgpu_entries.size();
-    wgpu_bgl_desc.entries = wgpu_entries.data();
-    wgpu_bind_group_layouts.push_back(wgpu_device.CreateBindGroupLayout(&wgpu_bgl_desc));
-  }
-
-  // Phase 3: Create PipelineLayout, emplace into pool, and return handle.
-  wgpu::PipelineLayoutDescriptor pipeline_layout_desc {};
-  pipeline_layout_desc.bindGroupLayoutCount = wgpu_bind_group_layouts.size();
-  pipeline_layout_desc.bindGroupLayouts = wgpu_bind_group_layouts.data();
-  wgpu::PipelineLayout pipeline_layout = wgpu_device.CreatePipelineLayout(&pipeline_layout_desc);
-
+  // Phase 3: Emplace into pool and return handle.
   ProgramHot hot { .wgpu_pipeline_layout = std::move(pipeline_layout) };
 
   ProgramCold cold {};

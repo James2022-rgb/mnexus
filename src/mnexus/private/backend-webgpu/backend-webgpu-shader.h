@@ -13,6 +13,7 @@
 
 #include "backend-webgpu/include_dawn.h"
 
+#include "pipeline/pipeline_layout_cache.h"
 #include "shader/reflection.h"
 
 namespace mnexus_backend::webgpu {
@@ -57,7 +58,8 @@ container::ResourceHandle EmplaceProgramResourcePool(
   wgpu::Device const& wgpu_device,
   mnexus::ProgramDesc const& program_desc,
   ShaderModuleResourcePool const& shader_module_pool,
-  std::function<container::ResourceHandle(mnexus::ShaderModuleHandle)> get_shader_module_pool_handle
+  std::function<container::ResourceHandle(mnexus::ShaderModuleHandle)> get_shader_module_pool_handle,
+  pipeline::TPipelineLayoutCache<wgpu::PipelineLayout>& pipeline_layout_cache
 );
 
 } // namespace mnexus_backend::webgpu

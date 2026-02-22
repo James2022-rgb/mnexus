@@ -44,6 +44,7 @@
 #include "backend-webgpu/blit_texture.h"
 #include "backend-webgpu/buffer_row_repack.h"
 
+#include "pipeline/pipeline_layout_cache.h"
 #include "pipeline/render_pipeline_cache.h"
 #include "pipeline/render_pipeline_state_tracker.h"
 
@@ -59,6 +60,7 @@ struct ResourceStorage final {
   TextureResourcePool textures;
   SamplerResourcePool samplers;
 
+  pipeline::TPipelineLayoutCache<wgpu::PipelineLayout> pipeline_layout_cache;
   pipeline::TRenderPipelineCache<wgpu::RenderPipeline> render_pipeline_cache;
 
   std::mutex swapchain_texture_mutex; // Protects `TextureHot` and `TextureCold`.
@@ -1204,7 +1206,8 @@ public:
       resource_storage_->shader_modules,
       [](mnexus::ShaderModuleHandle shader_module_handle) {
         return container::ResourceHandle::FromU64(shader_module_handle.Get());
-      }
+      },
+      resource_storage_->pipeline_layout_cache
     );
     if (pool_handle.IsNull()) {
       return mnexus::ProgramHandle::Invalid();

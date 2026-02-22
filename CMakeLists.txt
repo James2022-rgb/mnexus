@@ -392,6 +392,9 @@ source_group("Private/Binding" FILES ${_sources_private_binding})
 
 set(_private_pipeline_dir "${_private_root_dir}/pipeline")
 set(_sources_private_pipeline
+  ${_private_pipeline_dir}/pipeline_layout_cache.h
+  ${_private_pipeline_dir}/pipeline_layout_cache_key.cpp
+  ${_private_pipeline_dir}/pipeline_layout_cache_key.h
   ${_private_pipeline_dir}/render_pipeline_cache.h
   ${_private_pipeline_dir}/render_pipeline_cache_key.cpp
   ${_private_pipeline_dir}/render_pipeline_cache_key.h
