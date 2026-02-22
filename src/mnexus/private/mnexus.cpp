@@ -7,6 +7,7 @@
 // c++ headers ------------------------------------------
 
 // public project headers -------------------------------
+#include "mbase/public/assert.h"
 #include "mbase/public/log.h"
 #include "mbase/public/access.h"
 
@@ -19,8 +20,9 @@ namespace mnexus {
 
 class Nexus final : public INexus {
 public:
-  explicit Nexus(std::unique_ptr<mnexus_backend::IBackend> backend) :
-    backend_(std::move(backend))
+  explicit Nexus(std::unique_ptr<mnexus_backend::IBackend> backend, bool headless) :
+    backend_(std::move(backend)),
+    headless_(headless)
   {
   }
   ~Nexus() override = default;
@@ -33,14 +35,17 @@ public:
   // Surface lifecycle.
 
   MNEXUS_NO_THROW void MNEXUS_CALL OnDisplayChanged() override {
+    if (headless_) return;
     backend_->OnDisplayChanged();
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL OnSurfaceDestroyed() override {
+    MBASE_ASSERT_MSG(!headless_, "OnSurfaceDestroyed() must not be called on a headless INexus instance");
     backend_->OnSurfaceDestroyed();
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL OnSurfaceRecreated(SurfaceSourceDesc const& surface_source_desc) override {
+    MBASE_ASSERT_MSG(!headless_, "OnSurfaceRecreated() must not be called on a headless INexus instance");
     backend_->OnSurfaceRecreated(surface_source_desc);
   }
 
@@ -48,10 +53,12 @@ public:
   // Presentation.
 
   MNEXUS_NO_THROW void MNEXUS_CALL OnPresentPrologue() override {
+    MBASE_ASSERT_MSG(!headless_, "OnPresentPrologue() must not be called on a headless INexus instance");
     backend_->OnPresentPrologue();
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL OnPresentEpilogue() override {
+    MBASE_ASSERT_MSG(!headless_, "OnPresentEpilogue() must not be called on a headless INexus instance");
     backend_->OnPresentEpilogue();
   }
 
@@ -64,9 +71,10 @@ public:
 
 private:
   std::unique_ptr<mnexus_backend::IBackend> backend_;
+  bool headless_ = false;
 };
 
-INexus* INexus::Create() {
+INexus* INexus::Create(NexusDesc const& desc) {
   // TODO: Select backend here.
 
 #if MNEXUS_ENABLE_BACKEND_WGPU
@@ -75,7 +83,7 @@ INexus* INexus::Create() {
 # error No backend is enabled in mnexus!
 #endif
 
-  return new Nexus(std::move(backend));
+  return new Nexus(std::move(backend), desc.headless);
 }
 
 } // namespace mnexus

@@ -21,9 +21,13 @@ class ICommandList;
 #define _MNEXUS_VAPI(ret, name, ...) \
   virtual MNEXUS_NO_THROW ret MNEXUS_CALL name(__VA_ARGS__) = 0
 
+struct NexusDesc final {
+  bool headless = false;
+};
+
 class INexus {
 public:
-  static INexus* Create();
+  static INexus* Create(NexusDesc const& desc = {});
 
   virtual ~INexus() = default;
 
