@@ -120,6 +120,8 @@ Test targets are grouped under the `mnexus/tests` solution folder in Visual Stud
 
 **Important:** Tests must call `mbase::Logger::Initialize()` before any mnexus API call, and `mbase::Logger::Shutdown()` at exit.
 
+Commits to `master` must not break existing tests. If a change includes a breaking API change, the same commit must update all affected tests so that they build and run successfully.
+
 ### Dependencies
 
 - `mbase` - Base utilities (logging, assertions, `SmallVector`, `ArrayProxy`, thread safety annotations, platform detection, `BitFlags`)
