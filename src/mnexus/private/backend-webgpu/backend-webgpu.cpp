@@ -2,6 +2,7 @@
 #include "backend-webgpu/backend-webgpu.h"
 
 // c++ headers ------------------------------------------
+#include <algorithm>
 #include <cstring>
 #include <mutex>
 #include <vector>
@@ -1556,69 +1557,87 @@ public:
     mnexus_device_.OnWgpuSurfaceUnconfigured();
 
     surface_.Unconfigure();
-    surface_ = nullptr;
+    // Keep the wgpu::Surface alive so that OnSurfaceRecreated can reuse it
+    // when the native window handle hasn't changed (e.g. resize). Destroying
+    // and recreating the underlying DXGI swapchain on every resize can fail
+    // if Dawn's D3D12 backend hasn't fully released the old swapchain yet.
   }
 
   void OnSurfaceRecreated(mnexus::SurfaceSourceDesc const& surface_source_desc) override {
     constexpr wgpu::TextureFormat kPreferredFormat = wgpu::TextureFormat::RGBA8Unorm;
     constexpr wgpu::TextureUsage kTextureUsage = wgpu::TextureUsage::RenderAttachment;
 
-    MBASE_ASSERT(!surface_);
+    // Check if we can reuse the existing wgpu::Surface. We can reuse it when the
+    // native window handle hasn't changed (e.g. desktop resize). Reusing avoids
+    // destroying and recreating the underlying DXGI swapchain, which can fail on
+    // Dawn's D3D12 backend if the old swapchain hasn't been fully released yet.
+    bool const can_reuse_surface =
+      surface_ && surface_source_desc.window_handle == last_surface_window_handle_;
 
-    {
+    if (can_reuse_surface) {
+      // Surface already unconfigured by OnSurfaceDestroyed; just reconfigure below.
+    } else {
+      // Destroy old surface if one exists (native window changed).
+      if (surface_) {
+        surface_ = nullptr;
+      }
+
+      // Create a new surface.
+      {
 #if MBASE_PLATFORM_WINDOWS
-      wgpu::SurfaceSourceWindowsHWND chained_desc{};
-      chained_desc.hinstance = reinterpret_cast<void*>(surface_source_desc.instance_handle);
-      chained_desc.hwnd = reinterpret_cast<void*>(surface_source_desc.window_handle);
+        wgpu::SurfaceSourceWindowsHWND chained_desc{};
+        chained_desc.hinstance = reinterpret_cast<void*>(surface_source_desc.instance_handle);
+        chained_desc.hwnd = reinterpret_cast<void*>(surface_source_desc.window_handle);
 #elif MBASE_PLATFORM_ANDROID
-      wgpu::SurfaceSourceAndroidNativeWindow chained_desc{};
-      chained_desc.window = reinterpret_cast<void*>(surface_source_desc.window_handle);
+        wgpu::SurfaceSourceAndroidNativeWindow chained_desc{};
+        chained_desc.window = reinterpret_cast<void*>(surface_source_desc.window_handle);
 #elif MBASE_PLATFORM_WEB
-      wgpu::EmscriptenSurfaceSourceCanvasHTMLSelector chained_desc{};
-      chained_desc.selector = wgpu::StringView(surface_source_desc.canvas_selector, surface_source_desc.canvas_selector_length);
+        wgpu::EmscriptenSurfaceSourceCanvasHTMLSelector chained_desc{};
+        chained_desc.selector = wgpu::StringView(surface_source_desc.canvas_selector, surface_source_desc.canvas_selector_length);
 #endif
 
-      wgpu::SurfaceDescriptor desc{};
-      desc.nextInChain = &chained_desc;
+        wgpu::SurfaceDescriptor desc{};
+        desc.nextInChain = &chained_desc;
 
-      surface_ = instance_.CreateSurface(&desc);
-    }
-
-    wgpu::SurfaceCapabilities surface_caps{};
-    surface_.GetCapabilities(adapter_, &surface_caps);
-
-    // Log surface capabilities.
-    {
-      MBASE_LOG_INFO("Surface Capabilities:");
-      MBASE_LOG_INFO("Format count: {}", surface_caps.formatCount);
-      for (uint32_t i = 0; i < surface_caps.formatCount; ++i) {
-        MBASE_LOG_INFO("  Format[{}]: {}", i, surface_caps.formats[i]);
+        surface_ = instance_.CreateSurface(&desc);
       }
-      MBASE_LOG_INFO("Present mode count: {}", surface_caps.presentModeCount);
-      for (uint32_t i = 0; i < surface_caps.presentModeCount; ++i) {
-        MBASE_LOG_INFO("  PresentMode[{}]: {}", i, surface_caps.presentModes[i]);
-      }
-      MBASE_LOG_INFO("Alpha mode count: {}", surface_caps.alphaModeCount);
-      for (uint32_t i = 0; i < surface_caps.alphaModeCount; ++i) {
-        MBASE_LOG_INFO("  AlphaMode[{}]: {}", i, surface_caps.alphaModes[i]);
-      }
-    }
 
-    // Assert that the surface supports the preferred format.
-    {
-      bool format_supported = false;
-      for (uint32_t i = 0; i < surface_caps.formatCount; ++i) {
-        if (surface_caps.formats[i] == kPreferredFormat) {
-          format_supported = true;
-          break;
+      wgpu::SurfaceCapabilities surface_caps{};
+      surface_.GetCapabilities(adapter_, &surface_caps);
+
+      // Log surface capabilities.
+      {
+        MBASE_LOG_INFO("Surface Capabilities:");
+        MBASE_LOG_INFO("Format count: {}", surface_caps.formatCount);
+        for (uint32_t i = 0; i < surface_caps.formatCount; ++i) {
+          MBASE_LOG_INFO("  Format[{}]: {}", i, surface_caps.formats[i]);
+        }
+        MBASE_LOG_INFO("Present mode count: {}", surface_caps.presentModeCount);
+        for (uint32_t i = 0; i < surface_caps.presentModeCount; ++i) {
+          MBASE_LOG_INFO("  PresentMode[{}]: {}", i, surface_caps.presentModes[i]);
+        }
+        MBASE_LOG_INFO("Alpha mode count: {}", surface_caps.alphaModeCount);
+        for (uint32_t i = 0; i < surface_caps.alphaModeCount; ++i) {
+          MBASE_LOG_INFO("  AlphaMode[{}]: {}", i, surface_caps.alphaModes[i]);
         }
       }
 
-      MBASE_ASSERT_MSG(
-        format_supported,
-        "Preferred surface format {} is not supported by the surface!",
-        kPreferredFormat
-      );
+      // Assert that the surface supports the preferred format.
+      {
+        bool format_supported = false;
+        for (uint32_t i = 0; i < surface_caps.formatCount; ++i) {
+          if (surface_caps.formats[i] == kPreferredFormat) {
+            format_supported = true;
+            break;
+          }
+        }
+
+        MBASE_ASSERT_MSG(
+          format_supported,
+          "Preferred surface format {} is not supported by the surface!",
+          kPreferredFormat
+        );
+      }
     }
 
     uint32_t width = 0;
@@ -1646,6 +1665,10 @@ public:
 #endif
     }
 
+    // Clamp to 1x1 minimum (0x0 is invalid in WebGPU surface configuration).
+    width = std::max(width, 1u);
+    height = std::max(height, 1u);
+
     MBASE_LOG_INFO("Configuring surface with size {}x{}...", width, height);
 
     wgpu::SurfaceConfiguration surface_config {
@@ -1662,6 +1685,7 @@ public:
 
     surface_.Configure(&surface_config);
 
+    last_surface_window_handle_ = surface_source_desc.window_handle;
     mnexus_device_.OnWgpuSurfaceConfigured(surface_config);
   }
 
@@ -1733,6 +1757,7 @@ private:
   MnexusDeviceWebGpu mnexus_device_;
 
   wgpu::Surface surface_;
+  uint64_t last_surface_window_handle_ = 0;
 };
 
 std::unique_ptr<IBackendWebGpu> IBackendWebGpu::Create() {
