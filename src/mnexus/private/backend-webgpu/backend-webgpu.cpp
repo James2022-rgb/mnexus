@@ -243,6 +243,57 @@ public:
     }
   }
 
+  IMPL_VAPI(void, CopyTextureToBuffer,
+    mnexus::TextureHandle src_texture_handle,
+    mnexus::TextureSubresourceRange const& src_subresource_range,
+    mnexus::BufferHandle dst_buffer_handle,
+    uint32_t dst_buffer_offset,
+    mnexus::Extent3d const& copy_extent
+  ) {
+    // Transfer commands must not be recorded inside any pass.
+    this->EndCurrentRenderPass();
+    this->EndCurrentComputePass();
+
+    auto src_texture_pool_handle = container::ResourceHandle::FromU64(src_texture_handle.Get());
+    auto [src_texture_hot, src_texture_cold, src_texture_lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(src_texture_pool_handle);
+
+    if (!src_texture_hot.wgpu_texture) {
+      return;
+    }
+
+    auto dst_buffer_pool_handle = container::ResourceHandle::FromU64(dst_buffer_handle.Get());
+    auto [dst_buffer_hot, dst_buffer_lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(dst_buffer_pool_handle);
+
+    uint32_t const format_size = MnGetFormatSizeInBytes(src_texture_cold.desc.format);
+    MnExtent3d const block_extent = MnGetFormatTexelBlockExtent(src_texture_cold.desc.format);
+
+    uint32_t const blocks_per_row = (copy_extent.width + block_extent.width - 1) / block_extent.width;
+    uint32_t const bytes_per_row_unaligned = blocks_per_row * format_size;
+    uint32_t const bytes_per_row_aligned = (bytes_per_row_unaligned + 255) & ~uint32_t(255);
+
+    uint32_t const rows_per_image = (copy_extent.height + block_extent.height - 1) / block_extent.height;
+
+    wgpu::TexelCopyTextureInfo src {};
+    src.texture = src_texture_hot.wgpu_texture;
+    src.mipLevel = src_subresource_range.base_mip_level;
+    src.origin = { 0, 0, src_subresource_range.base_array_layer };
+    src.aspect = wgpu::TextureAspect::All;
+
+    wgpu::TexelCopyBufferInfo dst {};
+    dst.buffer = dst_buffer_hot.wgpu_buffer;
+    dst.layout.offset = dst_buffer_offset;
+    dst.layout.bytesPerRow = bytes_per_row_aligned;
+    dst.layout.rowsPerImage = rows_per_image;
+
+    wgpu::Extent3D wgpu_copy_size {
+      copy_extent.width,
+      copy_extent.height,
+      copy_extent.depth,
+    };
+
+    wgpu_command_encoder_.CopyTextureToBuffer(&src, &dst, &wgpu_copy_size);
+  }
+
   IMPL_VAPI(void, BlitTexture,
     mnexus::TextureHandle src_texture_handle,
     mnexus::TextureSubresourceRange const& src_subresource_range,

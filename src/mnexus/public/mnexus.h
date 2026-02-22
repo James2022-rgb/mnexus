@@ -413,6 +413,14 @@ public:
     Extent3d const& copy_extent
   );
 
+  _MNEXUS_VAPI(void, CopyTextureToBuffer,
+    TextureHandle src_texture_handle,
+    TextureSubresourceRange const& src_subresource_range,
+    BufferHandle dst_buffer_handle,
+    uint32_t dst_buffer_offset,
+    Extent3d const& copy_extent
+  );
+
   _MNEXUS_VAPI(void, BlitTexture,
     TextureHandle src_texture_handle,
     TextureSubresourceRange const& src_subresource_range,
