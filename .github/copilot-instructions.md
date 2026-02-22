@@ -36,7 +36,7 @@ mnexus is a graphics abstraction layer providing a unified API over WebGPU (via 
 
 - `INexus` - Main entry point for surface lifecycle, presentation, and device access
 - `IDevice` - Resource creation (buffers, textures, shaders, programs, pipelines, layouts) and command submission
-- `ICommandList` - Command recording for compute and transfer operations
+- `ICommandList` - Command recording for render, compute, and transfer operations
 - `Texture` - RAII wrapper around texture handles
 
 ### Headless Mode
