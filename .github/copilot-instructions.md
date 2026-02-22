@@ -39,6 +39,22 @@ mnexus is a graphics abstraction layer providing a unified API over WebGPU (via 
 - `ICommandList` - Command recording for compute and transfer operations
 - `Texture` - RAII wrapper around texture handles
 
+### Headless Mode
+
+`INexus` supports headless operation (no surface/swapchain) for compute, transfer, and offscreen rendering workloads.
+
+```cpp
+mnexus::INexus* nexus = mnexus::INexus::Create({.headless = true});
+mnexus::IDevice* device = nexus->GetDevice();
+// Use device for compute, buffer read/write, offscreen render-to-texture, etc.
+nexus->Destroy();
+```
+
+- The GPU device is created immediately, independent of any surface.
+- All `IDevice` operations (buffers, textures, samplers, shaders, pipelines, command lists, queue ops) work without a surface.
+- Surface/presentation methods (`OnSurfaceRecreated`, `OnSurfaceDestroyed`, `OnPresentPrologue`, `OnPresentEpilogue`) must NOT be called on a headless instance (guarded by assertions).
+- `OnDisplayChanged` is a silent no-op in headless mode.
+
 ### C/C++ FFI Type Layer (`src/mnexus/public/types.h`)
 
 Types are defined in two layers for FFI compatibility:
