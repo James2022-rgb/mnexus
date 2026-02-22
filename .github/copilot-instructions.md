@@ -63,6 +63,15 @@ Types are defined in two layers for FFI compatibility:
 
 ### Backend Structure (`src/mnexus/private/`)
 
+- `binding/` - Backend-agnostic bind group state tracking
+  - `BindGroupStateTracker` - Tracks current bindings per group with dirty flags
+  - `BindGroupCacheKey` - Hashable descriptor for bind group deduplication
+- `pipeline/` - Backend-agnostic render pipeline scaffolding
+  - `RenderPipelineStateTracker` - Tracks mutable render state (program, vertex input, fixed-function) on a command list; assembles `RenderPipelineCacheKey` at draw time
+  - `TRenderPipelineCache<TPipeline>` - Thread-safe hash-based pipeline cache with shared/exclusive locking
+  - `RenderPipelineCacheKey` - Hashable key combining program, vertex layout, fixed-function state, and render target formats
+  - `PerDrawFixedFunctionStaticState` / `PerAttachmentFixedFunctionStaticState` - Packed uint8 structs for fast memcmp/memhash
+- `builtin_shader/` - Embedded SPIR-V for internal operations (blit, buffer row repack, full-screen quad)
 - `backend-iface/` - Abstract backend interface (`IBackend`)
 - `backend-webgpu/` - WebGPU implementation
   - `backend-webgpu.cpp/.h` - Main backend: `IBackendWebGpu`, `MnexusDeviceWebGpu`, `MnexusCommandListWebGpu`
