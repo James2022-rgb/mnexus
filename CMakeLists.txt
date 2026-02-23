@@ -326,6 +326,7 @@ source_group("Public/Container" FILES ${_sources_public_container})
 set(_private_root_dir "${SRC_DIR}/${TARGET_NAME}/private")
 set(_sources_private_root
   ${_private_root_dir}/mnexus.cpp
+  ${_private_root_dir}/mnexus_c.cpp
   ${_private_root_dir}/types.cpp
 )
 source_group("Private" FILES ${_sources_private_root})

@@ -16,5 +16,6 @@ function(mnexus_add_test TARGET_NAME)
   endif()
 endfunction()
 
+add_subdirectory(test-capi-headless-info)
 add_subdirectory(test-headless-info)
 add_subdirectory(test-headless-triangle)

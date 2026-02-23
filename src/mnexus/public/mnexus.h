@@ -1,7 +1,9 @@
 #pragma once
 
 // c++ headers ------------------------------------------
-#include <memory>
+#if defined(__cplusplus)
+# include <memory>
+#endif
 
 // public project headers -------------------------------
 #include "mbase/public/call.h"
@@ -518,3 +520,26 @@ private:
 } // namespace mnexus
 
 #endif // defined(__cplusplus)
+
+// ----------------------------------------------------------------------------------------------------
+// C API
+//
+
+typedef struct MnNexus_T*       MnNexus;
+typedef struct MnDevice_T*      MnDevice;
+typedef struct MnCommandList_T* MnCommandList;
+
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
+MNEXUS_NO_THROW MnNexus  MNEXUS_CALL MnNexusCreate(MnNexusDesc const* desc);
+MNEXUS_NO_THROW void     MNEXUS_CALL MnNexusDestroy(MnNexus nexus);
+MNEXUS_NO_THROW MnDevice MNEXUS_CALL MnNexusGetDevice(MnNexus nexus);
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceGetAdapterInfo(
+  MnDevice device, MnAdapterInfo* out_info);
+
+#if defined(__cplusplus)
+} // extern "C"
+#endif

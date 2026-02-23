@@ -8,6 +8,8 @@
 # include <string>
 # include <optional>
 # include <span>
+#else
+# include <stdint.h>
 #endif
 
 // public project headers -------------------------------
@@ -19,9 +21,32 @@
 # include "mnexus/public/container/array_proxy.h"
 #endif
 
-using MnBool32 = uint32_t;
+typedef uint32_t MnBool32;
 static const MnBool32 MnBoolFalse = 0;
 static const MnBool32 MnBoolTrue  = 1;
+
+// ----------------------------------------------------------------------------------------------------
+// Nexus
+
+typedef struct MnNexusDesc {
+  MnBool32 headless;
+} MnNexusDesc;
+
+// ----------------------------------------------------------------------------------------------------
+// Adapter Info
+
+typedef struct MnAdapterInfo {
+  char device_name[256];
+  char vendor[256];
+  char architecture[256];
+  char description[256];
+  uint32_t vendor_id;
+  uint32_t device_id;
+} MnAdapterInfo;
+
+// The following types use C++-only syntax (final, default member initializers,
+// enum class, enum : uint8_t). They will be made C-compatible incrementally.
+#if defined(__cplusplus)
 
 struct MnExtent3d final {
   uint32_t width = 0;
@@ -557,6 +582,8 @@ struct MnRenderPassDesc final {
   // N.B.: See `mnexus::RenderPassDesc`.
 };
 
+#endif // C++ only types (MnExtent3d ... MnRenderPassDesc)
+
 #if defined(__cplusplus)
 
 namespace mnexus {
@@ -626,6 +653,7 @@ struct AdapterInfo final {
   uint32_t vendor_id = 0;
   uint32_t device_id = 0;
 };
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(AdapterInfo, MnAdapterInfo);
 
 // ----------------------------------------------------------------------------------------------------
 // Handles
