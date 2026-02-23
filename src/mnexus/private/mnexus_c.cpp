@@ -70,13 +70,8 @@ void MnDeviceDestroyShaderModule(MnDevice device, MnResourceHandle handle) {
 }
 
 MnResourceHandle MnDeviceCreateProgram(MnDevice device, MnProgramDesc const* desc) {
-  mnexus::ProgramDesc cpp_desc {};
-  cpp_desc.struct_type = desc->struct_type;
-  cpp_desc.next_ptr = desc->next_ptr;
-  cpp_desc.shader_modules = mnexus::container::ArrayProxy<mnexus::ShaderModuleHandle const>(
-    reinterpret_cast<mnexus::ShaderModuleHandle const*>(desc->shader_modules),
-    desc->shader_module_count);
-  return ToDevice(device)->CreateProgram(cpp_desc).Get();
+  return ToDevice(device)->CreateProgram(
+    *reinterpret_cast<mnexus::ProgramDesc const*>(desc)).Get();
 }
 
 void MnDeviceDestroyProgram(MnDevice device, MnResourceHandle handle) {
@@ -131,13 +126,8 @@ void MnDeviceQueueWait(
 //
 
 void MnCommandListBeginRenderPass(MnCommandList cl, MnRenderPassDesc const* desc) {
-  mnexus::RenderPassDesc cpp_desc {};
-  cpp_desc.color_attachments = mnexus::container::ArrayProxy<mnexus::ColorAttachmentDesc const>(
-    reinterpret_cast<mnexus::ColorAttachmentDesc const*>(desc->color_attachments),
-    desc->color_attachment_count);
-  cpp_desc.depth_stencil_attachment =
-    reinterpret_cast<mnexus::DepthStencilAttachmentDesc const*>(desc->depth_stencil_attachment);
-  ToCommandList(cl)->BeginRenderPass(cpp_desc);
+  ToCommandList(cl)->BeginRenderPass(
+    *reinterpret_cast<mnexus::RenderPassDesc const*>(desc));
 }
 
 void MnCommandListEndRenderPass(MnCommandList cl) {

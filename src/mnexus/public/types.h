@@ -374,8 +374,10 @@ typedef struct MnShaderModuleDesc _MN_FINAL {
 typedef struct MnProgramDesc _MN_FINAL {
   uint32_t struct_type _MN_INIT(0); // Placeholder for future expansion.
   void* next_ptr _MN_INIT(_MN_NULL); // Placeholder for future expansion.
-  MnResourceHandle const* shader_modules _MN_INIT(_MN_NULL);
+  // shader_modules: ArrayProxy-compatible layout (count, ptr).
+  // N.B.: Compiler inserts implicit padding between count and ptr on 64-bit targets.
   uint32_t shader_module_count _MN_INIT(0);
+  MnResourceHandle const* shader_modules _MN_INIT(_MN_NULL);
   // N.B.: See `mnexus::ProgramDesc`.
 } MnProgramDesc;
 
@@ -564,17 +566,17 @@ typedef struct MnVertexInputAttributeDesc _MN_FINAL {
 
 typedef struct MnRenderPipelineDesc _MN_FINAL {
   MnResourceHandle program _MN_INIT(MnInvalidResourceHandle);
-  // vertex_bindings: ArrayProxy-compatible layout (count, pad, ptr).
+  // vertex_bindings: ArrayProxy-compatible layout (count, ptr).
+  // N.B.: Compiler inserts implicit padding between count and ptr on 64-bit targets.
   uint32_t vertex_binding_count _MN_INIT(0);
-  uint32_t _pad0 _MN_INIT(0);
   MnVertexInputBindingDesc const* vertex_bindings _MN_INIT(_MN_NULL);
-  // vertex_attributes: ArrayProxy-compatible layout.
+  // vertex_attributes: ArrayProxy-compatible layout (count, ptr).
+  // N.B.: Compiler inserts implicit padding between count and ptr on 64-bit targets.
   uint32_t vertex_attribute_count _MN_INIT(0);
-  uint32_t _pad1 _MN_INIT(0);
   MnVertexInputAttributeDesc const* vertex_attributes _MN_INIT(_MN_NULL);
-  // color_formats: ArrayProxy-compatible layout.
+  // color_formats: ArrayProxy-compatible layout (count, ptr).
+  // N.B.: Compiler inserts implicit padding between count and ptr on 64-bit targets.
   uint32_t color_format_count _MN_INIT(0);
-  uint32_t _pad2 _MN_INIT(0);
   MnFormat const* color_formats _MN_INIT(_MN_NULL);
   // Scalar fields.
   MnFormat depth_stencil_format _MN_INIT(MnFormatUndefined);
@@ -634,8 +636,10 @@ typedef struct MnDepthStencilAttachmentDesc _MN_FINAL {
 } MnDepthStencilAttachmentDesc;
 
 typedef struct MnRenderPassDesc _MN_FINAL {
-  MnColorAttachmentDesc const* color_attachments _MN_INIT(_MN_NULL);
+  // color_attachments: ArrayProxy-compatible layout (count, ptr).
+  // N.B.: Compiler inserts implicit padding between count and ptr on 64-bit targets.
   uint32_t color_attachment_count _MN_INIT(0);
+  MnColorAttachmentDesc const* color_attachments _MN_INIT(_MN_NULL);
   MnDepthStencilAttachmentDesc const* depth_stencil_attachment _MN_INIT(_MN_NULL);
   // N.B.: See `mnexus::RenderPassDesc`.
 } MnRenderPassDesc;
