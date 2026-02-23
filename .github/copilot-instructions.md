@@ -39,6 +39,8 @@ mnexus is a graphics abstraction layer providing a unified API over WebGPU (via 
 - `ICommandList` - Command recording for render, compute, and transfer operations
 - `Texture` - RAII wrapper around texture handles
 
+Public API methods should be documented with `///` doc comments. Use RFC 2119 keywords (MUST, MUST NOT, SHOULD, MAY, etc.) to state normative requirements on each parameter. These constraints define the API contract that all backend implementations must satisfy. See `CopyBufferToTexture` / `CopyTextureToBuffer` for reference.
+
 ### Headless Mode
 
 `INexus` supports headless operation (no surface/swapchain) for compute, transfer, and offscreen rendering workloads.
