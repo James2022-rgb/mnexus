@@ -16,6 +16,9 @@ mnexus::TextureUsageFlags FromWgpuTextureUsage(wgpu::TextureUsage usage);
 wgpu::TextureDimension ToWgpuTextureDimension(mnexus::TextureDimension value);
 
 wgpu::TextureFormat ToWgpuTextureFormat(MnFormat value);
+inline wgpu::TextureFormat ToWgpuTextureFormat(mnexus::Format value) {
+  return ToWgpuTextureFormat(static_cast<MnFormat>(value));
+}
 MnFormat FromWgpuTextureFormat(wgpu::TextureFormat value);
 
 // Sampler conversions.
@@ -30,6 +33,9 @@ wgpu::FrontFace ToWgpuFrontFace(mnexus::FrontFace value);
 wgpu::IndexFormat ToWgpuIndexFormat(mnexus::IndexType value);
 wgpu::VertexStepMode ToWgpuVertexStepMode(mnexus::VertexStepMode value);
 wgpu::VertexFormat ToWgpuVertexFormat(MnFormat value);
+inline wgpu::VertexFormat ToWgpuVertexFormat(mnexus::Format value) {
+  return ToWgpuVertexFormat(static_cast<MnFormat>(value));
+}
 wgpu::LoadOp ToWgpuLoadOp(mnexus::LoadOp value);
 wgpu::StoreOp ToWgpuStoreOp(mnexus::StoreOp value);
 wgpu::CompareFunction ToWgpuCompareFunction(mnexus::CompareOp value);

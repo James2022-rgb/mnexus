@@ -100,7 +100,7 @@ wgpu::RenderPipeline CreateWgpuRenderPipelineFromCacheKey(
 
   // Depth stencil state (if depth format is specified).
   std::optional<wgpu::DepthStencilState> depth_stencil_state;
-  if (key.depth_stencil_format != MnFormat::kUndefined) {
+  if (key.depth_stencil_format != mnexus::Format::kUndefined) {
     depth_stencil_state = wgpu::DepthStencilState {
       .format = ToWgpuTextureFormat(key.depth_stencil_format),
       .depthWriteEnabled = pd.depth_write_enabled != 0,

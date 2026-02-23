@@ -63,8 +63,8 @@ public:
   // Render target configuration (called by backend at BeginRenderPass)
 
   void SetRenderTargetConfig(
-    mbase::SmallVector<MnFormat, 4> color_formats,
-    MnFormat depth_stencil_format,
+    mbase::SmallVector<mnexus::Format, 4> color_formats,
+    mnexus::Format depth_stencil_format,
     uint32_t sample_count
   );
 
@@ -95,8 +95,8 @@ private:
   mbase::SmallVector<mnexus::VertexInputAttributeDesc, 8> vertex_attributes_;
 
   // Render target configuration (set at BeginRenderPass).
-  mbase::SmallVector<MnFormat, 4> color_formats_;
-  MnFormat depth_stencil_format_ = MnFormat::kUndefined;
+  mbase::SmallVector<mnexus::Format, 4> color_formats_;
+  mnexus::Format depth_stencil_format_ = mnexus::Format::kUndefined;
   uint32_t sample_count_ = 1;
 };
 

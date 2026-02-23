@@ -174,8 +174,8 @@ public:
       return;
     }
 
-    uint32_t const format_size = MnGetFormatSizeInBytes(dst_texture_cold.desc.format);
-    MnExtent3d const block_extent = MnGetFormatTexelBlockExtent(dst_texture_cold.desc.format);
+    uint32_t const format_size = MnGetFormatSizeInBytes(static_cast<MnFormat>(dst_texture_cold.desc.format));
+    MnExtent3d const block_extent = MnGetFormatTexelBlockExtent(static_cast<MnFormat>(dst_texture_cold.desc.format));
 
     // Compute bytesPerRow: number of bytes per row of texel blocks, aligned to 256.
     uint32_t const blocks_per_row = (copy_extent.width + block_extent.width - 1) / block_extent.width;
@@ -264,8 +264,8 @@ public:
     auto dst_buffer_pool_handle = container::ResourceHandle::FromU64(dst_buffer_handle.Get());
     auto [dst_buffer_hot, dst_buffer_lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(dst_buffer_pool_handle);
 
-    uint32_t const format_size = MnGetFormatSizeInBytes(src_texture_cold.desc.format);
-    MnExtent3d const block_extent = MnGetFormatTexelBlockExtent(src_texture_cold.desc.format);
+    uint32_t const format_size = MnGetFormatSizeInBytes(static_cast<MnFormat>(src_texture_cold.desc.format));
+    MnExtent3d const block_extent = MnGetFormatTexelBlockExtent(static_cast<MnFormat>(src_texture_cold.desc.format));
 
     uint32_t const blocks_per_row = (copy_extent.width + block_extent.width - 1) / block_extent.width;
     uint32_t const bytes_per_row_unaligned = blocks_per_row * format_size;
@@ -453,7 +453,7 @@ public:
     mbase::SmallVector<wgpu::RenderPassColorAttachment, 4> wgpu_color_attachments;
     wgpu_color_attachments.reserve(desc.color_attachments.size());
 
-    mbase::SmallVector<MnFormat, 4> color_formats;
+    mbase::SmallVector<mnexus::Format, 4> color_formats;
     color_formats.reserve(desc.color_attachments.size());
 
     for (uint32_t i = 0; i < desc.color_attachments.size(); ++i) {
@@ -493,7 +493,7 @@ public:
       );
     }
 
-    MnFormat depth_stencil_format = MnFormat::kUndefined;
+    mnexus::Format depth_stencil_format = mnexus::Format::kUndefined;
 
     // Depth/stencil attachment.
     wgpu::RenderPassDepthStencilAttachment wgpu_depth_stencil {};
@@ -1460,7 +1460,7 @@ public:
 
     mnexus::TextureDesc desc {
       .usage = FromWgpuTextureUsage(surface_config.usage),
-      .format = FromWgpuTextureFormat(surface_config.format),
+      .format = static_cast<mnexus::Format>(FromWgpuTextureFormat(surface_config.format)),
       .dimension = mnexus::TextureDimension::k2D,
       .width = surface_config.width,
       .height = surface_config.height,

@@ -174,8 +174,8 @@ void RenderPipelineStateTracker::SetColorWriteMask(uint32_t attachment, mnexus::
 }
 
 void RenderPipelineStateTracker::SetRenderTargetConfig(
-  mbase::SmallVector<MnFormat, 4> color_formats,
-  MnFormat depth_stencil_format,
+  mbase::SmallVector<mnexus::Format, 4> color_formats,
+  mnexus::Format depth_stencil_format,
   uint32_t sample_count
 ) {
   color_formats_ = std::move(color_formats);
@@ -212,7 +212,7 @@ void RenderPipelineStateTracker::Reset() {
   vertex_bindings_.clear();
   vertex_attributes_.clear();
   color_formats_.clear();
-  depth_stencil_format_ = MnFormat::kUndefined;
+  depth_stencil_format_ = mnexus::Format::kUndefined;
   sample_count_ = 1;
 }
 

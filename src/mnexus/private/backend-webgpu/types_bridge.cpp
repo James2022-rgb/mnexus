@@ -120,101 +120,101 @@ wgpu::TextureDimension ToWgpuTextureDimension(mnexus::TextureDimension value) {
 
 wgpu::TextureFormat ToWgpuTextureFormat(MnFormat value) {
   switch (value) {
-  case MnFormat::kUndefined: return wgpu::TextureFormat::Undefined;
+  case MnFormatUndefined: return wgpu::TextureFormat::Undefined;
   // ...
-  case MnFormat::kR8_UNORM: return wgpu::TextureFormat::R8Unorm;
-  case MnFormat::kR8G8_UNORM: return wgpu::TextureFormat::RG8Unorm;
+  case MnFormatR8_UNORM: return wgpu::TextureFormat::R8Unorm;
+  case MnFormatR8G8_UNORM: return wgpu::TextureFormat::RG8Unorm;
   // ...
-  case MnFormat::kR8G8B8A8_UNORM: return wgpu::TextureFormat::RGBA8Unorm;
-  case MnFormat::kR8G8B8A8_SRGB: return wgpu::TextureFormat::RGBA8UnormSrgb;
-  case MnFormat::kB8G8R8A8_UNORM: return wgpu::TextureFormat::BGRA8Unorm;
-  case MnFormat::kB8G8R8A8_SRGB: return wgpu::TextureFormat::BGRA8UnormSrgb;
-  case MnFormat::kR16_SFLOAT: return wgpu::TextureFormat::R16Float;
-  case MnFormat::kR16G16_SFLOAT: return wgpu::TextureFormat::RG16Float;
+  case MnFormatR8G8B8A8_UNORM: return wgpu::TextureFormat::RGBA8Unorm;
+  case MnFormatR8G8B8A8_SRGB: return wgpu::TextureFormat::RGBA8UnormSrgb;
+  case MnFormatB8G8R8A8_UNORM: return wgpu::TextureFormat::BGRA8Unorm;
+  case MnFormatB8G8R8A8_SRGB: return wgpu::TextureFormat::BGRA8UnormSrgb;
+  case MnFormatR16_SFLOAT: return wgpu::TextureFormat::R16Float;
+  case MnFormatR16G16_SFLOAT: return wgpu::TextureFormat::RG16Float;
   // ...
-  case MnFormat::kR16G16B16A16_UNORM: return wgpu::TextureFormat::RGBA16Unorm;
-  case MnFormat::kR16G16B16A16_UINT: return wgpu::TextureFormat::RGBA16Uint;
-  case MnFormat::kR16G16B16A16_SFLOAT: return wgpu::TextureFormat::RGBA16Float;
-  case MnFormat::kR32_SFLOAT: return wgpu::TextureFormat::R32Float;
-  case MnFormat::kR32G32_SFLOAT: return wgpu::TextureFormat::RG32Float;
+  case MnFormatR16G16B16A16_UNORM: return wgpu::TextureFormat::RGBA16Unorm;
+  case MnFormatR16G16B16A16_UINT: return wgpu::TextureFormat::RGBA16Uint;
+  case MnFormatR16G16B16A16_SFLOAT: return wgpu::TextureFormat::RGBA16Float;
+  case MnFormatR32_SFLOAT: return wgpu::TextureFormat::R32Float;
+  case MnFormatR32G32_SFLOAT: return wgpu::TextureFormat::RG32Float;
   // ...
-  case MnFormat::kR32G32B32A32_UINT: return wgpu::TextureFormat::RGBA32Uint;
-  case MnFormat::kR32G32B32A32_SFLOAT: return wgpu::TextureFormat::RGBA32Float;
-  case MnFormat::kA2R10G10B10_UNORM_PACK32: return wgpu::TextureFormat::RGB10A2Unorm;
+  case MnFormatR32G32B32A32_UINT: return wgpu::TextureFormat::RGBA32Uint;
+  case MnFormatR32G32B32A32_SFLOAT: return wgpu::TextureFormat::RGBA32Float;
+  case MnFormatA2R10G10B10_UNORM_PACK32: return wgpu::TextureFormat::RGB10A2Unorm;
   // ...
-  case MnFormat::kD16_UNORM: return wgpu::TextureFormat::Depth16Unorm;
-  case MnFormat::kD32_SFLOAT: return wgpu::TextureFormat::Depth32Float;
-  case MnFormat::kD16_UNORM_S8_UINT: return wgpu::TextureFormat::Depth24PlusStencil8;
-  case MnFormat::kD32_SFLOAT_S8_UINT: return wgpu::TextureFormat::Depth32FloatStencil8;
-  case MnFormat::kBC1_RGB_UNORM_BLOCK: return wgpu::TextureFormat::BC1RGBAUnorm;
-  case MnFormat::kBC1_RGB_SRGB_BLOCK: return wgpu::TextureFormat::BC1RGBAUnormSrgb;
-  case MnFormat::kBC2_UNORM_BLOCK: return wgpu::TextureFormat::BC2RGBAUnorm;
-  case MnFormat::kBC2_SRGB_BLOCK: return wgpu::TextureFormat::BC2RGBAUnormSrgb;
-  case MnFormat::kBC3_UNORM_BLOCK: return wgpu::TextureFormat::BC3RGBAUnorm;
-  case MnFormat::kBC3_SRGB_BLOCK: return wgpu::TextureFormat::BC3RGBAUnormSrgb;
-  case MnFormat::kBC4_UNORM_BLOCK: return wgpu::TextureFormat::BC4RUnorm;
-  case MnFormat::kBC4_SNORM_BLOCK: return wgpu::TextureFormat::BC4RSnorm;
-  case MnFormat::kBC5_UNORM_BLOCK: return wgpu::TextureFormat::BC5RGUnorm;
-  case MnFormat::kBC5_SNORM_BLOCK: return wgpu::TextureFormat::BC5RGSnorm;
-  case MnFormat::kETC2_R8G8B8_UNORM_BLOCK: return wgpu::TextureFormat::ETC2RGB8Unorm;
-  case MnFormat::kETC2_R8G8B8_SRGB_BLOCK: return wgpu::TextureFormat::ETC2RGB8UnormSrgb;
-  case MnFormat::kETC2_R8G8B8A1_UNORM_BLOCK: return wgpu::TextureFormat::ETC2RGBA8Unorm;
-  case MnFormat::kETC2_R8G8B8A1_SRGB_BLOCK: return wgpu::TextureFormat::ETC2RGBA8UnormSrgb;
-  case MnFormat::kETC2_R8G8B8A8_UNORM_BLOCK: return wgpu::TextureFormat::ETC2RGBA8Unorm;
-  case MnFormat::kETC2_R8G8B8A8_SRGB_BLOCK: return wgpu::TextureFormat::ETC2RGBA8UnormSrgb;
-  case MnFormat::kEAC_R11_UNORM_BLOCK: return wgpu::TextureFormat::EACR11Unorm;
-  case MnFormat::kEAC_R11_SNORM_BLOCK: return wgpu::TextureFormat::EACR11Snorm;
-  case MnFormat::kEAC_R11G11_UNORM_BLOCK: return wgpu::TextureFormat::EACRG11Unorm;
-  case MnFormat::kEAC_R11G11_SNORM_BLOCK: return wgpu::TextureFormat::EACRG11Snorm;
-  case MnFormat::kASTC_4x4_UNORM_BLOCK: return wgpu::TextureFormat::ASTC4x4Unorm;
-  case MnFormat::kASTC_4x4_SRGB_BLOCK: return wgpu::TextureFormat::ASTC4x4UnormSrgb;
-  case MnFormat::kASTC_5x4_UNORM_BLOCK: return wgpu::TextureFormat::ASTC5x4Unorm;
-  case MnFormat::kASTC_5x4_SRGB_BLOCK: return wgpu::TextureFormat::ASTC5x4UnormSrgb;
-  case MnFormat::kASTC_5x5_UNORM_BLOCK: return wgpu::TextureFormat::ASTC5x5Unorm;
-  case MnFormat::kASTC_5x5_SRGB_BLOCK: return wgpu::TextureFormat::ASTC5x5UnormSrgb;
-  case MnFormat::kASTC_6x5_UNORM_BLOCK: return wgpu::TextureFormat::ASTC6x5Unorm;
-  case MnFormat::kASTC_6x5_SRGB_BLOCK: return wgpu::TextureFormat::ASTC6x5UnormSrgb;
-  case MnFormat::kASTC_6x6_UNORM_BLOCK: return wgpu::TextureFormat::ASTC6x6Unorm;
-  case MnFormat::kASTC_6x6_SRGB_BLOCK: return wgpu::TextureFormat::ASTC6x6UnormSrgb;
-  case MnFormat::kASTC_8x5_UNORM_BLOCK: return wgpu::TextureFormat::ASTC8x5Unorm;
-  case MnFormat::kASTC_8x5_SRGB_BLOCK: return wgpu::TextureFormat::ASTC8x5UnormSrgb;
-  case MnFormat::kASTC_8x6_UNORM_BLOCK: return wgpu::TextureFormat::ASTC8x6Unorm;
-  case MnFormat::kASTC_8x6_SRGB_BLOCK: return wgpu::TextureFormat::ASTC8x6UnormSrgb;
-  case MnFormat::kASTC_8x8_UNORM_BLOCK: return wgpu::TextureFormat::ASTC8x8Unorm;
-  case MnFormat::kASTC_8x8_SRGB_BLOCK: return wgpu::TextureFormat::ASTC8x8UnormSrgb;
-  case MnFormat::kASTC_10x5_UNORM_BLOCK: return wgpu::TextureFormat::ASTC10x5Unorm;
-  case MnFormat::kASTC_10x5_SRGB_BLOCK: return wgpu::TextureFormat::ASTC10x5UnormSrgb;
-  case MnFormat::kASTC_10x6_UNORM_BLOCK: return wgpu::TextureFormat::ASTC10x6Unorm;
-  case MnFormat::kASTC_10x6_SRGB_BLOCK: return wgpu::TextureFormat::ASTC10x6UnormSrgb;
-  case MnFormat::kASTC_10x8_UNORM_BLOCK: return wgpu::TextureFormat::ASTC10x8Unorm;
-  case MnFormat::kASTC_10x8_SRGB_BLOCK: return wgpu::TextureFormat::ASTC10x8UnormSrgb;
-  case MnFormat::kASTC_10x10_UNORM_BLOCK: return wgpu::TextureFormat::ASTC10x10Unorm;
-  case MnFormat::kASTC_10x10_SRGB_BLOCK: return wgpu::TextureFormat::ASTC10x10UnormSrgb;
-  case MnFormat::kASTC_12x10_UNORM_BLOCK: return wgpu::TextureFormat::ASTC12x10Unorm;
-  case MnFormat::kASTC_12x10_SRGB_BLOCK: return wgpu::TextureFormat::ASTC12x10UnormSrgb;
-  case MnFormat::kASTC_12x12_UNORM_BLOCK: return wgpu::TextureFormat::ASTC12x12Unorm;
-  case MnFormat::kASTC_12x12_SRGB_BLOCK: return wgpu::TextureFormat::ASTC12x12UnormSrgb;
+  case MnFormatD16_UNORM: return wgpu::TextureFormat::Depth16Unorm;
+  case MnFormatD32_SFLOAT: return wgpu::TextureFormat::Depth32Float;
+  case MnFormatD16_UNORM_S8_UINT: return wgpu::TextureFormat::Depth24PlusStencil8;
+  case MnFormatD32_SFLOAT_S8_UINT: return wgpu::TextureFormat::Depth32FloatStencil8;
+  case MnFormatBC1_RGB_UNORM_BLOCK: return wgpu::TextureFormat::BC1RGBAUnorm;
+  case MnFormatBC1_RGB_SRGB_BLOCK: return wgpu::TextureFormat::BC1RGBAUnormSrgb;
+  case MnFormatBC2_UNORM_BLOCK: return wgpu::TextureFormat::BC2RGBAUnorm;
+  case MnFormatBC2_SRGB_BLOCK: return wgpu::TextureFormat::BC2RGBAUnormSrgb;
+  case MnFormatBC3_UNORM_BLOCK: return wgpu::TextureFormat::BC3RGBAUnorm;
+  case MnFormatBC3_SRGB_BLOCK: return wgpu::TextureFormat::BC3RGBAUnormSrgb;
+  case MnFormatBC4_UNORM_BLOCK: return wgpu::TextureFormat::BC4RUnorm;
+  case MnFormatBC4_SNORM_BLOCK: return wgpu::TextureFormat::BC4RSnorm;
+  case MnFormatBC5_UNORM_BLOCK: return wgpu::TextureFormat::BC5RGUnorm;
+  case MnFormatBC5_SNORM_BLOCK: return wgpu::TextureFormat::BC5RGSnorm;
+  case MnFormatETC2_R8G8B8_UNORM_BLOCK: return wgpu::TextureFormat::ETC2RGB8Unorm;
+  case MnFormatETC2_R8G8B8_SRGB_BLOCK: return wgpu::TextureFormat::ETC2RGB8UnormSrgb;
+  case MnFormatETC2_R8G8B8A1_UNORM_BLOCK: return wgpu::TextureFormat::ETC2RGBA8Unorm;
+  case MnFormatETC2_R8G8B8A1_SRGB_BLOCK: return wgpu::TextureFormat::ETC2RGBA8UnormSrgb;
+  case MnFormatETC2_R8G8B8A8_UNORM_BLOCK: return wgpu::TextureFormat::ETC2RGBA8Unorm;
+  case MnFormatETC2_R8G8B8A8_SRGB_BLOCK: return wgpu::TextureFormat::ETC2RGBA8UnormSrgb;
+  case MnFormatEAC_R11_UNORM_BLOCK: return wgpu::TextureFormat::EACR11Unorm;
+  case MnFormatEAC_R11_SNORM_BLOCK: return wgpu::TextureFormat::EACR11Snorm;
+  case MnFormatEAC_R11G11_UNORM_BLOCK: return wgpu::TextureFormat::EACRG11Unorm;
+  case MnFormatEAC_R11G11_SNORM_BLOCK: return wgpu::TextureFormat::EACRG11Snorm;
+  case MnFormatASTC_4x4_UNORM_BLOCK: return wgpu::TextureFormat::ASTC4x4Unorm;
+  case MnFormatASTC_4x4_SRGB_BLOCK: return wgpu::TextureFormat::ASTC4x4UnormSrgb;
+  case MnFormatASTC_5x4_UNORM_BLOCK: return wgpu::TextureFormat::ASTC5x4Unorm;
+  case MnFormatASTC_5x4_SRGB_BLOCK: return wgpu::TextureFormat::ASTC5x4UnormSrgb;
+  case MnFormatASTC_5x5_UNORM_BLOCK: return wgpu::TextureFormat::ASTC5x5Unorm;
+  case MnFormatASTC_5x5_SRGB_BLOCK: return wgpu::TextureFormat::ASTC5x5UnormSrgb;
+  case MnFormatASTC_6x5_UNORM_BLOCK: return wgpu::TextureFormat::ASTC6x5Unorm;
+  case MnFormatASTC_6x5_SRGB_BLOCK: return wgpu::TextureFormat::ASTC6x5UnormSrgb;
+  case MnFormatASTC_6x6_UNORM_BLOCK: return wgpu::TextureFormat::ASTC6x6Unorm;
+  case MnFormatASTC_6x6_SRGB_BLOCK: return wgpu::TextureFormat::ASTC6x6UnormSrgb;
+  case MnFormatASTC_8x5_UNORM_BLOCK: return wgpu::TextureFormat::ASTC8x5Unorm;
+  case MnFormatASTC_8x5_SRGB_BLOCK: return wgpu::TextureFormat::ASTC8x5UnormSrgb;
+  case MnFormatASTC_8x6_UNORM_BLOCK: return wgpu::TextureFormat::ASTC8x6Unorm;
+  case MnFormatASTC_8x6_SRGB_BLOCK: return wgpu::TextureFormat::ASTC8x6UnormSrgb;
+  case MnFormatASTC_8x8_UNORM_BLOCK: return wgpu::TextureFormat::ASTC8x8Unorm;
+  case MnFormatASTC_8x8_SRGB_BLOCK: return wgpu::TextureFormat::ASTC8x8UnormSrgb;
+  case MnFormatASTC_10x5_UNORM_BLOCK: return wgpu::TextureFormat::ASTC10x5Unorm;
+  case MnFormatASTC_10x5_SRGB_BLOCK: return wgpu::TextureFormat::ASTC10x5UnormSrgb;
+  case MnFormatASTC_10x6_UNORM_BLOCK: return wgpu::TextureFormat::ASTC10x6Unorm;
+  case MnFormatASTC_10x6_SRGB_BLOCK: return wgpu::TextureFormat::ASTC10x6UnormSrgb;
+  case MnFormatASTC_10x8_UNORM_BLOCK: return wgpu::TextureFormat::ASTC10x8Unorm;
+  case MnFormatASTC_10x8_SRGB_BLOCK: return wgpu::TextureFormat::ASTC10x8UnormSrgb;
+  case MnFormatASTC_10x10_UNORM_BLOCK: return wgpu::TextureFormat::ASTC10x10Unorm;
+  case MnFormatASTC_10x10_SRGB_BLOCK: return wgpu::TextureFormat::ASTC10x10UnormSrgb;
+  case MnFormatASTC_12x10_UNORM_BLOCK: return wgpu::TextureFormat::ASTC12x10Unorm;
+  case MnFormatASTC_12x10_SRGB_BLOCK: return wgpu::TextureFormat::ASTC12x10UnormSrgb;
+  case MnFormatASTC_12x12_UNORM_BLOCK: return wgpu::TextureFormat::ASTC12x12Unorm;
+  case MnFormatASTC_12x12_SRGB_BLOCK: return wgpu::TextureFormat::ASTC12x12UnormSrgb;
 
   //
   // Unsupported formats in WebGPU.
   //
 
-  case MnFormat::kR5G6B5_UNORM_PACK16:
-  case MnFormat::kR5G5B5A1_UNORM_PACK16:
-  case MnFormat::kR8G8B8_UNORM:
-  case MnFormat::kR16G16B16_SFLOAT:
-  case MnFormat::kR32G32B32_SFLOAT:
-  case MnFormat::kA2R10G10B10_SNORM_PACK32:
-  case MnFormat::kA2R10G10B10_USCALED_PACK32:
-  case MnFormat::kA2R10G10B10_SSCALED_PACK32:
-  case MnFormat::kA2R10G10B10_UINT_PACK32:
-  case MnFormat::kA2R10G10B10_SINT_PACK32:
-  case MnFormat::kA2B10G10R10_UNORM_PACK32:
-  case MnFormat::kA2B10G10R10_SNORM_PACK32:
-  case MnFormat::kA2B10G10R10_USCALED_PACK32:
-  case MnFormat::kA2B10G10R10_SSCALED_PACK32:
-  case MnFormat::kA2B10G10R10_UINT_PACK32:
-  case MnFormat::kA2B10G10R10_SINT_PACK32:
+  case MnFormatR5G6B5_UNORM_PACK16:
+  case MnFormatR5G5B5A1_UNORM_PACK16:
+  case MnFormatR8G8B8_UNORM:
+  case MnFormatR16G16B16_SFLOAT:
+  case MnFormatR32G32B32_SFLOAT:
+  case MnFormatA2R10G10B10_SNORM_PACK32:
+  case MnFormatA2R10G10B10_USCALED_PACK32:
+  case MnFormatA2R10G10B10_SSCALED_PACK32:
+  case MnFormatA2R10G10B10_UINT_PACK32:
+  case MnFormatA2R10G10B10_SINT_PACK32:
+  case MnFormatA2B10G10R10_UNORM_PACK32:
+  case MnFormatA2B10G10R10_SNORM_PACK32:
+  case MnFormatA2B10G10R10_USCALED_PACK32:
+  case MnFormatA2B10G10R10_SSCALED_PACK32:
+  case MnFormatA2B10G10R10_UINT_PACK32:
+  case MnFormatA2B10G10R10_SINT_PACK32:
     MBASE_LOG_ERROR("MnFormat value {} is not supported in WebGPU backend", mnexus::ToString(value));
     return wgpu::TextureFormat::Undefined;
 
@@ -230,84 +230,84 @@ wgpu::TextureFormat ToWgpuTextureFormat(MnFormat value) {
 
 MnFormat FromWgpuTextureFormat(wgpu::TextureFormat value) {
   switch (value) {
-  case wgpu::TextureFormat::Undefined: return MnFormat::kUndefined;
+  case wgpu::TextureFormat::Undefined: return MnFormatUndefined;
   // ...
-  case wgpu::TextureFormat::R8Unorm: return MnFormat::kR8_UNORM;
-  case wgpu::TextureFormat::RG8Unorm: return MnFormat::kR8G8_UNORM;
+  case wgpu::TextureFormat::R8Unorm: return MnFormatR8_UNORM;
+  case wgpu::TextureFormat::RG8Unorm: return MnFormatR8G8_UNORM;
   // ...
-  case wgpu::TextureFormat::RGBA8Unorm: return MnFormat::kR8G8B8A8_UNORM;
-  case wgpu::TextureFormat::RGBA8UnormSrgb: return MnFormat::kR8G8B8A8_SRGB;
-  case wgpu::TextureFormat::BGRA8Unorm: return MnFormat::kB8G8R8A8_UNORM;
-  case wgpu::TextureFormat::BGRA8UnormSrgb: return MnFormat::kB8G8R8A8_SRGB;
-  case wgpu::TextureFormat::R16Float: return MnFormat::kR16_SFLOAT;
-  case wgpu::TextureFormat::RG16Float: return MnFormat::kR16G16_SFLOAT;
+  case wgpu::TextureFormat::RGBA8Unorm: return MnFormatR8G8B8A8_UNORM;
+  case wgpu::TextureFormat::RGBA8UnormSrgb: return MnFormatR8G8B8A8_SRGB;
+  case wgpu::TextureFormat::BGRA8Unorm: return MnFormatB8G8R8A8_UNORM;
+  case wgpu::TextureFormat::BGRA8UnormSrgb: return MnFormatB8G8R8A8_SRGB;
+  case wgpu::TextureFormat::R16Float: return MnFormatR16_SFLOAT;
+  case wgpu::TextureFormat::RG16Float: return MnFormatR16G16_SFLOAT;
   // ...
-  case wgpu::TextureFormat::RGBA16Unorm: return MnFormat::kR16G16B16A16_UNORM;
-  case wgpu::TextureFormat::RGBA16Uint: return MnFormat::kR16G16B16A16_UINT;
-  case wgpu::TextureFormat::RGBA16Float: return MnFormat::kR16G16B16A16_SFLOAT;
-  case wgpu::TextureFormat::R32Float: return MnFormat::kR32_SFLOAT;
-  case wgpu::TextureFormat::RG32Float: return MnFormat::kR32G32_SFLOAT;
+  case wgpu::TextureFormat::RGBA16Unorm: return MnFormatR16G16B16A16_UNORM;
+  case wgpu::TextureFormat::RGBA16Uint: return MnFormatR16G16B16A16_UINT;
+  case wgpu::TextureFormat::RGBA16Float: return MnFormatR16G16B16A16_SFLOAT;
+  case wgpu::TextureFormat::R32Float: return MnFormatR32_SFLOAT;
+  case wgpu::TextureFormat::RG32Float: return MnFormatR32G32_SFLOAT;
   // ...
-  case wgpu::TextureFormat::RGBA32Uint: return MnFormat::kR32G32B32A32_UINT;
-  case wgpu::TextureFormat::RGBA32Float: return MnFormat::kR32G32B32A32_SFLOAT;
-  case wgpu::TextureFormat::RGB10A2Unorm: return MnFormat::kA2R10G10B10_UNORM_PACK32;
+  case wgpu::TextureFormat::RGBA32Uint: return MnFormatR32G32B32A32_UINT;
+  case wgpu::TextureFormat::RGBA32Float: return MnFormatR32G32B32A32_SFLOAT;
+  case wgpu::TextureFormat::RGB10A2Unorm: return MnFormatA2R10G10B10_UNORM_PACK32;
   // ...
-  case wgpu::TextureFormat::Depth16Unorm: return MnFormat::kD16_UNORM;
-  case wgpu::TextureFormat::Depth32Float: return MnFormat::kD32_SFLOAT;
-  case wgpu::TextureFormat::Depth24PlusStencil8: return MnFormat::kD16_UNORM_S8_UINT;
-  case wgpu::TextureFormat::Depth32FloatStencil8: return MnFormat::kD32_SFLOAT_S8_UINT;
-  case wgpu::TextureFormat::BC1RGBAUnorm: return MnFormat::kBC1_RGB_UNORM_BLOCK;
-  case wgpu::TextureFormat::BC1RGBAUnormSrgb: return MnFormat::kBC1_RGB_SRGB_BLOCK;
-  case wgpu::TextureFormat::BC2RGBAUnorm: return MnFormat::kBC2_UNORM_BLOCK;
-  case wgpu::TextureFormat::BC2RGBAUnormSrgb: return MnFormat::kBC2_SRGB_BLOCK;
-  case wgpu::TextureFormat::BC3RGBAUnorm: return MnFormat::kBC3_UNORM_BLOCK;
-  case wgpu::TextureFormat::BC3RGBAUnormSrgb: return MnFormat::kBC3_SRGB_BLOCK;
-  case wgpu::TextureFormat::BC4RUnorm: return MnFormat::kBC4_UNORM_BLOCK;
-  case wgpu::TextureFormat::BC4RSnorm: return MnFormat::kBC4_SNORM_BLOCK;
-  case wgpu::TextureFormat::BC5RGUnorm: return MnFormat::kBC5_UNORM_BLOCK;
-  case wgpu::TextureFormat::BC5RGSnorm: return MnFormat::kBC5_SNORM_BLOCK;
-  case wgpu::TextureFormat::ETC2RGB8Unorm: return MnFormat::kETC2_R8G8B8_UNORM_BLOCK;
-  case wgpu::TextureFormat::ETC2RGB8UnormSrgb: return MnFormat::kETC2_R8G8B8_SRGB_BLOCK;
-  case wgpu::TextureFormat::ETC2RGBA8Unorm: return MnFormat::kETC2_R8G8B8A1_UNORM_BLOCK;
-  case wgpu::TextureFormat::ETC2RGBA8UnormSrgb: return MnFormat::kETC2_R8G8B8A1_SRGB_BLOCK;
-  case wgpu::TextureFormat::EACR11Unorm: return MnFormat::kEAC_R11_UNORM_BLOCK;
-  case wgpu::TextureFormat::EACR11Snorm: return MnFormat::kEAC_R11_SNORM_BLOCK;
-  case wgpu::TextureFormat::EACRG11Unorm: return MnFormat::kEAC_R11G11_UNORM_BLOCK;
-  case wgpu::TextureFormat::EACRG11Snorm: return MnFormat::kEAC_R11G11_SNORM_BLOCK;
-  case wgpu::TextureFormat::ASTC4x4Unorm: return MnFormat::kASTC_4x4_UNORM_BLOCK;
-  case wgpu::TextureFormat::ASTC4x4UnormSrgb: return MnFormat::kASTC_4x4_SRGB_BLOCK;
-  case wgpu::TextureFormat::ASTC5x4Unorm: return MnFormat::kASTC_5x4_UNORM_BLOCK;
-  case wgpu::TextureFormat::ASTC5x4UnormSrgb: return MnFormat::kASTC_5x4_SRGB_BLOCK;
-  case wgpu::TextureFormat::ASTC5x5Unorm: return MnFormat::kASTC_5x5_UNORM_BLOCK;
-  case wgpu::TextureFormat::ASTC5x5UnormSrgb: return MnFormat::kASTC_5x5_SRGB_BLOCK;
-  case wgpu::TextureFormat::ASTC6x5Unorm: return MnFormat::kASTC_6x5_UNORM_BLOCK;
-  case wgpu::TextureFormat::ASTC6x5UnormSrgb: return MnFormat::kASTC_6x5_SRGB_BLOCK;
-  case wgpu::TextureFormat::ASTC6x6Unorm: return MnFormat::kASTC_6x6_UNORM_BLOCK;
-  case wgpu::TextureFormat::ASTC6x6UnormSrgb: return MnFormat::kASTC_6x6_SRGB_BLOCK;
-  case wgpu::TextureFormat::ASTC8x5Unorm: return MnFormat::kASTC_8x5_UNORM_BLOCK;
-  case wgpu::TextureFormat::ASTC8x5UnormSrgb: return MnFormat::kASTC_8x5_SRGB_BLOCK;
-  case wgpu::TextureFormat::ASTC8x6Unorm: return MnFormat::kASTC_8x6_UNORM_BLOCK;
-  case wgpu::TextureFormat::ASTC8x6UnormSrgb: return MnFormat::kASTC_8x6_SRGB_BLOCK;
-  case wgpu::TextureFormat::ASTC8x8Unorm: return MnFormat::kASTC_8x8_UNORM_BLOCK;
-  case wgpu::TextureFormat::ASTC8x8UnormSrgb: return MnFormat::kASTC_8x8_SRGB_BLOCK;
-  case wgpu::TextureFormat::ASTC10x5Unorm: return MnFormat::kASTC_10x5_UNORM_BLOCK;
-  case wgpu::TextureFormat::ASTC10x5UnormSrgb: return MnFormat::kASTC_10x5_SRGB_BLOCK;
-  case wgpu::TextureFormat::ASTC10x6Unorm: return MnFormat::kASTC_10x6_UNORM_BLOCK;
-  case wgpu::TextureFormat::ASTC10x6UnormSrgb: return MnFormat::kASTC_10x6_SRGB_BLOCK;
-  case wgpu::TextureFormat::ASTC10x8Unorm: return MnFormat::kASTC_10x8_UNORM_BLOCK;
-  case wgpu::TextureFormat::ASTC10x8UnormSrgb: return MnFormat::kASTC_10x8_SRGB_BLOCK;
-  case wgpu::TextureFormat::ASTC10x10Unorm: return MnFormat::kASTC_10x10_UNORM_BLOCK;
-  case wgpu::TextureFormat::ASTC10x10UnormSrgb: return MnFormat::kASTC_10x10_SRGB_BLOCK;
-  case wgpu::TextureFormat::ASTC12x10Unorm: return MnFormat::kASTC_12x10_UNORM_BLOCK;
-  case wgpu::TextureFormat::ASTC12x10UnormSrgb: return MnFormat::kASTC_12x10_SRGB_BLOCK;
-  case wgpu::TextureFormat::ASTC12x12Unorm: return MnFormat::kASTC_12x12_UNORM_BLOCK;
-  case wgpu::TextureFormat::ASTC12x12UnormSrgb: return MnFormat::kASTC_12x12_SRGB_BLOCK;
+  case wgpu::TextureFormat::Depth16Unorm: return MnFormatD16_UNORM;
+  case wgpu::TextureFormat::Depth32Float: return MnFormatD32_SFLOAT;
+  case wgpu::TextureFormat::Depth24PlusStencil8: return MnFormatD16_UNORM_S8_UINT;
+  case wgpu::TextureFormat::Depth32FloatStencil8: return MnFormatD32_SFLOAT_S8_UINT;
+  case wgpu::TextureFormat::BC1RGBAUnorm: return MnFormatBC1_RGB_UNORM_BLOCK;
+  case wgpu::TextureFormat::BC1RGBAUnormSrgb: return MnFormatBC1_RGB_SRGB_BLOCK;
+  case wgpu::TextureFormat::BC2RGBAUnorm: return MnFormatBC2_UNORM_BLOCK;
+  case wgpu::TextureFormat::BC2RGBAUnormSrgb: return MnFormatBC2_SRGB_BLOCK;
+  case wgpu::TextureFormat::BC3RGBAUnorm: return MnFormatBC3_UNORM_BLOCK;
+  case wgpu::TextureFormat::BC3RGBAUnormSrgb: return MnFormatBC3_SRGB_BLOCK;
+  case wgpu::TextureFormat::BC4RUnorm: return MnFormatBC4_UNORM_BLOCK;
+  case wgpu::TextureFormat::BC4RSnorm: return MnFormatBC4_SNORM_BLOCK;
+  case wgpu::TextureFormat::BC5RGUnorm: return MnFormatBC5_UNORM_BLOCK;
+  case wgpu::TextureFormat::BC5RGSnorm: return MnFormatBC5_SNORM_BLOCK;
+  case wgpu::TextureFormat::ETC2RGB8Unorm: return MnFormatETC2_R8G8B8_UNORM_BLOCK;
+  case wgpu::TextureFormat::ETC2RGB8UnormSrgb: return MnFormatETC2_R8G8B8_SRGB_BLOCK;
+  case wgpu::TextureFormat::ETC2RGBA8Unorm: return MnFormatETC2_R8G8B8A1_UNORM_BLOCK;
+  case wgpu::TextureFormat::ETC2RGBA8UnormSrgb: return MnFormatETC2_R8G8B8A1_SRGB_BLOCK;
+  case wgpu::TextureFormat::EACR11Unorm: return MnFormatEAC_R11_UNORM_BLOCK;
+  case wgpu::TextureFormat::EACR11Snorm: return MnFormatEAC_R11_SNORM_BLOCK;
+  case wgpu::TextureFormat::EACRG11Unorm: return MnFormatEAC_R11G11_UNORM_BLOCK;
+  case wgpu::TextureFormat::EACRG11Snorm: return MnFormatEAC_R11G11_SNORM_BLOCK;
+  case wgpu::TextureFormat::ASTC4x4Unorm: return MnFormatASTC_4x4_UNORM_BLOCK;
+  case wgpu::TextureFormat::ASTC4x4UnormSrgb: return MnFormatASTC_4x4_SRGB_BLOCK;
+  case wgpu::TextureFormat::ASTC5x4Unorm: return MnFormatASTC_5x4_UNORM_BLOCK;
+  case wgpu::TextureFormat::ASTC5x4UnormSrgb: return MnFormatASTC_5x4_SRGB_BLOCK;
+  case wgpu::TextureFormat::ASTC5x5Unorm: return MnFormatASTC_5x5_UNORM_BLOCK;
+  case wgpu::TextureFormat::ASTC5x5UnormSrgb: return MnFormatASTC_5x5_SRGB_BLOCK;
+  case wgpu::TextureFormat::ASTC6x5Unorm: return MnFormatASTC_6x5_UNORM_BLOCK;
+  case wgpu::TextureFormat::ASTC6x5UnormSrgb: return MnFormatASTC_6x5_SRGB_BLOCK;
+  case wgpu::TextureFormat::ASTC6x6Unorm: return MnFormatASTC_6x6_UNORM_BLOCK;
+  case wgpu::TextureFormat::ASTC6x6UnormSrgb: return MnFormatASTC_6x6_SRGB_BLOCK;
+  case wgpu::TextureFormat::ASTC8x5Unorm: return MnFormatASTC_8x5_UNORM_BLOCK;
+  case wgpu::TextureFormat::ASTC8x5UnormSrgb: return MnFormatASTC_8x5_SRGB_BLOCK;
+  case wgpu::TextureFormat::ASTC8x6Unorm: return MnFormatASTC_8x6_UNORM_BLOCK;
+  case wgpu::TextureFormat::ASTC8x6UnormSrgb: return MnFormatASTC_8x6_SRGB_BLOCK;
+  case wgpu::TextureFormat::ASTC8x8Unorm: return MnFormatASTC_8x8_UNORM_BLOCK;
+  case wgpu::TextureFormat::ASTC8x8UnormSrgb: return MnFormatASTC_8x8_SRGB_BLOCK;
+  case wgpu::TextureFormat::ASTC10x5Unorm: return MnFormatASTC_10x5_UNORM_BLOCK;
+  case wgpu::TextureFormat::ASTC10x5UnormSrgb: return MnFormatASTC_10x5_SRGB_BLOCK;
+  case wgpu::TextureFormat::ASTC10x6Unorm: return MnFormatASTC_10x6_UNORM_BLOCK;
+  case wgpu::TextureFormat::ASTC10x6UnormSrgb: return MnFormatASTC_10x6_SRGB_BLOCK;
+  case wgpu::TextureFormat::ASTC10x8Unorm: return MnFormatASTC_10x8_UNORM_BLOCK;
+  case wgpu::TextureFormat::ASTC10x8UnormSrgb: return MnFormatASTC_10x8_SRGB_BLOCK;
+  case wgpu::TextureFormat::ASTC10x10Unorm: return MnFormatASTC_10x10_UNORM_BLOCK;
+  case wgpu::TextureFormat::ASTC10x10UnormSrgb: return MnFormatASTC_10x10_SRGB_BLOCK;
+  case wgpu::TextureFormat::ASTC12x10Unorm: return MnFormatASTC_12x10_UNORM_BLOCK;
+  case wgpu::TextureFormat::ASTC12x10UnormSrgb: return MnFormatASTC_12x10_SRGB_BLOCK;
+  case wgpu::TextureFormat::ASTC12x12Unorm: return MnFormatASTC_12x12_UNORM_BLOCK;
+  case wgpu::TextureFormat::ASTC12x12UnormSrgb: return MnFormatASTC_12x12_SRGB_BLOCK;
 
     //
     // Unknown format.
   default:
     MBASE_LOG_ERROR("Unknown wgpu::TextureFormat value {}", value);
-    return MnFormat::kUndefined;
+    return MnFormatUndefined;
   }
 }
 
@@ -399,20 +399,20 @@ wgpu::VertexStepMode ToWgpuVertexStepMode(mnexus::VertexStepMode value) {
 wgpu::VertexFormat ToWgpuVertexFormat(MnFormat value) {
   switch (value) {
   // 8-bit
-  case MnFormat::kR8_UNORM:            return wgpu::VertexFormat::Unorm8;
-  case MnFormat::kR8G8_UNORM:          return wgpu::VertexFormat::Unorm8x2;
-  case MnFormat::kR8G8B8A8_UNORM:      return wgpu::VertexFormat::Unorm8x4;
+  case MnFormatR8_UNORM:            return wgpu::VertexFormat::Unorm8;
+  case MnFormatR8G8_UNORM:          return wgpu::VertexFormat::Unorm8x2;
+  case MnFormatR8G8B8A8_UNORM:      return wgpu::VertexFormat::Unorm8x4;
   // 16-bit float
-  case MnFormat::kR16_SFLOAT:          return wgpu::VertexFormat::Float16;
-  case MnFormat::kR16G16_SFLOAT:       return wgpu::VertexFormat::Float16x2;
-  case MnFormat::kR16G16B16A16_SFLOAT: return wgpu::VertexFormat::Float16x4;
+  case MnFormatR16_SFLOAT:          return wgpu::VertexFormat::Float16;
+  case MnFormatR16G16_SFLOAT:       return wgpu::VertexFormat::Float16x2;
+  case MnFormatR16G16B16A16_SFLOAT: return wgpu::VertexFormat::Float16x4;
   // 32-bit float
-  case MnFormat::kR32_SFLOAT:          return wgpu::VertexFormat::Float32;
-  case MnFormat::kR32G32_SFLOAT:       return wgpu::VertexFormat::Float32x2;
-  case MnFormat::kR32G32B32_SFLOAT:    return wgpu::VertexFormat::Float32x3;
-  case MnFormat::kR32G32B32A32_SFLOAT: return wgpu::VertexFormat::Float32x4;
+  case MnFormatR32_SFLOAT:          return wgpu::VertexFormat::Float32;
+  case MnFormatR32G32_SFLOAT:       return wgpu::VertexFormat::Float32x2;
+  case MnFormatR32G32B32_SFLOAT:    return wgpu::VertexFormat::Float32x3;
+  case MnFormatR32G32B32A32_SFLOAT: return wgpu::VertexFormat::Float32x4;
   // 32-bit uint
-  case MnFormat::kR32G32B32A32_UINT:   return wgpu::VertexFormat::Uint32x4;
+  case MnFormatR32G32B32A32_UINT:   return wgpu::VertexFormat::Uint32x4;
   default:
     MBASE_LOG_ERROR("MnFormat {} is not supported as a vertex format in WebGPU backend", mnexus::ToString(value));
     return wgpu::VertexFormat::Float32;

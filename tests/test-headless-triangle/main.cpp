@@ -33,7 +33,7 @@ int main() {
   mnexus::TextureHandle render_target = device->CreateTexture(
     mnexus::TextureDesc {
       .usage = mnexus::TextureUsageFlagBits::kAttachment | mnexus::TextureUsageFlagBits::kTransferSrc,
-      .format = MnFormat::kR8G8B8A8_UNORM,
+      .format = mnexus::Format::kR8G8B8A8_UNORM,
       .dimension = mnexus::TextureDimension::k2D,
       .width = kWidth,
       .height = kHeight,
@@ -124,8 +124,8 @@ int main() {
     .step_mode = mnexus::VertexStepMode::kVertex,
   };
   std::array<mnexus::VertexInputAttributeDesc, 2> attributes = {{
-    { .location = 0, .binding = 0, .format = MnFormat::kR32G32_SFLOAT,    .offset = 0 },
-    { .location = 1, .binding = 0, .format = MnFormat::kR32G32B32_SFLOAT, .offset = sizeof(float) * 2 },
+    { .location = 0, .binding = 0, .format = mnexus::Format::kR32G32_SFLOAT,    .offset = 0 },
+    { .location = 1, .binding = 0, .format = mnexus::Format::kR32G32B32_SFLOAT, .offset = sizeof(float) * 2 },
   }};
 
   command_list->BindRenderProgram(program);

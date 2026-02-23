@@ -22,8 +22,8 @@ struct RenderPipelineCacheKey final {
   mbase::SmallVector<PerAttachmentFixedFunctionStaticState, 4> per_attachment;
   mbase::SmallVector<mnexus::VertexInputBindingDesc, 4> vertex_bindings;
   mbase::SmallVector<mnexus::VertexInputAttributeDesc, 8> vertex_attributes;
-  mbase::SmallVector<MnFormat, 4> color_formats;
-  MnFormat depth_stencil_format = MnFormat::kUndefined;
+  mbase::SmallVector<mnexus::Format, 4> color_formats;
+  mnexus::Format depth_stencil_format = mnexus::Format::kUndefined;
   uint32_t sample_count = 1;
 
   [[nodiscard]] size_t ComputeHash() const;

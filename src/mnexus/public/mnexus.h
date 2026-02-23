@@ -540,6 +540,84 @@ MNEXUS_NO_THROW MnDevice MNEXUS_CALL MnNexusGetDevice(MnNexus nexus);
 MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceGetAdapterInfo(
   MnDevice device, MnAdapterInfo* out_info);
 
+// ----------------------------------------------------------------------------------------------------
+// IDevice: Resource creation / destruction
+//
+
+MNEXUS_NO_THROW MnResourceHandle MNEXUS_CALL MnDeviceCreateTexture(
+  MnDevice device, MnTextureDesc const* desc);
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceDestroyTexture(
+  MnDevice device, MnResourceHandle handle);
+
+MNEXUS_NO_THROW MnResourceHandle MNEXUS_CALL MnDeviceCreateBuffer(
+  MnDevice device, MnBufferDesc const* desc);
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceDestroyBuffer(
+  MnDevice device, MnResourceHandle handle);
+
+MNEXUS_NO_THROW MnResourceHandle MNEXUS_CALL MnDeviceCreateShaderModule(
+  MnDevice device, MnShaderModuleDesc const* desc);
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceDestroyShaderModule(
+  MnDevice device, MnResourceHandle handle);
+
+MNEXUS_NO_THROW MnResourceHandle MNEXUS_CALL MnDeviceCreateProgram(
+  MnDevice device, MnProgramDesc const* desc);
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceDestroyProgram(
+  MnDevice device, MnResourceHandle handle);
+
+MNEXUS_NO_THROW MnCommandList MNEXUS_CALL MnDeviceCreateCommandList(
+  MnDevice device, MnCommandListDesc const* desc);
+
+// ----------------------------------------------------------------------------------------------------
+// IDevice: Queue operations
+//
+
+MNEXUS_NO_THROW MnIntraQueueSubmissionId MNEXUS_CALL MnDeviceQueueWriteBuffer(
+  MnDevice device, MnQueueId const* queue_id,
+  MnResourceHandle buffer, uint32_t offset,
+  void const* data, uint32_t size);
+
+MNEXUS_NO_THROW MnIntraQueueSubmissionId MNEXUS_CALL MnDeviceQueueSubmitCommandList(
+  MnDevice device, MnQueueId const* queue_id, MnCommandList command_list);
+
+MNEXUS_NO_THROW MnIntraQueueSubmissionId MNEXUS_CALL MnDeviceQueueReadBuffer(
+  MnDevice device, MnQueueId const* queue_id,
+  MnResourceHandle buffer, uint32_t offset,
+  void* dst, uint32_t size);
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceQueueWait(
+  MnDevice device, MnQueueId const* queue_id, MnIntraQueueSubmissionId value);
+
+// ----------------------------------------------------------------------------------------------------
+// ICommandList
+//
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListBeginRenderPass(
+  MnCommandList cl, MnRenderPassDesc const* desc);
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListEndRenderPass(MnCommandList cl);
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListBindRenderProgram(
+  MnCommandList cl, MnResourceHandle program);
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListSetVertexInputLayout(
+  MnCommandList cl,
+  MnVertexInputBindingDesc const* bindings, uint32_t binding_count,
+  MnVertexInputAttributeDesc const* attributes, uint32_t attribute_count);
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListBindVertexBuffer(
+  MnCommandList cl, uint32_t binding, MnResourceHandle buffer, uint64_t offset);
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListDraw(
+  MnCommandList cl, uint32_t vertex_count, uint32_t instance_count,
+  uint32_t first_vertex, uint32_t first_instance);
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListCopyTextureToBuffer(
+  MnCommandList cl,
+  MnResourceHandle src_texture, MnTextureSubresourceRange const* src_range,
+  MnResourceHandle dst_buffer, uint32_t dst_offset,
+  MnExtent3d const* extent);
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListEnd(MnCommandList cl);
+
 #if defined(__cplusplus)
 } // extern "C"
 #endif
