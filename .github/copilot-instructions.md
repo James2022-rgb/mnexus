@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+`CLAUDE.md` is a symlink to `.github/copilot-instructions.md`.
+
 ## Commit messages
 
 See @.github/git-commit-instructions.md
