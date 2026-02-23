@@ -405,6 +405,27 @@ public:
     ClearValue const& clear_value
   );
 
+  /// Copies pixel data from a buffer into a texture.
+  ///
+  /// The source buffer is assumed to contain tightly packed pixel data (no row
+  /// padding). The backend handles WebGPU's 256-byte `bytesPerRow` alignment
+  /// internally via compute-shader repacking or row-by-row fallback.
+  ///
+  /// The copy always starts from texture origin (0, 0, base_array_layer).
+  ///
+  /// - `src_buffer_handle`: MUST have been created with `kTransferSrc` usage.
+  /// - `src_buffer_offset`: MUST be a multiple of the texel block byte size of
+  ///   the destination texture format (e.g. 4 for `kR8G8B8A8_UNORM`).
+  ///   For depth-stencil formats, MUST be a multiple of 4.
+  ///   The buffer MUST be large enough to hold the tightly packed pixel data
+  ///   starting at this offset.
+  /// - `dst_texture_handle`: MUST have been created with `kTransferDst` usage.
+  ///   MUST have sample count 1 (multisampled textures are NOT supported).
+  /// - `dst_subresource_range`: `base_mip_level` MUST be less than the
+  ///   texture's mip level count.
+  /// - `copy_extent`: MUST fit within the destination texture's mip level
+  ///   dimensions.  For compressed formats, width and height MUST be multiples
+  ///   of the texel block dimensions.
   _MNEXUS_VAPI(void, CopyBufferToTexture,
     BufferHandle src_buffer_handle,
     uint32_t src_buffer_offset,
@@ -413,6 +434,29 @@ public:
     Extent3d const& copy_extent
   );
 
+  /// Copies pixel data from a texture into a buffer.
+  ///
+  /// The copy always starts from texture origin (0, 0, base_array_layer).
+  ///
+  /// **Important (WebGPU backend):** The data written to the destination buffer
+  /// uses a row stride of `Align(width_in_blocks * texel_block_bytes, 256)`.
+  /// This means rows MAY be padded to a 256-byte boundary.  Callers that read
+  /// the buffer back (e.g. via `QueueReadBuffer`) MUST account for this
+  /// padding when the image width is not 256-byte aligned.
+  ///
+  /// - `src_texture_handle`: MUST have been created with `kTransferSrc` usage.
+  ///   MUST have sample count 1 (multisampled textures are NOT supported).
+  /// - `src_subresource_range`: `base_mip_level` MUST be less than the
+  ///   texture's mip level count.
+  /// - `dst_buffer_handle`: MUST have been created with `kTransferDst` usage.
+  ///   The buffer MUST be large enough to hold the copy data with 256-byte
+  ///   aligned row stride.
+  /// - `dst_buffer_offset`: MUST be a multiple of the texel block byte size of
+  ///   the source texture format (e.g. 4 for `kR8G8B8A8_UNORM`).
+  ///   For depth-stencil formats, MUST be a multiple of 4.
+  /// - `copy_extent`: MUST fit within the source texture's mip level
+  ///   dimensions.  For compressed formats, width and height MUST be multiples
+  ///   of the texel block dimensions.
   _MNEXUS_VAPI(void, CopyTextureToBuffer,
     TextureHandle src_texture_handle,
     TextureSubresourceRange const& src_subresource_range,
