@@ -27,8 +27,11 @@ Key CMake options:
 - `MNEXUS_ENABLE_BACKEND_WGPU` - Enable WebGPU backend (default: ON)
 - `MNEXUS_ENABLE_DAWN` - Enable Dawn for WebGPU on native platforms (default: ON, ignored on Emscripten)
 - `MNEXUS_ENABLE_TINT_ON_WEB` - Enable Tint SPIR-V to WGSL conversion on Emscripten (default: ON)
+- `MNEXUS_BUILD_TESTS` - Build test executables (default: OFF)
 
 Compiler warnings: `-Wall -Wextra -Werror` (GCC/Clang), `/W4` (MSVC). Thread-safety analysis (`-Werror=thread-safety`) is enabled on Clang/GCC.
+
+**Emscripten note:** mnexus propagates `--use-port=emdawnwebgpu` as PUBLIC but does NOT propagate `--closure=1`. Final binaries that want Closure optimization (e.g., wentos-desktop) must specify `--closure=1` on their own target. This is because Closure conflicts with ASYNCIFY + exception handling (`_setThrew` undeclared).
 
 ## Architecture
 
@@ -130,17 +133,35 @@ Files follow a consistent header ordering:
 
 Test executables live under `tests/`, each in its own subdirectory. Controlled by the `MNEXUS_BUILD_TESTS` CMake option (default: OFF).
 
+#### Test harness (`tests/harness/`)
+
+A shared test harness provides `main()`, Logger init/shutdown, and `MnTestWritePng()`. Each test implements `MnTestMain()` instead of `main()`:
+
+```c
+// C
+#include "mnexus_test_harness.h"
+int MnTestMain(int argc, char** argv) { /* ... */ return 0; }
+
+// C++
+#include "mnexus_test_harness.h"
+extern "C" int MnTestMain(int, char**) { /* ... */ return 0; }
+```
+
+`MnTestWritePng()` abstracts PNG output: writes to file on native, triggers a browser download on Emscripten.
+
+On Emscripten, the harness links ASYNCIFY flags and skips Logger shutdown (EXIT_RUNTIME=0 keeps the runtime alive). See `doc/memo_emscripten_asyncify.md` for constraints on main-loop tests.
+
+#### Adding a test
+
 `tests/CMakeLists.txt` provides a helper function:
 
 ```cmake
 mnexus_add_test(<target_name> <source_file> ...)
 ```
 
-This handles linking to `mnexus`, setting C++23, and copying backend-dependent DLLs (e.g., `d3dcompiler_47.dll` on Windows) to the executable output directory. Individual test `CMakeLists.txt` files should use this helper instead of manually configuring each target.
+This handles linking to `mnexus_test_harness` (which transitively links `mnexus`), auto-detecting C vs C++ sources for `cxx_std_23`, copying backend-dependent DLLs on Windows, and setting `.html` suffix on Emscripten. Individual test `CMakeLists.txt` files should be a single `mnexus_add_test()` call.
 
 Test targets are grouped under the `mnexus/tests` solution folder in Visual Studio.
-
-**Important:** Tests must call `mbase::Logger::Initialize()` before any mnexus API call, and `mbase::Logger::Shutdown()` at exit.
 
 Commits to `master` must not break existing tests. If a change includes a breaking API change, the same commit must update all affected tests so that they build and run successfully.
 
