@@ -2,21 +2,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* external headers ------------------------------------- */
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb/stb_image_write.h"
-
 /* public project headers ------------------------------- */
-#include "mbase/public/log/log_c.h"
-
 #include "mnexus/public/mnexus.h"
 
 /* project headers -------------------------------------- */
 #include "triangle_test_vs_spv.h"
 #include "triangle_test_fs_spv.h"
 
-int main(void) {
-  MbLoggerInitialize();
+/* test harness ----------------------------------------- */
+#include "mnexus_test_harness.h"
+
+int MnTestMain(int argc, char** argv) {
+  (void)argc;
+  (void)argv;
 
   uint32_t const kWidth = 256;
   uint32_t const kHeight = 256;
@@ -113,8 +111,8 @@ int main(void) {
   color_attachment.clear_value = clear_value;
 
   MnRenderPassDesc rp_desc = { 0 };
-  rp_desc.color_attachments = &color_attachment;
   rp_desc.color_attachment_count = 1;
+  rp_desc.color_attachments = &color_attachment;
 
   MnCommandListBeginRenderPass(command_list, &rp_desc);
 
@@ -161,7 +159,7 @@ int main(void) {
 
   /* Write PNG. */
   char const* const output_path = "triangle.png";
-  int const result = stbi_write_png(
+  int const result = MnTestWritePng(
     output_path,
     (int)kWidth,
     (int)kHeight,
@@ -187,6 +185,5 @@ int main(void) {
 
   MnNexusDestroy(nexus);
 
-  MbLoggerShutdown();
   return result ? 0 : 1;
 }

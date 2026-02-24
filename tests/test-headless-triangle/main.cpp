@@ -3,22 +3,17 @@
 #include <cstdio>
 #include <vector>
 
-// external headers -------------------------------------
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb/stb_image_write.h"
-
 // public project headers -------------------------------
-#include "mbase/public/log.h"
-
 #include "mnexus/public/mnexus.h"
 
 // project headers --------------------------------------
 #include "triangle_test_vs_spv.h"
 #include "triangle_test_fs_spv.h"
 
-int main() {
-  mbase::Logger::Initialize();
+// test harness -----------------------------------------
+#include "mnexus_test_harness.h"
 
+extern "C" int MnTestMain(int, char**) {
   constexpr uint32_t kWidth = 256;
   constexpr uint32_t kHeight = 256;
   constexpr uint32_t kBytesPerPixel = 4;
@@ -157,7 +152,7 @@ int main() {
 
   // Write PNG.
   char const* const output_path = "triangle.png";
-  int const result = stbi_write_png(
+  int const result = MnTestWritePng(
     output_path,
     static_cast<int>(kWidth),
     static_cast<int>(kHeight),
@@ -182,6 +177,5 @@ int main() {
 
   nexus->Destroy();
 
-  mbase::Logger::Shutdown();
   return result ? 0 : 1;
 }

@@ -2,12 +2,14 @@
 #include <stdio.h>
 
 /* public project headers ------------------------------- */
-#include "mbase/public/log/log_c.h"
-
 #include "mnexus/public/mnexus.h"
 
-int main(void) {
-  MbLoggerInitialize();
+/* test harness ----------------------------------------- */
+#include "mnexus_test_harness.h"
+
+int MnTestMain(int argc, char** argv) {
+  (void)argc;
+  (void)argv;
 
   MnNexusDesc desc = { 0 };
   desc.headless = MnBoolTrue;
@@ -27,6 +29,5 @@ int main(void) {
 
   MnNexusDestroy(nexus);
 
-  MbLoggerShutdown();
   return 0;
 }

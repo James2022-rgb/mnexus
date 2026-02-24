@@ -74,7 +74,7 @@ set(_thirdparty_dir "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty")
 #
 if(EMSCRIPTEN)
   target_compile_options(${TARGET_NAME} PUBLIC "--use-port=emdawnwebgpu")
-  target_link_options(${TARGET_NAME} PUBLIC "--use-port=emdawnwebgpu" "--closure=1")
+  target_link_options(${TARGET_NAME} PUBLIC "--use-port=emdawnwebgpu")
 endif()
 
 #

@@ -48,48 +48,48 @@ public:
     return *this;
   }
 
-  constexpr ArrayProxy(std::nullptr_t) : ptr_(nullptr), count_(0) {}
+  constexpr ArrayProxy(std::nullptr_t) : count_(0), ptr_(nullptr) {}
 
-  ArrayProxy(element_type& ptr) : ptr_(&ptr), count_(1) {}
+  ArrayProxy(element_type& ptr) : count_(1), ptr_(&ptr) {}
 
-  ArrayProxy(T* ptr, uint32_t count) : ptr_(ptr), count_(count) {}
+  ArrayProxy(T* ptr, uint32_t count) : count_(count), ptr_(ptr) {}
   template<class U = T, std::enable_if_t<std::is_const_v<U>, int> = 0>
-  ArrayProxy(T const* ptr, uint32_t count) : ptr_(const_cast<T*>(ptr)), count_(count) {}
+  ArrayProxy(T const* ptr, uint32_t count) : count_(count), ptr_(const_cast<T*>(ptr)) {}
 
   template<class U = T, std::enable_if_t<std::is_const_v<U>, int> = 0>
-  ArrayProxy(std::initializer_list<T>& data) : ptr_(data.begin()), count_(uint32_t(data.size())) {}
+  ArrayProxy(std::initializer_list<T>& data) : count_(uint32_t(data.size())), ptr_(data.begin()) {}
   template<class U = T,
            std::enable_if_t<std::is_const_v<U>, int> = 0>
-  ArrayProxy(std::initializer_list<std::remove_const_t<T>>& data) : ptr_(data.begin()), count_(uint32_t(data.size())) {}
+  ArrayProxy(std::initializer_list<std::remove_const_t<T>>& data) : count_(uint32_t(data.size())), ptr_(data.begin()) {}
   template<class U = T, std::enable_if_t<std::is_const_v<U>, int> = 0>
-  ArrayProxy(std::initializer_list<T> const&data) : ptr_(data.begin()), count_(uint32_t(data.size())) {}
+  ArrayProxy(std::initializer_list<T> const&data) : count_(uint32_t(data.size())), ptr_(data.begin()) {}
   template<class U = T,
            std::enable_if_t<std::is_const_v<U>, int> = 0>
-  ArrayProxy(std::initializer_list<std::remove_const_t<T>> const data) : ptr_(data.begin()), count_(uint32_t(data.size())) {}
+  ArrayProxy(std::initializer_list<std::remove_const_t<T>> const data) : count_(uint32_t(data.size())), ptr_(data.begin()) {}
 
   // std::array
   template<size_t N>
-  ArrayProxy(std::array<std::remove_const_t<T>, N>& data) : ptr_(data.data()), count_(uint32_t(N)) {}
+  ArrayProxy(std::array<std::remove_const_t<T>, N>& data) : count_(uint32_t(N)), ptr_(data.data()) {}
   template<size_t N>
-  ArrayProxy(std::array<std::remove_const_t<T>, N> const& data) : ptr_(const_cast<T*>(data.data())), count_(uint32_t(N)) {}
+  ArrayProxy(std::array<std::remove_const_t<T>, N> const& data) : count_(uint32_t(N)), ptr_(const_cast<T*>(data.data())) {}
 
   // std::vector
   template<class Allocator = std::allocator<std::remove_const_t<T>>,
            class U = T,
            std::enable_if_t<!std::is_const_v<U>, int> = 0>
-  ArrayProxy(std::vector<T, Allocator>& data) : ptr_(data.data()), count_(uint32_t(data.size())) {}
+  ArrayProxy(std::vector<T, Allocator>& data) : count_(uint32_t(data.size())), ptr_(data.data()) {}
   template<class Allocator = std::allocator<std::remove_const_t<T>>,
            class U = T,
            std::enable_if_t<std::is_const_v<U>, int> = 0>
-  ArrayProxy(std::vector<std::remove_const_t<T>, Allocator>& data) : ptr_(data.data()), count_(uint32_t(data.size())) {}
+  ArrayProxy(std::vector<std::remove_const_t<T>, Allocator>& data) : count_(uint32_t(data.size())), ptr_(data.data()) {}
   template<class Allocator = std::allocator<std::remove_const_t<T>>,
            class U = T,
            std::enable_if_t<!std::is_const_v<U>, int> = 0>
-  ArrayProxy(std::vector<T, Allocator> const& data) : ptr_(data.data()), count_(uint32_t(data.size())) {}
+  ArrayProxy(std::vector<T, Allocator> const& data) : count_(uint32_t(data.size())), ptr_(data.data()) {}
   template<class Allocator = std::allocator<std::remove_const_t<T>>,
            class U = T,
            std::enable_if_t<std::is_const_v<U>, int> = 0>
-  ArrayProxy(std::vector<std::remove_const_t<T>, Allocator> const& data) : ptr_(data.data()), count_(uint32_t(data.size())) {}
+  ArrayProxy(std::vector<std::remove_const_t<T>, Allocator> const& data) : count_(uint32_t(data.size())), ptr_(data.data()) {}
 
   template<class Allocator = std::allocator<std::remove_const_t<T>>>
   operator std::vector<std::remove_const_t<T>, Allocator>() const { return { begin(), end() }; }

@@ -83,6 +83,53 @@ return 0;
 | `emscripten_exit_with_live_runtime()` | Also throws internally; same problem |
 | Stack-allocated objects used after `main()` returns | Dangling pointers if `simulate_infinite_loop=false` and main returns |
 
+## Test harness (`tests/harness/`)
+
+The test harness provides `main()` and platform-abstracted utilities so that
+each test only implements `MnTestMain()`.
+
+### ASYNCIFY link flags
+
+Tests inherit ASYNCIFY flags from the `mnexus_test_harness` CMake target:
+
+```cmake
+target_link_options(mnexus_test_harness PUBLIC
+    -sASYNCIFY -sASYNCIFY_STACK_SIZE=65536
+    -sSTACK_SIZE=1048576 -sALLOW_MEMORY_GROWTH=1 ...)
+```
+
+### Logger lifetime
+
+On Emscripten, `MbLoggerShutdown()` is **not called**. `EXIT_RUNTIME=0`
+(default) keeps the runtime alive, and page/tab close handles cleanup. This
+is necessary because a main-loop test's callback may still be firing after
+`MnTestMain()` returns.
+
+### One-shot tests
+
+ASYNCIFY handles `MnNexusCreate` (requestAdapter/requestDevice) and
+`MnDeviceQueueWait` transparently — `main()` suspends and resumes as needed.
+The test runs to completion inside `MnTestMain()` and returns normally.
+
+### Main-loop tests
+
+A test that needs a render loop should call
+`emscripten_set_main_loop_arg(cb, ctx, 0, false)` inside `MnTestMain()` on
+Emscripten (guarded by `#ifdef __EMSCRIPTEN__`), then return. The same
+constraints from the section above apply:
+
+- **Must** use `simulate_infinite_loop=false`.
+- Objects used by the callback **must outlive `main()`** (heap allocation or
+  `.release()`).
+
+### File output
+
+`MnTestWritePng()` abstracts PNG output:
+
+- **Native**: writes to file via `stbi_write_png`.
+- **Emscripten**: encodes PNG to memory via `stbi_write_png_to_func`, then
+  triggers a browser download via `EM_JS` (Blob + `<a>` click).
+
 ## References
 
 - [emscripten#24154](https://github.com/emscripten-core/emscripten/issues/24154) — `wgpuInstanceWaitAny` + "Uncaught (in promise) unwind"

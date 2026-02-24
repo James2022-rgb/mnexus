@@ -120,6 +120,8 @@ uint32_t MnGetFormatSizeInBytes(MnFormat value) {
   case MnFormatASTC_12x10_SRGB_BLOCK:      return 16;
   case MnFormatASTC_12x12_UNORM_BLOCK:     return 16;
   case MnFormatASTC_12x12_SRGB_BLOCK:      return 16;
+
+  case MnFormatForce32: break;
   }
   return 0;
 }

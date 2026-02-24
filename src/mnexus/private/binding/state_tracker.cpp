@@ -53,6 +53,8 @@ void BindGroupStateTracker::SetBuffer(
       .offset = offset,
       .size = size,
     },
+    .texture = {},
+    .sampler = {},
   });
 }
 
@@ -66,10 +68,12 @@ void BindGroupStateTracker::SetTexture(
     .binding = binding,
     .array_element = array_element,
     .type = type,
+    .buffer = {},
     .texture = BoundTexture {
       .texture = texture,
       .subresource_range = subresource_range,
     },
+    .sampler = {},
   });
 }
 
@@ -81,6 +85,8 @@ void BindGroupStateTracker::SetSampler(
     .binding = binding,
     .array_element = array_element,
     .type = mnexus::BindGroupLayoutEntryType::kSampler,
+    .buffer = {},
+    .texture = {},
     .sampler = BoundSampler {
       .sampler = sampler,
     },

@@ -2,13 +2,12 @@
 #include <cstdio>
 
 // public project headers -------------------------------
-#include "mbase/public/log.h"
-
 #include "mnexus/public/mnexus.h"
 
-int main() {
-  mbase::Logger::Initialize();
+// test harness -----------------------------------------
+#include "mnexus_test_harness.h"
 
+extern "C" int MnTestMain(int, char**) {
   mnexus::INexus* nexus = mnexus::INexus::Create({.headless = true});
   mnexus::IDevice* device = nexus->GetDevice();
 
@@ -25,6 +24,5 @@ int main() {
 
   nexus->Destroy();
 
-  mbase::Logger::Shutdown();
   return 0;
 }
