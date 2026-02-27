@@ -83,6 +83,7 @@ INexus* INexus::Create(NexusDesc const& desc) {
 # error No backend is enabled in mnexus!
 #endif
 
+  if (!backend) return nullptr;
   return new Nexus(std::move(backend), desc.headless);
 }
 

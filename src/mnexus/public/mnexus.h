@@ -75,13 +75,12 @@ class INexus {
 public:
   /// Creates a new mnexus instance and initializes the GPU backend.
   ///
-  /// If initialization fails (e.g. no suitable GPU adapter), the process is
-  /// terminated via `mbase::Trap()`. This function never returns null.
+  /// Returns `nullptr` if initialization fails (e.g. no suitable GPU adapter).
   ///
   /// - `desc`: Instance configuration. If `desc.headless` is `true`, no
   ///   surface or swapchain is created; the device is available immediately.
-  /// - Returns: A non-null `INexus` pointer. The caller **MUST** eventually
-  ///   call `Destroy` to release it.
+  /// - Returns: A valid `INexus` pointer, or `nullptr` on failure. If
+  ///   non-null, the caller **MUST** eventually call `Destroy` to release it.
   static INexus* Create(NexusDesc const& desc = {});
 
   virtual ~INexus() = default;

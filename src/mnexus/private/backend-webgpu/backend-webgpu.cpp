@@ -1835,13 +1835,15 @@ std::unique_ptr<IBackendWebGpu> IBackendWebGpu::Create() {
       [&adapter](wgpu::RequestAdapterStatus status, wgpu::Adapter a, wgpu::StringView message) {
         if (status != wgpu::RequestAdapterStatus::Success) {
           MBASE_LOG_ERROR("RequestAdapter failed: {}", message);
-          mbase::Trap();
+          return;
         }
         adapter = std::move(a);
       }
     );
 
     instance.WaitAny(f1, UINT64_MAX);
+
+    if (!adapter) return nullptr;
   }
 
   {
@@ -1870,14 +1872,16 @@ std::unique_ptr<IBackendWebGpu> IBackendWebGpu::Create() {
       wgpu::CallbackMode::WaitAnyOnly,
       [&device](wgpu::RequestDeviceStatus status, wgpu::Device d, wgpu::StringView message) {
         if (status != wgpu::RequestDeviceStatus::Success) {
-          MBASE_LOG_ERROR("RequestDevice: {}", message);
-          mbase::Trap();
+          MBASE_LOG_ERROR("RequestDevice failed: {}", message);
+          return;
         }
         device = std::move(d);
       }
     );
 
     instance.WaitAny(f2, UINT64_MAX);
+
+    if (!device) return nullptr;
   }
 
   auto backend = std::make_unique<BackendWebGpu>(
