@@ -1,7 +1,7 @@
 # Emscripten ASYNCIFY and Main Loop
 
 The WebGPU backend of mnexus uses `wgpuInstanceWaitAny`
-(via `wgpu::Instance::WaitAny`) to implement synchronous `QueueWait`. On
+(via `wgpu::Instance::WaitAny`) to implement synchronous `QueueWaitIdle`. On
 Emscripten, synchronous blocking is impossible in the browser event loop, so the
 build enables **ASYNCIFY**, which transforms blocking calls into a suspend/resume
 (unwind/rewind) sequence backed by JavaScript promises.
@@ -10,7 +10,7 @@ build enables **ASYNCIFY**, which transforms blocking calls into a suspend/resum
 set(CMAKE_EXE_LINKER_FLAGS "... -s ASYNCIFY -s ASYNCIFY_STACK_SIZE=65536 ...")
 ```
 
-This is required because the WebGPU backend's `QueueWait` implementation polls
+This is required because the WebGPU backend's `QueueWaitIdle` implementation polls
 `WaitAny(future, UINT64_MAX)` in a loop until the target timeline value is
 reached.
 
@@ -29,7 +29,7 @@ Uncaught (in promise) unwind
 
 If `WaitAny` (or any ASYNCIFY-wrapped function) is called before
 `emscripten_set_main_loop` — for example, during resource initialization where
-`QueueWait` is used to synchronously wait for a texture upload — the subsequent
+`QueueWaitIdle` is used to synchronously wait for a texture upload — the subsequent
 code runs inside a **resumed ASYNCIFY context**, i.e. inside a JavaScript promise
 chain.
 
@@ -108,7 +108,7 @@ is necessary because a main-loop test's callback may still be firing after
 ### One-shot tests
 
 ASYNCIFY handles `MnNexusCreate` (requestAdapter/requestDevice) and
-`MnDeviceQueueWait` transparently — `main()` suspends and resumes as needed.
+`MnDeviceQueueWaitIdleIdle` transparently — `main()` suspends and resumes as needed.
 The test runs to completion inside `MnTestMain()` and returns normally.
 
 ### Main-loop tests

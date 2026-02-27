@@ -113,10 +113,10 @@ MnIntraQueueSubmissionId MnDeviceQueueReadBuffer(
     mnexus::BufferHandle(buffer), offset, dst, size).Get();
 }
 
-void MnDeviceQueueWait(
+void MnDeviceQueueWaitIdle(
     MnDevice device, MnQueueId const* queue_id,
     MnIntraQueueSubmissionId value) {
-  ToDevice(device)->QueueWait(
+  ToDevice(device)->QueueWaitIdle(
     *reinterpret_cast<mnexus::QueueId const*>(queue_id),
     mnexus::IntraQueueSubmissionId(value));
 }

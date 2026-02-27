@@ -5,7 +5,7 @@ target_include_directories(mnexus_test_harness PRIVATE
 target_link_libraries(mnexus_test_harness PUBLIC mnexus)
 
 if(EMSCRIPTEN)
-    # ASYNCIFY: required for synchronous MnNexusCreate / MnDeviceQueueWait.
+    # ASYNCIFY: required for synchronous MnNexusCreate / MnDeviceQueueWaitIdle.
     # NOTE: ASYNCIFY and -fwasm-exceptions are incompatible. Using JS exceptions mode.
     target_compile_options(mnexus_test_harness PUBLIC -sNO_DISABLE_EXCEPTION_CATCHING)
     target_link_options(mnexus_test_harness PUBLIC

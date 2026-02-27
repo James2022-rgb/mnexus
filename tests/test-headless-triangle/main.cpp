@@ -148,7 +148,7 @@ extern "C" int MnTestMain(int, char**) {
   mnexus::IntraQueueSubmissionId read_id = device->QueueReadBuffer(
     {}, readback_buffer, 0, pixels.data(), kBufferSize
   );
-  device->QueueWait({}, read_id);
+  device->QueueWaitIdle({}, read_id);
 
   // Write PNG.
   char const* const output_path = "triangle.png";

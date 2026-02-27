@@ -1008,7 +1008,7 @@ public:
     return mnexus::IntraQueueSubmissionId { completed_value_ };
   }
 
-  IMPL_VAPI(void, QueueWait,
+  IMPL_VAPI(void, QueueWaitIdle,
     mnexus::QueueId const& queue_id,
     mnexus::IntraQueueSubmissionId value
   ) {
@@ -1031,7 +1031,7 @@ public:
           if (wait_status == wgpu::WaitStatus::Success) {
             pending_ops_.erase(pending_ops_.begin() + static_cast<ptrdiff_t>(i));
           } else {
-            MBASE_LOG_ERROR("WaitAny failed during QueueWait (pending op)");
+            MBASE_LOG_ERROR("WaitAny failed during QueueWaitIdle (pending op)");
             ++i;
           }
         } else {

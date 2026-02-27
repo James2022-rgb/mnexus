@@ -155,7 +155,7 @@ int MnTestMain(int argc, char** argv) {
   uint8_t* pixels = (uint8_t*)malloc(kBufferSize);
   MnIntraQueueSubmissionId read_id = MnDeviceQueueReadBuffer(
     device, &default_queue, readback_buffer, 0, pixels, kBufferSize);
-  MnDeviceQueueWait(device, &default_queue, read_id);
+  MnDeviceQueueWaitIdle(device, &default_queue, read_id);
 
   /* Write PNG. */
   char const* const output_path = "triangle.png";

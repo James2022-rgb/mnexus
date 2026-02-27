@@ -205,7 +205,7 @@ public:
   // - All operations with timeline value <= V have completed and their
   //   side-effects are visible.
   //
-  // **Blocking**: `QueueWait(queue_id, V)` blocks the calling thread until
+  // **Blocking**: `QueueWaitIdle(queue_id, V)` blocks the calling thread until
   // `QueueGetCompletedValue(queue_id) >= V`.
   // ==============================================================================================
 
@@ -315,7 +315,7 @@ public:
   /// - `queue_id`: **MUST** identify a valid queue.
   /// - `value`: Timeline value to wait for. Passing 0 or an already-completed
   ///   value returns immediately.
-  _MNEXUS_VAPI(void, QueueWait,
+  _MNEXUS_VAPI(void, QueueWaitIdle,
     QueueId const& queue_id,
     IntraQueueSubmissionId value
   );
@@ -897,7 +897,7 @@ MNEXUS_NO_THROW MnIntraQueueSubmissionId MNEXUS_CALL MnDeviceQueueReadBuffer(
   MnResourceHandle buffer, uint32_t offset,
   void* dst, uint32_t size);
 
-MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceQueueWait(
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceQueueWaitIdle(
   MnDevice device, MnQueueId const* queue_id, MnIntraQueueSubmissionId value);
 
 // ----------------------------------------------------------------------------------------------------
