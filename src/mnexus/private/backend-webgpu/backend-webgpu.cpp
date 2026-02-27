@@ -94,7 +94,8 @@ public:
   //
 
   IMPL_VAPI(void, End) {
-    this->EndCurrentRenderPass();
+    MBASE_ASSERT_MSG(!current_render_pass_.has_value(),
+      "Active render pass must be ended via EndRenderPass before calling End");
     this->EndCurrentComputePass();
   }
 

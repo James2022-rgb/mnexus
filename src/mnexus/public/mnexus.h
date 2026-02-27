@@ -59,6 +59,15 @@ namespace mnexus {
 // > **Note:** The underlying GPU resource may be retained by the
 // > implementation until in-flight operations that reference it have
 // > completed (deferred deletion).
+//
+// ## Render Pass Scope
+//
+// A render pass scope begins with `ICommandList::BeginRenderPass` and ends
+// with `ICommandList::EndRenderPass`. Commands that are only valid inside a
+// render pass scope (e.g. `Draw`, `DrawIndexed`, render state setters) **MUST
+// NOT** be recorded outside of one. Conversely, commands that are not valid
+// inside a render pass scope (e.g. transfer commands) **MUST NOT** be
+// recorded while one is active.
 // ====================================================================================================
 
 class IDevice;
@@ -544,14 +553,14 @@ public:
 
   /// Finalizes command recording.
   ///
-  /// Any active render pass or compute pass is implicitly ended. The caller
-  /// **MUST NOT** record further commands after this call. The command list
-  /// is ready for submission via `IDevice::QueueSubmitCommandList` or
-  /// disposal via `IDevice::DiscardCommandList`.
+  /// The caller **MUST NOT** record further commands after this call. The
+  /// command list is ready for submission via `IDevice::QueueSubmitCommandList`
+  /// or disposal via `IDevice::DiscardCommandList`.
   ///
   /// ## Pre-conditions
   /// - The command list **MUST** be in the recording state (`End` has not
   ///   already been called).
+  /// - The command list **MUST NOT** be inside a render pass scope.
   _MNEXUS_VAPI(void, End);
 
   //
@@ -604,7 +613,16 @@ public:
   // Render Pass
   //
 
+  /// Begins a render pass scope.
+  ///
+  /// ## Pre-conditions
+  /// - The command list **MUST NOT** already be inside a render pass scope.
   _MNEXUS_VAPI(void, BeginRenderPass, RenderPassDesc const& desc);
+
+  /// Ends the current render pass scope.
+  ///
+  /// ## Pre-conditions
+  /// - The command list **MUST** be inside a render pass scope.
   _MNEXUS_VAPI(void, EndRenderPass);
 
   //
