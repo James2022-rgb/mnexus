@@ -782,10 +782,12 @@ struct QueueId final {
 static_assert(sizeof(QueueId) == sizeof(MnQueueId) && alignof(QueueId) == alignof(MnQueueId));
 
 /// Uniquely identifies a submission within a queue.
-/// Nothing is guarenteed about the value of this value, except:
-/// - It it an integer that monotonically increases with each submission.
-/// - It is unique within the queue from which it was obtained.
-/// - A valid value is non-zero.
+///
+/// `IntraQueueSubmissionId` values form a per-queue timeline:
+/// - A valid value is always non-zero.
+/// - Values are monotonically increasing within the queue that produced them.
+/// - Comparing values from different queues is meaningless.
+/// - A value V is "completed" when `IDevice::QueueGetCompletedValue() >= V`.
 using IntraQueueSubmissionId = mbase::TypesafeHandle<struct MnIntraQueueSubmissionIdTag, uint64_t, 0>;
 _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(IntraQueueSubmissionId, MnIntraQueueSubmissionId);
 
