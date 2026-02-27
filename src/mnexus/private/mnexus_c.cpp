@@ -15,17 +15,17 @@ extern "C" {
 // INexus
 //
 
-MnNexus MnNexusCreate(MnNexusDesc const* desc) {
+MNEXUS_NO_THROW MnNexus MNEXUS_CALL MnNexusCreate(MnNexusDesc const* desc) {
   mnexus::NexusDesc cpp_desc {};
   if (desc) { cpp_desc.headless = desc->headless != 0; }
   return reinterpret_cast<MnNexus>(mnexus::INexus::Create(cpp_desc));
 }
 
-void MnNexusDestroy(MnNexus nexus) {
+MNEXUS_NO_THROW void MNEXUS_CALL MnNexusDestroy(MnNexus nexus) {
   ToNexus(nexus)->Destroy();
 }
 
-MnDevice MnNexusGetDevice(MnNexus nexus) {
+MNEXUS_NO_THROW MnDevice MNEXUS_CALL MnNexusGetDevice(MnNexus nexus) {
   return reinterpret_cast<MnDevice>(ToNexus(nexus)->GetDevice());
 }
 
@@ -33,7 +33,7 @@ MnDevice MnNexusGetDevice(MnNexus nexus) {
 // IDevice: Info
 //
 
-void MnDeviceGetAdapterInfo(MnDevice device, MnAdapterInfo* out_info) {
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceGetAdapterInfo(MnDevice device, MnAdapterInfo* out_info) {
   ToDevice(device)->GetAdapterInfo(
     *reinterpret_cast<mnexus::AdapterInfo*>(out_info));
 }
@@ -42,43 +42,43 @@ void MnDeviceGetAdapterInfo(MnDevice device, MnAdapterInfo* out_info) {
 // IDevice: Resource creation / destruction
 //
 
-MnResourceHandle MnDeviceCreateTexture(MnDevice device, MnTextureDesc const* desc) {
+MNEXUS_NO_THROW MnResourceHandle MNEXUS_CALL MnDeviceCreateTexture(MnDevice device, MnTextureDesc const* desc) {
   return ToDevice(device)->CreateTexture(
     *reinterpret_cast<mnexus::TextureDesc const*>(desc)).Get();
 }
 
-void MnDeviceDestroyTexture(MnDevice device, MnResourceHandle handle) {
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceDestroyTexture(MnDevice device, MnResourceHandle handle) {
   ToDevice(device)->DestroyTexture(mnexus::TextureHandle(handle));
 }
 
-MnResourceHandle MnDeviceCreateBuffer(MnDevice device, MnBufferDesc const* desc) {
+MNEXUS_NO_THROW MnResourceHandle MNEXUS_CALL MnDeviceCreateBuffer(MnDevice device, MnBufferDesc const* desc) {
   return ToDevice(device)->CreateBuffer(
     *reinterpret_cast<mnexus::BufferDesc const*>(desc)).Get();
 }
 
-void MnDeviceDestroyBuffer(MnDevice device, MnResourceHandle handle) {
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceDestroyBuffer(MnDevice device, MnResourceHandle handle) {
   ToDevice(device)->DestroyBuffer(mnexus::BufferHandle(handle));
 }
 
-MnResourceHandle MnDeviceCreateShaderModule(MnDevice device, MnShaderModuleDesc const* desc) {
+MNEXUS_NO_THROW MnResourceHandle MNEXUS_CALL MnDeviceCreateShaderModule(MnDevice device, MnShaderModuleDesc const* desc) {
   return ToDevice(device)->CreateShaderModule(
     *reinterpret_cast<mnexus::ShaderModuleDesc const*>(desc)).Get();
 }
 
-void MnDeviceDestroyShaderModule(MnDevice device, MnResourceHandle handle) {
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceDestroyShaderModule(MnDevice device, MnResourceHandle handle) {
   ToDevice(device)->DestroyShaderModule(mnexus::ShaderModuleHandle(handle));
 }
 
-MnResourceHandle MnDeviceCreateProgram(MnDevice device, MnProgramDesc const* desc) {
+MNEXUS_NO_THROW MnResourceHandle MNEXUS_CALL MnDeviceCreateProgram(MnDevice device, MnProgramDesc const* desc) {
   return ToDevice(device)->CreateProgram(
     *reinterpret_cast<mnexus::ProgramDesc const*>(desc)).Get();
 }
 
-void MnDeviceDestroyProgram(MnDevice device, MnResourceHandle handle) {
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceDestroyProgram(MnDevice device, MnResourceHandle handle) {
   ToDevice(device)->DestroyProgram(mnexus::ProgramHandle(handle));
 }
 
-MnCommandList MnDeviceCreateCommandList(MnDevice device, MnCommandListDesc const* desc) {
+MNEXUS_NO_THROW MnCommandList MNEXUS_CALL MnDeviceCreateCommandList(MnDevice device, MnCommandListDesc const* desc) {
   return reinterpret_cast<MnCommandList>(
     ToDevice(device)->CreateCommandList(
       *reinterpret_cast<mnexus::CommandListDesc const*>(desc)));
@@ -88,7 +88,7 @@ MnCommandList MnDeviceCreateCommandList(MnDevice device, MnCommandListDesc const
 // IDevice: Queue operations
 //
 
-MnIntraQueueSubmissionId MnDeviceQueueWriteBuffer(
+MNEXUS_NO_THROW MnIntraQueueSubmissionId MNEXUS_CALL MnDeviceQueueWriteBuffer(
     MnDevice device, MnQueueId const* queue_id,
     MnResourceHandle buffer, uint32_t offset,
     void const* data, uint32_t size) {
@@ -97,14 +97,14 @@ MnIntraQueueSubmissionId MnDeviceQueueWriteBuffer(
     mnexus::BufferHandle(buffer), offset, data, size).Get();
 }
 
-MnIntraQueueSubmissionId MnDeviceQueueSubmitCommandList(
+MNEXUS_NO_THROW MnIntraQueueSubmissionId MNEXUS_CALL MnDeviceQueueSubmitCommandList(
     MnDevice device, MnQueueId const* queue_id, MnCommandList command_list) {
   return ToDevice(device)->QueueSubmitCommandList(
     *reinterpret_cast<mnexus::QueueId const*>(queue_id),
     ToCommandList(command_list)).Get();
 }
 
-MnIntraQueueSubmissionId MnDeviceQueueReadBuffer(
+MNEXUS_NO_THROW MnIntraQueueSubmissionId MNEXUS_CALL MnDeviceQueueReadBuffer(
     MnDevice device, MnQueueId const* queue_id,
     MnResourceHandle buffer, uint32_t offset,
     void* dst, uint32_t size) {
@@ -113,7 +113,7 @@ MnIntraQueueSubmissionId MnDeviceQueueReadBuffer(
     mnexus::BufferHandle(buffer), offset, dst, size).Get();
 }
 
-void MnDeviceQueueWaitIdle(
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceQueueWaitIdle(
     MnDevice device, MnQueueId const* queue_id,
     MnIntraQueueSubmissionId value) {
   ToDevice(device)->QueueWaitIdle(
@@ -125,20 +125,20 @@ void MnDeviceQueueWaitIdle(
 // ICommandList
 //
 
-void MnCommandListBeginRenderPass(MnCommandList cl, MnRenderPassDesc const* desc) {
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListBeginRenderPass(MnCommandList cl, MnRenderPassDesc const* desc) {
   ToCommandList(cl)->BeginRenderPass(
     *reinterpret_cast<mnexus::RenderPassDesc const*>(desc));
 }
 
-void MnCommandListEndRenderPass(MnCommandList cl) {
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListEndRenderPass(MnCommandList cl) {
   ToCommandList(cl)->EndRenderPass();
 }
 
-void MnCommandListBindRenderProgram(MnCommandList cl, MnResourceHandle program) {
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListBindRenderProgram(MnCommandList cl, MnResourceHandle program) {
   ToCommandList(cl)->BindRenderProgram(mnexus::ProgramHandle(program));
 }
 
-void MnCommandListSetVertexInputLayout(
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListSetVertexInputLayout(
     MnCommandList cl,
     MnVertexInputBindingDesc const* bindings, uint32_t binding_count,
     MnVertexInputAttributeDesc const* attributes, uint32_t attribute_count) {
@@ -151,18 +151,18 @@ void MnCommandListSetVertexInputLayout(
       attribute_count));
 }
 
-void MnCommandListBindVertexBuffer(
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListBindVertexBuffer(
     MnCommandList cl, uint32_t binding, MnResourceHandle buffer, uint64_t offset) {
   ToCommandList(cl)->BindVertexBuffer(binding, mnexus::BufferHandle(buffer), offset);
 }
 
-void MnCommandListDraw(
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListDraw(
     MnCommandList cl, uint32_t vertex_count, uint32_t instance_count,
     uint32_t first_vertex, uint32_t first_instance) {
   ToCommandList(cl)->Draw(vertex_count, instance_count, first_vertex, first_instance);
 }
 
-void MnCommandListCopyTextureToBuffer(
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListCopyTextureToBuffer(
     MnCommandList cl,
     MnResourceHandle src_texture, MnTextureSubresourceRange const* src_range,
     MnResourceHandle dst_buffer, uint32_t dst_offset,
@@ -175,7 +175,7 @@ void MnCommandListCopyTextureToBuffer(
     *reinterpret_cast<mnexus::Extent3d const*>(extent));
 }
 
-void MnCommandListEnd(MnCommandList cl) {
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListEnd(MnCommandList cl) {
   ToCommandList(cl)->End();
 }
 
