@@ -349,6 +349,8 @@ if(${_enable_backend_webgpu})
     ${_private_backend_webgpu_dir}/backend-webgpu-binding.h
     ${_private_backend_webgpu_dir}/backend-webgpu-buffer.cpp
     ${_private_backend_webgpu_dir}/backend-webgpu-buffer.h
+    ${_private_backend_webgpu_dir}/backend-webgpu-command_list.cpp
+    ${_private_backend_webgpu_dir}/backend-webgpu-command_list.h
     ${_private_backend_webgpu_dir}/backend-webgpu-compute_pipeline.cpp
     ${_private_backend_webgpu_dir}/backend-webgpu-compute_pipeline.h
     ${_private_backend_webgpu_dir}/backend-webgpu-layout.cpp
