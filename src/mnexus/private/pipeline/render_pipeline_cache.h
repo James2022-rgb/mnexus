@@ -21,12 +21,14 @@ namespace pipeline {
 template<typename TPipeline>
 class TRenderPipelineCache final {
 public:
-  /// Looks up `key` in the cache. On hit, returns the cached pipeline.
-  /// On miss, calls `factory(key)` to create a new pipeline, inserts it, and returns it.
+  /// Looks up `key` in the cache. On hit, returns the cached pipeline and
+  /// sets `*out_cache_hit = true`. On miss, calls `factory(key)` to create
+  /// a new pipeline, inserts it, sets `*out_cache_hit = false`, and returns it.
   /// The factory is only invoked while the exclusive lock is held, so at most one
   /// thread creates a pipeline for any given key.
   template<typename TFactory>
-  TPipeline FindOrInsert(RenderPipelineCacheKey const& key, TFactory&& factory) MBASE_EXCLUDES(mutex_) {
+  TPipeline FindOrInsert(RenderPipelineCacheKey const& key, TFactory&& factory,
+                         bool* out_cache_hit) MBASE_EXCLUDES(mutex_) {
     // Fast path: shared lock for concurrent reads.
     {
       mbase::SharedLockGuard shared_lock(mutex_);
@@ -34,6 +36,7 @@ public:
       auto it = cache_.find(key);
       if (it != cache_.end()) {
         cache_hits_.fetch_add(1, std::memory_order_relaxed);
+        *out_cache_hit = true;
         return it->second;
       }
     }
@@ -44,9 +47,11 @@ public:
     if (!inserted) {
       // Another thread inserted between our shared unlock and exclusive lock.
       cache_hits_.fetch_add(1, std::memory_order_relaxed);
+      *out_cache_hit = true;
       return it->second;
     }
     cache_misses_.fetch_add(1, std::memory_order_relaxed);
+    *out_cache_hit = false;
     it->second = factory(key);
     return it->second;
   }

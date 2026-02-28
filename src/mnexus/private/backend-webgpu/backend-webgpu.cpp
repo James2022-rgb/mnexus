@@ -81,7 +81,9 @@ public:
     resource_storage_(resource_storage),
     wgpu_device_(std::move(wgpu_device)),
     wgpu_command_encoder_(std::move(wgpu_command_encoder))
-  {}
+  {
+    render_pipeline_state_tracker_.SetEventLog(&render_state_event_log_);
+  }
   ~MnexusCommandListWebGpu() override = default;
   MBASE_DISALLOW_COPY_MOVE(MnexusCommandListWebGpu);
 
@@ -97,6 +99,14 @@ public:
     MBASE_ASSERT_MSG(!current_render_pass_.has_value(),
       "Active render pass must be ended via EndRenderPass before calling End");
     this->EndCurrentComputePass();
+  }
+
+  //
+  // Diagnostics
+  //
+
+  IMPL_VAPI(mnexus::RenderStateEventLog&, GetStateEventLog) {
+    return render_state_event_log_;
   }
 
   //
@@ -541,9 +551,20 @@ public:
       depth_stencil_format,
       1 // sample_count (always 1 for now)
     );
+
+    if (render_state_event_log_.IsEnabled()) {
+      render_state_event_log_.Record(
+        mnexus::RenderStateEventTag::kBeginRenderPass,
+        render_pipeline_state_tracker_.BuildSnapshot());
+    }
   }
 
   IMPL_VAPI(void, EndRenderPass) {
+    if (render_state_event_log_.IsEnabled()) {
+      render_state_event_log_.Record(
+        mnexus::RenderStateEventTag::kEndRenderPass,
+        render_pipeline_state_tracker_.BuildSnapshot());
+    }
     this->EndCurrentRenderPass();
   }
 
@@ -689,6 +710,12 @@ public:
 
     this->ResolveRenderPipelineAndBindState();
 
+    if (render_state_event_log_.IsEnabled()) {
+      render_state_event_log_.Record(
+        mnexus::RenderStateEventTag::kDraw,
+        render_pipeline_state_tracker_.BuildSnapshot());
+    }
+
     current_render_pass_->Draw(vertex_count, instance_count, first_vertex, first_instance);
   }
 
@@ -702,6 +729,12 @@ public:
     MBASE_ASSERT_MSG(current_render_pass_.has_value(), "DrawIndexed called outside of a render pass");
 
     this->ResolveRenderPipelineAndBindState();
+
+    if (render_state_event_log_.IsEnabled()) {
+      render_state_event_log_.Record(
+        mnexus::RenderStateEventTag::kDrawIndexed,
+        render_pipeline_state_tracker_.BuildSnapshot());
+    }
 
     current_render_pass_->DrawIndexed(index_count, instance_count, first_index, vertex_offset, first_instance);
   }
@@ -766,6 +799,7 @@ private:
       pipeline::RenderPipelineCacheKey key = render_pipeline_state_tracker_.BuildCacheKey();
       render_pipeline_state_tracker_.MarkClean();
 
+      bool cache_hit = false;
       current_render_pipeline_ = resource_storage_->render_pipeline_cache.FindOrInsert(
         key,
         [&](pipeline::RenderPipelineCacheKey const& k) {
@@ -775,8 +809,16 @@ private:
             resource_storage_->programs,
             resource_storage_->shader_modules
           );
-        }
+        },
+        &cache_hit
       );
+
+      if (render_state_event_log_.IsEnabled()) {
+        render_state_event_log_.RecordPso(
+          render_pipeline_state_tracker_.BuildSnapshot(),
+          key.ComputeHash(),
+          cache_hit);
+      }
 
       current_render_pass_->SetPipeline(current_render_pipeline_);
     }
@@ -828,6 +870,7 @@ private:
   wgpu::RenderPipeline current_render_pipeline_;
   bool explicit_render_pipeline_bound_ = false;
   pipeline::RenderPipelineStateTracker render_pipeline_state_tracker_;
+  mnexus::RenderStateEventLog render_state_event_log_;
   mbase::SmallVector<BoundVertexBuffer, 4> bound_vertex_buffers_;
   BoundIndexBuffer bound_index_buffer_;
 
@@ -1340,6 +1383,7 @@ public:
     key.per_attachment.resize(desc.color_formats.size());
 
     // Look up or create the wgpu pipeline via the cache.
+    bool cache_hit = false;
     wgpu::RenderPipeline wgpu_pipeline = resource_storage_->render_pipeline_cache.FindOrInsert(
       key,
       [&](pipeline::RenderPipelineCacheKey const& k) {
@@ -1349,7 +1393,8 @@ public:
           resource_storage_->programs,
           resource_storage_->shader_modules
         );
-      }
+      },
+      &cache_hit
     );
 
     if (!wgpu_pipeline) {

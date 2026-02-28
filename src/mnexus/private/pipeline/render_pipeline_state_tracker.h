@@ -3,9 +3,13 @@
 // c++ headers ------------------------------------------
 #include <cstdint>
 
+#include <string>
+
 // public project headers -------------------------------
 #include "mbase/public/container.h"
 
+#include "mnexus/public/render_pipeline_state_snapshot.h"
+#include "mnexus/public/render_state_event_log.h"
 #include "mnexus/public/types.h"
 
 // project headers --------------------------------------
@@ -81,12 +85,40 @@ public:
   [[nodiscard]] RenderPipelineCacheKey BuildCacheKey() const;
 
   // -----------------------------------------------------------------------
+  // Public snapshot
+
+  /// Builds a strongly-typed snapshot from the current internal state.
+  [[nodiscard]] mnexus::RenderPipelineStateSnapshot BuildSnapshot() const;
+
+  // -----------------------------------------------------------------------
+  // Text formatting
+
+  /// Formats a snapshot as multi-line human-readable text.
+  [[nodiscard]] static std::string FormatSnapshot(
+    mnexus::RenderPipelineStateSnapshot const& snapshot);
+
+  /// Formats the difference between two snapshots as human-readable text.
+  /// Returns an empty string when the snapshots are identical.
+  [[nodiscard]] static std::string FormatDiff(
+    mnexus::RenderPipelineStateSnapshot const& before,
+    mnexus::RenderPipelineStateSnapshot const& after);
+
+  // -----------------------------------------------------------------------
+  // Event log
+
+  /// Sets the event log to record state changes into. Pass nullptr to disable.
+  void SetEventLog(mnexus::RenderStateEventLog* log);
+
+  // -----------------------------------------------------------------------
   // Reset
 
   void Reset();
 
 private:
+  void RecordEvent(mnexus::RenderStateEventTag tag);
+
   bool dirty_ = true;
+  mnexus::RenderStateEventLog* event_log_ = nullptr;
 
   mnexus::ProgramHandle program_;
   PerDrawFixedFunctionStaticState per_draw_;

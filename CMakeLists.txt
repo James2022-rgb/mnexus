@@ -313,6 +313,8 @@ target_link_libraries(${TARGET_NAME} PRIVATE spirv-reflect-static)
 set(_public_root_dir "${SRC_DIR}/${TARGET_NAME}/public")
 set(_sources_public
   ${_public_root_dir}/mnexus.h
+  ${_public_root_dir}/render_pipeline_state_snapshot.h
+  ${_public_root_dir}/render_state_event_log.h
   ${_public_root_dir}/types.h
 )
 source_group("Public" FILES ${_sources_public})
@@ -403,6 +405,7 @@ set(_sources_private_pipeline
   ${_private_pipeline_dir}/render_pipeline_fixed_function.h
   ${_private_pipeline_dir}/render_pipeline_state_tracker.cpp
   ${_private_pipeline_dir}/render_pipeline_state_tracker.h
+  ${_private_pipeline_dir}/render_state_event_log.cpp
 )
 source_group("Private/Pipeline" FILES ${_sources_private_pipeline})
 

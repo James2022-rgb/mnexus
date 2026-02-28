@@ -550,4 +550,16 @@ std::string_view ToString(StoreOp value) {
   return "N/A";
 }
 
+std::string ToString(ColorWriteMask value) {
+  if (value == ColorWriteMask::kNone) return "None";
+  if (value == ColorWriteMask::kAll)  return "R|G|B|A";
+
+  std::string result;
+  if (bool(value & ColorWriteMask::kRed))   { if (!result.empty()) result += '|'; result += 'R'; }
+  if (bool(value & ColorWriteMask::kGreen)) { if (!result.empty()) result += '|'; result += 'G'; }
+  if (bool(value & ColorWriteMask::kBlue))  { if (!result.empty()) result += '|'; result += 'B'; }
+  if (bool(value & ColorWriteMask::kAlpha)) { if (!result.empty()) result += '|'; result += 'A'; }
+  return result.empty() ? "N/A" : result;
+}
+
 } // namespace mnexus

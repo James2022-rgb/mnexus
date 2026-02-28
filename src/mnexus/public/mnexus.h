@@ -8,6 +8,7 @@
 // public project headers -------------------------------
 #include "mbase/public/call.h"
 
+#include "mnexus/public/render_state_event_log.h"
 #include "mnexus/public/types.h"
 
 #define MNEXUS_NO_THROW MBASE_NO_THROW
@@ -808,6 +809,15 @@ public:
     Extent3d const& dst_extent,
     Filter filter
   );
+
+  //
+  // Diagnostics
+  //
+
+  /// Returns a reference to the per-command-list render state event log.
+  /// Recording is disabled by default; call `SetEnabled(true)` on the
+  /// returned log to start capturing structured events.
+  _MNEXUS_VAPI(RenderStateEventLog&, GetStateEventLog);
 
 protected:
   ICommandList() = default;

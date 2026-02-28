@@ -1294,6 +1294,7 @@ std::string_view ToString(IndexType value);
 std::string_view ToString(VertexStepMode value);
 std::string_view ToString(LoadOp value);
 std::string_view ToString(StoreOp value);
+std::string ToString(ColorWriteMask value);
 
 inline uint32_t GetFormatSizeInBytes(MnFormat value) { return MnGetFormatSizeInBytes(value); }
 inline Extent3d GetFormatTexelBlockExtent(MnFormat value) {
