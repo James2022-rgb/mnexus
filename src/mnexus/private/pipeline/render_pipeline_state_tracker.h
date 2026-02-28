@@ -90,6 +90,10 @@ public:
   /// Builds a strongly-typed snapshot from the current internal state.
   [[nodiscard]] mnexus::RenderPipelineStateSnapshot BuildSnapshot() const;
 
+  /// Builds a strongly-typed snapshot from a cache key.
+  [[nodiscard]] static mnexus::RenderPipelineStateSnapshot SnapshotFromCacheKey(
+    RenderPipelineCacheKey const& key);
+
   // -----------------------------------------------------------------------
   // Text formatting
 

@@ -544,6 +544,17 @@ public:
   ///   description, and numeric IDs.
   _MNEXUS_VAPI(void, GetAdapterInfo, AdapterInfo& out_info);
 
+  //
+  // Diagnostics
+  //
+
+  /// Returns a point-in-time snapshot of the device's render pipeline cache.
+  ///
+  /// The snapshot includes aggregate hit/miss diagnostics and per-entry
+  /// pipeline state. The data is intended for debugging UIs and is not
+  /// synchronized with in-flight GPU work.
+  _MNEXUS_VAPI(RenderPipelineCacheSnapshot, GetRenderPipelineCacheSnapshot);
+
 protected:
   IDevice() = default;
 };

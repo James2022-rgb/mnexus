@@ -298,6 +298,54 @@ mnexus::RenderPipelineStateSnapshot RenderPipelineStateTracker::BuildSnapshot() 
   return s;
 }
 
+mnexus::RenderPipelineStateSnapshot RenderPipelineStateTracker::SnapshotFromCacheKey(
+  RenderPipelineCacheKey const& key
+) {
+  using namespace mnexus;
+  RenderPipelineStateSnapshot s;
+  s.program = key.program;
+
+  s.primitive_topology = static_cast<PrimitiveTopology>(key.per_draw.ia_primitive_topology);
+  s.polygon_mode       = static_cast<PolygonMode>(key.per_draw.raster_polygon_mode);
+  s.cull_mode          = static_cast<CullMode>(key.per_draw.raster_cull_mode);
+  s.front_face         = static_cast<FrontFace>(key.per_draw.raster_front_face);
+  s.depth_test_enabled  = key.per_draw.depth_test_enabled != 0;
+  s.depth_write_enabled = key.per_draw.depth_write_enabled != 0;
+  s.depth_compare_op    = static_cast<CompareOp>(key.per_draw.depth_compare_op);
+  s.stencil_test_enabled = key.per_draw.stencil_test_enabled != 0;
+  s.stencil_front_fail_op       = static_cast<StencilOp>(key.per_draw.stencil_front_fail_op);
+  s.stencil_front_pass_op       = static_cast<StencilOp>(key.per_draw.stencil_front_pass_op);
+  s.stencil_front_depth_fail_op = static_cast<StencilOp>(key.per_draw.stencil_front_depth_fail_op);
+  s.stencil_front_compare_op    = static_cast<CompareOp>(key.per_draw.stencil_front_compare_op);
+  s.stencil_back_fail_op       = static_cast<StencilOp>(key.per_draw.stencil_back_fail_op);
+  s.stencil_back_pass_op       = static_cast<StencilOp>(key.per_draw.stencil_back_pass_op);
+  s.stencil_back_depth_fail_op = static_cast<StencilOp>(key.per_draw.stencil_back_depth_fail_op);
+  s.stencil_back_compare_op    = static_cast<CompareOp>(key.per_draw.stencil_back_compare_op);
+
+  s.attachments.resize(key.per_attachment.size());
+  for (size_t i = 0; i < key.per_attachment.size(); ++i) {
+    auto const& src = key.per_attachment[i];
+    auto& dst = s.attachments[i];
+    dst.blend_enabled = src.blend_enabled != 0;
+    dst.src_color = static_cast<BlendFactor>(src.blend_src_color_factor);
+    dst.dst_color = static_cast<BlendFactor>(src.blend_dst_color_factor);
+    dst.color_op  = static_cast<BlendOp>(src.blend_color_blend_op);
+    dst.src_alpha = static_cast<BlendFactor>(src.blend_src_alpha_factor);
+    dst.dst_alpha = static_cast<BlendFactor>(src.blend_dst_alpha_factor);
+    dst.alpha_op  = static_cast<BlendOp>(src.blend_alpha_blend_op);
+    dst.write_mask = static_cast<ColorWriteMask>(src.color_write_mask);
+  }
+
+  s.vertex_bindings = key.vertex_bindings;
+  s.vertex_attributes = key.vertex_attributes;
+
+  s.color_formats = key.color_formats;
+  s.depth_stencil_format = key.depth_stencil_format;
+  s.sample_count = key.sample_count;
+
+  return s;
+}
+
 // ----------------------------------------------------------------------------------------------------
 // Text formatting
 //

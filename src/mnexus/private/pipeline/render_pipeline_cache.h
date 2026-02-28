@@ -79,6 +79,17 @@ public:
     return cache_.size();
   }
 
+  /// Invokes `callback(RenderPipelineCacheKey const& key)` for each cached entry.
+  /// Holds a shared lock for the duration; `callback` MUST NOT call any
+  /// mutating method on this cache (deadlock).
+  template<typename TCallback>
+  void ForEachEntry(TCallback&& callback) const MBASE_EXCLUDES(mutex_) {
+    mbase::SharedLockGuard lock(mutex_);
+    for (auto const& [key, pipeline] : cache_) {
+      callback(key);
+    }
+  }
+
 private:
   mutable mbase::SharedLockable<std::shared_mutex> mutex_;
   std::unordered_map<RenderPipelineCacheKey, TPipeline, RenderPipelineCacheKey::Hasher>

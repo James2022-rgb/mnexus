@@ -1422,6 +1422,31 @@ public:
   }
 
   //
+  // Diagnostics
+  //
+
+  IMPL_VAPI(mnexus::RenderPipelineCacheSnapshot, GetRenderPipelineCacheSnapshot) {
+    mnexus::RenderPipelineCacheSnapshot snapshot;
+
+    auto diag = resource_storage_->render_pipeline_cache.GetDiagnostics();
+    snapshot.diagnostics.total_lookups = diag.total_lookups;
+    snapshot.diagnostics.cache_hits = diag.cache_hits;
+    snapshot.diagnostics.cache_misses = diag.cache_misses;
+    snapshot.diagnostics.cached_pipeline_count = diag.cached_pipeline_count;
+
+    resource_storage_->render_pipeline_cache.ForEachEntry(
+      [&snapshot](pipeline::RenderPipelineCacheKey const& key) {
+        snapshot.entries.push_back({
+          .hash = key.ComputeHash(),
+          .state = pipeline::RenderPipelineStateTracker::SnapshotFromCacheKey(key),
+        });
+      }
+    );
+
+    return snapshot;
+  }
+
+  //
   // Module local
   //
 

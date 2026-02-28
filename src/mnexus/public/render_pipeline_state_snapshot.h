@@ -3,6 +3,8 @@
 // c++ headers ------------------------------------------
 #include <cstdint>
 
+#include <vector>
+
 // public project headers -------------------------------
 #include "mbase/public/container.h"
 
@@ -56,6 +58,36 @@ struct RenderPipelineStateSnapshot final {
   mbase::SmallVector<Format, 4> color_formats;
   Format   depth_stencil_format = Format::kUndefined;
   uint32_t sample_count = 1;
+};
+
+// ---------------------------------------------------------------------------
+// Cache inspection types
+//
+
+/// Aggregate diagnostics for the device's render pipeline cache.
+struct RenderPipelineCacheDiagnosticsSnapshot final {
+  uint64_t total_lookups = 0;
+  uint64_t cache_hits = 0;
+  uint64_t cache_misses = 0;
+  uint64_t cached_pipeline_count = 0;
+
+  [[nodiscard]] double HitRate() const {
+    return total_lookups > 0
+      ? static_cast<double>(cache_hits) / static_cast<double>(total_lookups)
+      : 0.0;
+  }
+};
+
+/// A single entry in the render pipeline cache snapshot.
+struct RenderPipelineCacheEntry final {
+  size_t hash = 0;
+  RenderPipelineStateSnapshot state;
+};
+
+/// Complete snapshot of the render pipeline cache contents and diagnostics.
+struct RenderPipelineCacheSnapshot final {
+  RenderPipelineCacheDiagnosticsSnapshot diagnostics;
+  std::vector<RenderPipelineCacheEntry> entries;
 };
 
 } // namespace mnexus
