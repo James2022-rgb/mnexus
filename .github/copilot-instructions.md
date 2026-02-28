@@ -41,7 +41,7 @@ mnexus is a graphics abstraction layer providing a unified API over WebGPU (via 
 
 - `INexus` - Main entry point for surface lifecycle, presentation, and device access
 - `IDevice` - Resource creation (buffers, textures, shaders, programs, pipelines, layouts) and command submission
-- `ICommandList` - Command recording for render, compute, and transfer operations
+- `ICommandList` - Command recording for render, compute, and transfer operations. Exposes `GetStateEventLog()` for per-command-list PSO diagnostics
 - `Texture` - RAII wrapper around texture handles
 
 Public API methods should be documented with `///` doc comments. Use RFC 2119 keywords (MUST, MUST NOT, SHOULD, MAY, etc.) to state normative requirements on each parameter. These constraints define the API contract that all backend implementations must satisfy. See `CopyBufferToTexture` / `CopyTextureToBuffer` for reference.
@@ -76,6 +76,30 @@ Types are defined in two layers for FFI compatibility:
 - **C types** (outside `#if defined(__cplusplus)`): `Mn`-prefixed types (`MnBool32`, `MnResourceHandle`, `MnBufferDesc`, `MnTextureDesc`, `MnShaderModuleDesc`, `MnProgramDesc`, `MnComputePipelineDesc`, `MnRenderPipelineDesc`, `MnBindGroupLayoutDesc`, `MnPipelineLayoutDesc`, etc.) usable from C and other languages
 - **C++ types** (in `namespace mnexus`): Type-safe wrappers (`BufferHandle`, `TextureHandle`, `ShaderModuleHandle`, `ProgramHandle`, `ComputePipelineHandle`, etc.) with `static_assert` ensuring ABI compatibility with C counterparts
 
+### PSO Observability (`src/mnexus/public/render_state_event_log.h`, `render_pipeline_state_snapshot.h`)
+
+A per-command-list structured event log for debugging the auto-generated render pipeline (PSO) path. Each event carries a full `RenderPipelineStateSnapshot` so the complete pipeline state can be inspected at any recorded point without replay.
+
+**Public types (all in `mnexus` namespace):**
+- `RenderStateEventTag` - Enum of event kinds (BeginRenderPass, SetCullMode, PsoResolved, DrawIndexed, etc.)
+- `RenderStateEvent` - Tag + full state snapshot + PSO hash/cache-hit (for `kPsoResolved`)
+- `RenderStateEventLog` - Container with `SetEnabled` / `Record` / `RecordPso` / `GetEvent` / `Clear`. Recording is a no-op when disabled (null-pointer + bool branch per setter)
+- `RenderPipelineStateSnapshot` - Strongly-typed representation of complete pipeline state (native enum types, not packed uint8_t). Mirrors the internal `RenderPipelineCacheKey` but is human-inspectable
+
+**Usage pattern:**
+```cpp
+auto& log = command_list->GetStateEventLog();
+log.SetEnabled(true);
+// ... record rendering commands ...
+for (uint32_t i = 0; i < log.GetCount(); ++i) {
+  auto const& ev = log.GetEvent(i);
+  // ev.tag, ev.state (full snapshot), ev.pso_hash, ev.cache_hit
+}
+log.Clear();
+```
+
+**Text formatting** is available via static methods on `RenderPipelineStateTracker` (private header): `FormatSnapshot()` and `FormatDiff()`. These take the public `RenderPipelineStateSnapshot` type.
+
 ### Backend Structure (`src/mnexus/private/`)
 
 - `binding/` - Backend-agnostic bind group state tracking
@@ -83,10 +107,11 @@ Types are defined in two layers for FFI compatibility:
   - `BindGroupCacheKey` - Hashable descriptor for bind group deduplication
 - `pipeline/` - Backend-agnostic pipeline scaffolding
   - `TPipelineLayoutCache<TLayout>` - Thread-safe hash-based pipeline layout cache; keyed by `PipelineLayoutCacheKey` (bind group layout structure from shader reflection). Programs with identical bind group configurations share a single backend layout object
-  - `RenderPipelineStateTracker` - Tracks mutable render state (program, vertex input, fixed-function) on a command list; assembles `RenderPipelineCacheKey` at draw time
-  - `TRenderPipelineCache<TPipeline>` - Thread-safe hash-based render pipeline cache with shared/exclusive locking
+  - `RenderPipelineStateTracker` - Tracks mutable render state (program, vertex input, fixed-function) on a command list; assembles `RenderPipelineCacheKey` at draw time. Also provides `BuildSnapshot()` (converts packed internal state to public `RenderPipelineStateSnapshot`), `FormatSnapshot()` / `FormatDiff()` (text formatting), and `SetEventLog()` (wires structured event recording)
+  - `TRenderPipelineCache<TPipeline>` - Thread-safe hash-based render pipeline cache with shared/exclusive locking. `FindOrInsert` requires a mandatory `bool* out_cache_hit` output parameter
   - `RenderPipelineCacheKey` - Hashable key combining program, vertex layout, fixed-function state, and render target formats
   - `PerDrawFixedFunctionStaticState` / `PerAttachmentFixedFunctionStaticState` - Packed uint8 structs for fast memcmp/memhash
+  - `RenderStateEventLog` (impl) - Implementation of the public `RenderStateEventLog` class
 - `builtin_shader/` - Embedded SPIR-V for internal operations (blit, buffer row repack, full-screen quad)
 - `backend-iface/` - Abstract backend interface (`IBackend`)
 - `backend-webgpu/` - WebGPU implementation
