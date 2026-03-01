@@ -52,7 +52,7 @@ if(${MNEXUS_ENABLE_BACKEND_WGPU})
 endif()
 
 set(_enable_backend_vulkan OFF)
-if(${MNEXUS_ENABLE_BACKEND_VULKAN})
+if(${MNEXUS_ENABLE_BACKEND_VULKAN} AND NOT EMSCRIPTEN)
   set(_enable_backend_vulkan ON)
 endif()
 
@@ -463,7 +463,7 @@ target_include_directories(${TARGET_NAME} PUBLIC
 
 target_compile_definitions(${TARGET_NAME} PUBLIC
   MNEXUS_ENABLE_BACKEND_WGPU=$<BOOL:${MNEXUS_ENABLE_BACKEND_WGPU}>
-  MNEXUS_ENABLE_BACKEND_VULKAN=$<BOOL:${MNEXUS_ENABLE_BACKEND_VULKAN}>
+  MNEXUS_ENABLE_BACKEND_VULKAN=$<BOOL:${_enable_backend_vulkan}>
 )
 
 target_compile_definitions(${TARGET_NAME} PRIVATE

@@ -79,13 +79,21 @@ class ICommandList;
 
 struct NexusDesc final {
   bool headless = false;
+  BackendType backend_type = BackendType::kWebGpu;
 };
 
 class INexus {
 public:
+  /// Returns the list of backend types available at runtime.
+  ///
+  /// The returned span points to static storage and is valid for the lifetime
+  /// of the process.
+  static std::span<BackendType const> EnumerateBackends();
+
   /// Creates a new mnexus instance and initializes the GPU backend.
   ///
-  /// Returns `nullptr` if initialization fails (e.g. no suitable GPU adapter).
+  /// Returns `nullptr` if initialization fails (e.g. no suitable GPU adapter)
+  /// or if the requested `desc.backend_type` is not available.
   ///
   /// - `desc`: Instance configuration. If `desc.headless` is `true`, no
   ///   surface or swapchain is created; the device is available immediately.
@@ -883,6 +891,9 @@ typedef struct MnCommandList_T* MnCommandList;
 #if defined(__cplusplus)
 extern "C" {
 #endif
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnNexusEnumerateBackends(
+  uint32_t* count, MnBackendType* backends);
 
 MNEXUS_NO_THROW MnNexus  MNEXUS_CALL MnNexusCreate(MnNexusDesc const* desc);
 MNEXUS_NO_THROW void     MNEXUS_CALL MnNexusDestroy(MnNexus nexus);

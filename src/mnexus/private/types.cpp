@@ -280,6 +280,14 @@ std::string DescribeFlagBits(TFlags value, std::unordered_map<TFlagBits, std::st
 
 }
 
+std::string_view ToString(BackendType value) {
+  switch (value) {
+  case BackendType::kWebGpu: return "WebGPU";
+  case BackendType::kVulkan: return "Vulkan";
+  }
+  return "N/A";
+}
+
 std::string_view ToString(MnFormat value) {
   // In C++11 and later, std::string is guaranteed to be contiguous and null-terminated.
 

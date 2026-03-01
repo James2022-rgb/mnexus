@@ -15,9 +15,26 @@ extern "C" {
 // INexus
 //
 
+MNEXUS_NO_THROW void MNEXUS_CALL MnNexusEnumerateBackends(
+    uint32_t* count, MnBackendType* backends) {
+  auto available = mnexus::INexus::EnumerateBackends();
+  if (!backends) {
+    *count = static_cast<uint32_t>(available.size());
+    return;
+  }
+  uint32_t to_write = std::min(*count, static_cast<uint32_t>(available.size()));
+  for (uint32_t i = 0; i < to_write; ++i) {
+    backends[i] = static_cast<MnBackendType>(available[i]);
+  }
+  *count = to_write;
+}
+
 MNEXUS_NO_THROW MnNexus MNEXUS_CALL MnNexusCreate(MnNexusDesc const* desc) {
   mnexus::NexusDesc cpp_desc {};
-  if (desc) { cpp_desc.headless = desc->headless != 0; }
+  if (desc) {
+    cpp_desc.headless = desc->headless != 0;
+    cpp_desc.backend_type = static_cast<mnexus::BackendType>(desc->backend_type);
+  }
   return reinterpret_cast<MnNexus>(mnexus::INexus::Create(cpp_desc));
 }
 

@@ -40,10 +40,20 @@ static const MnBool32 MnBoolFalse = 0;
 static const MnBool32 MnBoolTrue  = 1;
 
 // ----------------------------------------------------------------------------------------------------
+// Backend Type
+
+typedef uint8_t MnBackendType;
+enum {
+  MnBackendTypeWebGpu = 0,
+  MnBackendTypeVulkan,
+};
+
+// ----------------------------------------------------------------------------------------------------
 // Nexus
 
 typedef struct MnNexusDesc {
   MnBool32 headless;
+  MnBackendType backend_type _MN_INIT(MnBackendTypeWebGpu);
 } MnNexusDesc;
 
 // ----------------------------------------------------------------------------------------------------
@@ -1075,6 +1085,15 @@ struct ComputePipelineDesc final {
 _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(ComputePipelineDesc, MnComputePipelineDesc);
 
 // ----------------------------------------------------------------------------------------------------
+// Backend Type
+//
+
+enum class BackendType : uint8_t {
+  kWebGpu = MnBackendTypeWebGpu,
+  kVulkan = MnBackendTypeVulkan,
+};
+
+// ----------------------------------------------------------------------------------------------------
 // Render State Enums
 //
 
@@ -1277,6 +1296,8 @@ _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(RenderPassDesc, MnRenderPassDesc);
 //
 // Functions returning `std::string_view` return pointers to static strings, null-terminated.
 //
+
+std::string_view ToString(BackendType value);
 
 std::string_view ToString(MnFormat value);
 std::string_view ToString(BindGroupLayoutEntryType value);

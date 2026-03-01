@@ -77,19 +77,38 @@ private:
   bool headless_ = false;
 };
 
+std::span<BackendType const> INexus::EnumerateBackends() {
+  static constexpr BackendType kBackends[] = {
+#if MNEXUS_ENABLE_BACKEND_WGPU
+    BackendType::kWebGpu,
+#endif
+#if MNEXUS_ENABLE_BACKEND_VULKAN
+    BackendType::kVulkan,
+#endif
+  };
+  return kBackends;
+}
+
 INexus* INexus::Create(NexusDesc const& desc) {
   std::unique_ptr<mnexus_backend::IBackend> backend;
 
-  // Select backend implementation.
-  // Currently defaults to WebGPU. To test the Vulkan stub backend,
-  // swap the order of the #if / #elif branches below.
+  switch (desc.backend_type) {
 #if MNEXUS_ENABLE_BACKEND_WGPU
-  backend = mnexus_backend::webgpu::IBackendWebGpu::Create();
-#elif MNEXUS_ENABLE_BACKEND_VULKAN
-  backend = mnexus_backend::vulkan::IBackendVulkan::Create();
-#else
-# error No backend is enabled in mnexus!
+  case BackendType::kWebGpu:
+    backend = mnexus_backend::webgpu::IBackendWebGpu::Create();
+    break;
 #endif
+#if MNEXUS_ENABLE_BACKEND_VULKAN
+  case BackendType::kVulkan:
+    backend = mnexus_backend::vulkan::IBackendVulkan::Create();
+    break;
+#endif
+  default:
+    MBASE_LOG_ERROR("Requested backend type '%.*s' is not available",
+                    static_cast<int>(ToString(desc.backend_type).size()),
+                    ToString(desc.backend_type).data());
+    return nullptr;
+  }
 
   if (!backend) return nullptr;
   return new Nexus(std::move(backend), desc.headless);
