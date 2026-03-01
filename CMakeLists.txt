@@ -17,6 +17,7 @@ project(${TARGET_NAME}
 #
 
 option(MNEXUS_ENABLE_BACKEND_WGPU "Enable WebGPU backend support" ON)
+option(MNEXUS_ENABLE_BACKEND_VULKAN "Enable Vulkan backend support" ON)
 option(MNEXUS_ENABLE_DAWN "Enable Dawn backend support for the WebGPU backend" ON)
 option(MNEXUS_ENABLE_TINT_ON_WEB "Enable Tint SPIR-V to WGSL conversion for Emscripten" ON)
 
@@ -48,6 +49,11 @@ endif()
 set(_enable_backend_webgpu OFF)
 if(${MNEXUS_ENABLE_BACKEND_WGPU})
   set(_enable_backend_webgpu ON)
+endif()
+
+set(_enable_backend_vulkan OFF)
+if(${MNEXUS_ENABLE_BACKEND_VULKAN})
+  set(_enable_backend_vulkan ON)
 endif()
 
 set(_enable_dawn OFF)
@@ -379,6 +385,17 @@ endif()
 source_group("Private/Backend-WebGPU" FILES ${_sources_private_backend_webgpu})
 
 
+set(_private_backend_vulkan_dir "${_private_root_dir}/backend-vulkan")
+if(${_enable_backend_vulkan})
+  set(_sources_private_backend_vulkan
+    ${_private_backend_vulkan_dir}/backend-vulkan.cpp
+    ${_private_backend_vulkan_dir}/backend-vulkan.h
+    ${_private_backend_vulkan_dir}/backend-vulkan-command_list.cpp
+    ${_private_backend_vulkan_dir}/backend-vulkan-command_list.h
+  )
+endif()
+source_group("Private/Backend-Vulkan" FILES ${_sources_private_backend_vulkan})
+
 
 set(_private_container_dir "${_private_root_dir}/container")
 set(_sources_private_container
@@ -425,6 +442,7 @@ target_sources(${TARGET_NAME} PRIVATE
   ${_sources_public_container}
   ${_sources_private_root}
   ${_sources_private_backend_iface}
+  ${_sources_private_backend_vulkan}
   ${_sources_private_backend_webgpu}
   ${_sources_private_binding}
   ${_sources_private_container}
@@ -445,6 +463,7 @@ target_include_directories(${TARGET_NAME} PUBLIC
 
 target_compile_definitions(${TARGET_NAME} PUBLIC
   MNEXUS_ENABLE_BACKEND_WGPU=$<BOOL:${MNEXUS_ENABLE_BACKEND_WGPU}>
+  MNEXUS_ENABLE_BACKEND_VULKAN=$<BOOL:${MNEXUS_ENABLE_BACKEND_VULKAN}>
 )
 
 target_compile_definitions(${TARGET_NAME} PRIVATE

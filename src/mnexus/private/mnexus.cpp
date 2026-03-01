@@ -12,6 +12,9 @@
 #include "mbase/public/access.h"
 
 // project headers --------------------------------------
+#if MNEXUS_ENABLE_BACKEND_VULKAN
+# include "backend-vulkan/backend-vulkan.h"
+#endif
 #if MNEXUS_ENABLE_BACKEND_WGPU
 # include "backend-webgpu/backend-webgpu.h"
 #endif
@@ -75,10 +78,15 @@ private:
 };
 
 INexus* INexus::Create(NexusDesc const& desc) {
-  // TODO: Select backend here.
+  std::unique_ptr<mnexus_backend::IBackend> backend;
 
+  // Select backend implementation.
+  // Currently defaults to WebGPU. To test the Vulkan stub backend,
+  // swap the order of the #if / #elif branches below.
 #if MNEXUS_ENABLE_BACKEND_WGPU
-  auto backend = mnexus_backend::webgpu::IBackendWebGpu::Create();
+  backend = mnexus_backend::webgpu::IBackendWebGpu::Create();
+#elif MNEXUS_ENABLE_BACKEND_VULKAN
+  backend = mnexus_backend::vulkan::IBackendVulkan::Create();
 #else
 # error No backend is enabled in mnexus!
 #endif
