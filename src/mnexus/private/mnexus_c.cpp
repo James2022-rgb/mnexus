@@ -29,6 +29,11 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnNexusEnumerateBackends(
   *count = to_write;
 }
 
+MNEXUS_NO_THROW char const* MNEXUS_CALL MnBackendTypeToString(MnBackendType value) {
+  std::string_view sv = mnexus::ToString(static_cast<mnexus::BackendType>(value));
+  return sv.data();
+}
+
 MNEXUS_NO_THROW MnNexus MNEXUS_CALL MnNexusCreate(MnNexusDesc const* desc) {
   mnexus::NexusDesc cpp_desc {};
   if (desc) {

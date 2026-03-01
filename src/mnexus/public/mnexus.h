@@ -8,7 +8,9 @@
 // public project headers -------------------------------
 #include "mbase/public/call.h"
 
-#include "mnexus/public/render_state_event_log.h"
+#if defined(__cplusplus)
+# include "mnexus/public/render_state_event_log.h"
+#endif
 #include "mnexus/public/types.h"
 
 #define MNEXUS_NO_THROW MBASE_NO_THROW
@@ -894,6 +896,8 @@ extern "C" {
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnNexusEnumerateBackends(
   uint32_t* count, MnBackendType* backends);
+
+MNEXUS_NO_THROW char const* MNEXUS_CALL MnBackendTypeToString(MnBackendType value);
 
 MNEXUS_NO_THROW MnNexus  MNEXUS_CALL MnNexusCreate(MnNexusDesc const* desc);
 MNEXUS_NO_THROW void     MNEXUS_CALL MnNexusDestroy(MnNexus nexus);

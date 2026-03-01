@@ -8,6 +8,15 @@
 #include "mnexus_test_harness.h"
 
 extern "C" int MnTestMain(int, char**) {
+  std::span<mnexus::BackendType const> backends = mnexus::INexus::EnumerateBackends();
+  std::printf("Available backends (%zu):\n", backends.size());
+  for (mnexus::BackendType b : backends) {
+    std::printf("  - %.*s\n",
+                static_cast<int>(mnexus::ToString(b).size()),
+                mnexus::ToString(b).data());
+  }
+  std::printf("\n");
+
   mnexus::INexus* nexus = mnexus::INexus::Create({.headless = true});
   mnexus::IDevice* device = nexus->GetDevice();
 

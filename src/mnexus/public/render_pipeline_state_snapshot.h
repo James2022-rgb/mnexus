@@ -1,5 +1,7 @@
 #pragma once
 
+#if defined(__cplusplus)
+
 // c++ headers ------------------------------------------
 #include <cstdint>
 
@@ -91,3 +93,5 @@ struct RenderPipelineCacheSnapshot final {
 };
 
 } // namespace mnexus
+
+#endif // defined(__cplusplus)

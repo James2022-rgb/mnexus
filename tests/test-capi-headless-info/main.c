@@ -11,6 +11,19 @@ int MnTestMain(int argc, char** argv) {
   (void)argc;
   (void)argv;
 
+  uint32_t backend_count = 0;
+  MnNexusEnumerateBackends(&backend_count, NULL);
+
+  printf("Available backends (%u):\n", backend_count);
+  if (backend_count > 0) {
+    MnBackendType backends[4];
+    MnNexusEnumerateBackends(&backend_count, backends);
+    for (uint32_t i = 0; i < backend_count; ++i) {
+      printf("  - %s\n", MnBackendTypeToString(backends[i]));
+    }
+  }
+  printf("\n");
+
   MnNexusDesc desc = { 0 };
   desc.headless = MnBoolTrue;
   MnNexus nexus = MnNexusCreate(&desc);

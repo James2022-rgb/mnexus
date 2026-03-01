@@ -1,5 +1,7 @@
 #pragma once
 
+#if defined(__cplusplus)
+
 // c++ headers ------------------------------------------
 #include <cstdint>
 
@@ -79,3 +81,5 @@ private:
 };
 
 } // namespace mnexus
+
+#endif // defined(__cplusplus)
