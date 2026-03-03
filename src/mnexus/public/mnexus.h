@@ -898,6 +898,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnNexusEnumerateBackends(
   uint32_t* count, MnBackendType* backends);
 
 MNEXUS_NO_THROW char const* MNEXUS_CALL MnBackendTypeToString(MnBackendType value);
+MNEXUS_NO_THROW char const* MNEXUS_CALL MnColorSpaceToString(MnColorSpace value);
 
 MNEXUS_NO_THROW MnNexus  MNEXUS_CALL MnNexusCreate(MnNexusDesc const* desc);
 MNEXUS_NO_THROW void     MNEXUS_CALL MnNexusDestroy(MnNexus nexus);

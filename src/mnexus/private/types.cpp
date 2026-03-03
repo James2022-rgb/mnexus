@@ -288,6 +288,15 @@ std::string_view ToString(BackendType value) {
   return "N/A";
 }
 
+std::string_view ToString(ColorSpace value) {
+  switch (value) {
+  case ColorSpace::kLinear:      return "Linear";
+  case ColorSpace::kSrgb:        return "sRGB";
+  case ColorSpace::kHdr10St2084: return "HDR10 ST.2084";
+  }
+  return "N/A";
+}
+
 std::string_view ToString(MnFormat value) {
   // In C++11 and later, std::string is guaranteed to be contiguous and null-terminated.
 

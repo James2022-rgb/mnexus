@@ -49,6 +49,15 @@ enum {
 };
 
 // ----------------------------------------------------------------------------------------------------
+// Color Space
+
+typedef enum MnColorSpace {
+  MnColorSpaceLinear = 0,
+  MnColorSpaceSrgb,
+  MnColorSpaceHdr10St2084,
+} MnColorSpace;
+
+// ----------------------------------------------------------------------------------------------------
 // Nexus
 
 typedef struct MnNexusDesc {
@@ -1094,6 +1103,16 @@ enum class BackendType : uint8_t {
 };
 
 // ----------------------------------------------------------------------------------------------------
+// Color Space
+//
+
+enum class ColorSpace : uint8_t {
+  kLinear      = MnColorSpaceLinear,
+  kSrgb        = MnColorSpaceSrgb,
+  kHdr10St2084 = MnColorSpaceHdr10St2084,
+};
+
+// ----------------------------------------------------------------------------------------------------
 // Render State Enums
 //
 
@@ -1298,6 +1317,7 @@ _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(RenderPassDesc, MnRenderPassDesc);
 //
 
 std::string_view ToString(BackendType value);
+std::string_view ToString(ColorSpace value);
 
 std::string_view ToString(MnFormat value);
 std::string_view ToString(BindGroupLayoutEntryType value);
