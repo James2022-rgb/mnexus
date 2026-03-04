@@ -65,6 +65,14 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceGetAdapterInfo(MnDevice device, MnAdapt
     *reinterpret_cast<mnexus::AdapterInfo*>(out_info));
 }
 
+MNEXUS_NO_THROW MnClipSpaceConvention MNEXUS_CALL MnDeviceGetClipSpaceConvention(MnDevice device) {
+  mnexus::ClipSpaceConvention conv = ToDevice(device)->GetClipSpaceConvention();
+  MnClipSpaceConvention result;
+  result.y_direction = static_cast<MnClipSpaceYDirection>(conv.y_direction);
+  result.depth_range = static_cast<MnClipSpaceDepthRange>(conv.depth_range);
+  return result;
+}
+
 // ----------------------------------------------------------------------------------------------------
 // IDevice: Resource creation / destruction
 //

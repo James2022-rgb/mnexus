@@ -492,6 +492,12 @@ public:
   ///
   /// > **Note:** Shader reflection extracts and merges bind group layouts
   /// > across all provided modules.
+  ///
+  /// > **Note:** On the WebGPU backend, the pipeline layout requires a bind
+  /// > group layout for every group index from 0 up to the highest group used
+  /// > by the shader. If a shader uses group N, groups 0 through N-1 must
+  /// > also have at least one binding. Prefer packing all bindings into
+  /// > consecutive groups starting from 0.
   _MNEXUS_VAPI(ProgramHandle, CreateProgram,
     ProgramDesc const& desc
   );
@@ -547,6 +553,15 @@ public:
 
   /// Returns capability flags for the GPU adapter.
   _MNEXUS_VAPI(AdapterCapability, GetAdapterCapability);
+
+  /// Returns the clip space convention used by this backend.
+  ///
+  /// - WebGPU: Y-up, depth [0, 1].
+  /// - Vulkan: Y-down, depth [0, 1].
+  ///
+  /// Callers **SHOULD** use the returned convention to construct projection
+  /// matrices that match the backend's NDC coordinate system.
+  _MNEXUS_VAPI(ClipSpaceConvention, GetClipSpaceConvention);
 
   /// Retrieves human-readable information about the GPU adapter.
   ///
@@ -906,6 +921,8 @@ MNEXUS_NO_THROW MnDevice MNEXUS_CALL MnNexusGetDevice(MnNexus nexus);
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceGetAdapterInfo(
   MnDevice device, MnAdapterInfo* out_info);
+MNEXUS_NO_THROW MnClipSpaceConvention MNEXUS_CALL MnDeviceGetClipSpaceConvention(
+  MnDevice device);
 
 // ----------------------------------------------------------------------------------------------------
 // IDevice: Resource creation / destruction

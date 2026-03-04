@@ -592,6 +592,13 @@ public:
     return adapter_capability_;
   }
 
+  IMPL_VAPI(mnexus::ClipSpaceConvention, GetClipSpaceConvention) {
+    return mnexus::ClipSpaceConvention {
+      .y_direction = mnexus::ClipSpaceYDirection::kUp,
+      .depth_range = mnexus::ClipSpaceDepthRange::kZeroToOne,
+    };
+  }
+
   IMPL_VAPI(void, GetAdapterInfo, mnexus::AdapterInfo& out_info) {
     out_info = adapter_info_;
   }

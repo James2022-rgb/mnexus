@@ -238,6 +238,13 @@ public:
     return {};
   }
 
+  MNEXUS_NO_THROW mnexus::ClipSpaceConvention MNEXUS_CALL GetClipSpaceConvention() override {
+    return mnexus::ClipSpaceConvention {
+      .y_direction = mnexus::ClipSpaceYDirection::kDown,
+      .depth_range = mnexus::ClipSpaceDepthRange::kZeroToOne,
+    };
+  }
+
   MNEXUS_NO_THROW void MNEXUS_CALL GetAdapterInfo(mnexus::AdapterInfo& out_info) override {
     MBASE_LOG_WARN("Vulkan backend: GetAdapterInfo() not implemented");
     out_info = {};

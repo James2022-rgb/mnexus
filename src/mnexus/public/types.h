@@ -49,6 +49,26 @@ enum {
 };
 
 // ----------------------------------------------------------------------------------------------------
+// Clip Space Convention
+
+typedef uint8_t MnClipSpaceYDirection;
+enum {
+  MnClipSpaceYDirectionUp = 0,   // WebGPU, OpenGL
+  MnClipSpaceYDirectionDown,     // Vulkan
+};
+
+typedef uint8_t MnClipSpaceDepthRange;
+enum {
+  MnClipSpaceDepthRangeZeroToOne = 0,    // Vulkan, WebGPU
+  MnClipSpaceDepthRangeNegOneToOne,      // OpenGL
+};
+
+typedef struct MnClipSpaceConvention {
+  MnClipSpaceYDirection y_direction _MN_INIT(MnClipSpaceYDirectionUp);
+  MnClipSpaceDepthRange depth_range _MN_INIT(MnClipSpaceDepthRangeZeroToOne);
+} MnClipSpaceConvention;
+
+// ----------------------------------------------------------------------------------------------------
 // Color Space
 
 typedef enum MnColorSpace {
@@ -1101,6 +1121,26 @@ enum class BackendType : uint8_t {
   kWebGpu = MnBackendTypeWebGpu,
   kVulkan = MnBackendTypeVulkan,
 };
+
+// ----------------------------------------------------------------------------------------------------
+// Clip Space Convention
+//
+
+enum class ClipSpaceYDirection : uint8_t {
+  kUp   = MnClipSpaceYDirectionUp,
+  kDown = MnClipSpaceYDirectionDown,
+};
+
+enum class ClipSpaceDepthRange : uint8_t {
+  kZeroToOne    = MnClipSpaceDepthRangeZeroToOne,
+  kNegOneToOne  = MnClipSpaceDepthRangeNegOneToOne,
+};
+
+struct ClipSpaceConvention final {
+  ClipSpaceYDirection y_direction = ClipSpaceYDirection::kUp;
+  ClipSpaceDepthRange depth_range = ClipSpaceDepthRange::kZeroToOne;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(ClipSpaceConvention, MnClipSpaceConvention);
 
 // ----------------------------------------------------------------------------------------------------
 // Color Space
