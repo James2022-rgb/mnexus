@@ -23,6 +23,20 @@ MNEXUS_NO_THROW mnexus::RenderStateEventLog& MNEXUS_CALL MnexusCommandListVulkan
 }
 
 //
+// Debug Markers
+//
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::PushDebugGroup(
+  mnexus::container::ArrayProxy<char const> /*name*/, float const* /*color*/
+) {
+  MBASE_LOG_WARN("Vulkan backend: PushDebugGroup() not implemented");
+}
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::PopDebugGroup() {
+  MBASE_LOG_WARN("Vulkan backend: PopDebugGroup() not implemented");
+}
+
+//
 // Transfer
 //
 

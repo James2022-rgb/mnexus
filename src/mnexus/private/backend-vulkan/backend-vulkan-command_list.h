@@ -24,6 +24,15 @@ public:
   MNEXUS_NO_THROW mnexus::RenderStateEventLog& MNEXUS_CALL GetStateEventLog() override;
 
   //
+  // Debug Markers
+  //
+
+  MNEXUS_NO_THROW void MNEXUS_CALL PushDebugGroup(
+    mnexus::container::ArrayProxy<char const> name, float const* color
+  ) override;
+  MNEXUS_NO_THROW void MNEXUS_CALL PopDebugGroup() override;
+
+  //
   // Transfer
   //
 

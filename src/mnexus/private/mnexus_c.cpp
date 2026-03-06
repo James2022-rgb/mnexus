@@ -210,6 +210,16 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListCopyTextureToBuffer(
     *reinterpret_cast<mnexus::Extent3d const*>(extent));
 }
 
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListPushDebugGroup(
+    MnCommandList cl, char const* name, uint32_t name_length, float const* color) {
+  ToCommandList(cl)->PushDebugGroup(
+    mnexus::container::ArrayProxy<char const>(name, name_length), color);
+}
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListPopDebugGroup(MnCommandList cl) {
+  ToCommandList(cl)->PopDebugGroup();
+}
+
 MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListEnd(MnCommandList cl) {
   ToCommandList(cl)->End();
 }

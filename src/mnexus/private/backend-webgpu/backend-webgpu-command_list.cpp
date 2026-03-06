@@ -43,6 +43,35 @@ MNEXUS_NO_THROW mnexus::RenderStateEventLog& MNEXUS_CALL MnexusCommandListWebGpu
 }
 
 //
+// Debug Markers
+//
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::PushDebugGroup(
+  mnexus::container::ArrayProxy<char const> name, float const* /*color*/
+) {
+  // Build a null-terminated label from the ArrayProxy.
+  std::string label(name.data(), name.size());
+
+  if (current_render_pass_.has_value()) {
+    current_render_pass_->PushDebugGroup(label.c_str());
+  } else if (current_compute_pass_.has_value()) {
+    current_compute_pass_->PushDebugGroup(label.c_str());
+  } else {
+    wgpu_command_encoder_.PushDebugGroup(label.c_str());
+  }
+}
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::PopDebugGroup() {
+  if (current_render_pass_.has_value()) {
+    current_render_pass_->PopDebugGroup();
+  } else if (current_compute_pass_.has_value()) {
+    current_compute_pass_->PopDebugGroup();
+  } else {
+    wgpu_command_encoder_.PopDebugGroup();
+  }
+}
+
+//
 // Transfer
 //
 

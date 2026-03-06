@@ -601,6 +601,18 @@ public:
   _MNEXUS_VAPI(void, End);
 
   //
+  // Debug Markers
+  //
+
+  /// > **Note:** `color` **MAY** be ignored by some backends.
+  _MNEXUS_VAPI(void, PushDebugGroup, container::ArrayProxy<char const> name, float const* color);
+  _MNEXUS_VAPI(void, PopDebugGroup);
+
+  void PushDebugGroup(char const* name, float const* color = nullptr) {
+    this->PushDebugGroup(container::ArrayProxy<char const>(name, std::strlen(name)), color);
+  }
+
+  //
   // Explicit Pipeline Binding
   //
 
@@ -999,6 +1011,10 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListCopyTextureToBuffer(
   MnResourceHandle src_texture, MnTextureSubresourceRange const* src_range,
   MnResourceHandle dst_buffer, uint32_t dst_offset,
   MnExtent3d const* extent);
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListPushDebugGroup(
+  MnCommandList cl, char const* name, uint32_t name_length, float const* color);
+MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListPopDebugGroup(MnCommandList cl);
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnCommandListEnd(MnCommandList cl);
 

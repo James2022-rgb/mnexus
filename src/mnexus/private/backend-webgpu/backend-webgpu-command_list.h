@@ -77,6 +77,13 @@ public:
   IMPL_VAPI(mnexus::RenderStateEventLog&, GetStateEventLog);
 
   //
+  // Debug Markers
+  //
+
+  IMPL_VAPI(void, PushDebugGroup, mnexus::container::ArrayProxy<char const> name, float const* color);
+  IMPL_VAPI(void, PopDebugGroup);
+
+  //
   // Transfer
   //
 
