@@ -450,6 +450,16 @@ target_sources(${TARGET_NAME} PRIVATE
   ${_sources_private_shader}
 )
 
+# Fetch mbase from GitHub if not already provided by a parent project.
+if(NOT TARGET mbase)
+  include(FetchContent)
+  FetchContent_Declare(mbase
+    GIT_REPOSITORY https://github.com/James2022-rgb/mbase.git
+    GIT_TAG        master
+  )
+  FetchContent_MakeAvailable(mbase)
+endif()
+
 target_link_libraries(${TARGET_NAME} PUBLIC
   mbase
 )

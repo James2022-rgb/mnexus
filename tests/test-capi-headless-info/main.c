@@ -24,8 +24,7 @@ int MnTestMain(int argc, char** argv) {
   }
   printf("\n");
 
-  MnNexusDesc desc = { 0 };
-  desc.headless = MnBoolTrue;
+  MnNexusDesc desc = MnTestGetDefaultNexusDesc();
   MnNexus nexus = MnNexusCreate(&desc);
   MnDevice device = MnNexusGetDevice(nexus);
 

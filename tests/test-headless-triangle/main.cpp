@@ -21,7 +21,11 @@ extern "C" int MnTestMain(int, char**) {
   constexpr uint32_t kBufferSize = kBytesPerRow * kHeight;
 
   // Create headless nexus and device.
-  mnexus::INexus* nexus = mnexus::INexus::Create({.headless = true});
+  MnNexusDesc c_desc = MnTestGetDefaultNexusDesc();
+  mnexus::INexus* nexus = mnexus::INexus::Create({
+      .headless = true,
+      .backend_type = static_cast<mnexus::BackendType>(c_desc.backend_type),
+  });
   mnexus::IDevice* device = nexus->GetDevice();
 
   // Create render target texture.

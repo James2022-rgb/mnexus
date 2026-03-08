@@ -17,7 +17,11 @@ extern "C" int MnTestMain(int, char**) {
   }
   std::printf("\n");
 
-  mnexus::INexus* nexus = mnexus::INexus::Create({.headless = true});
+  MnNexusDesc c_desc = MnTestGetDefaultNexusDesc();
+  mnexus::INexus* nexus = mnexus::INexus::Create({
+      .headless = true,
+      .backend_type = static_cast<mnexus::BackendType>(c_desc.backend_type),
+  });
   mnexus::IDevice* device = nexus->GetDevice();
 
   mnexus::AdapterInfo info {};

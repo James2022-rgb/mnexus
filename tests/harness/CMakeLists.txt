@@ -1,8 +1,12 @@
+set(MNEXUS_TESTS_USE_BACKEND "WebGPU" CACHE STRING "Backend for tests (WebGPU, Vulkan)")
+
 add_library(mnexus_test_harness STATIC mnexus_test_harness.c)
 target_include_directories(mnexus_test_harness PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(mnexus_test_harness PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty)
 target_link_libraries(mnexus_test_harness PUBLIC mnexus)
+target_compile_definitions(mnexus_test_harness PUBLIC
+    MNEXUS_TESTS_USE_BACKEND_STRING="${MNEXUS_TESTS_USE_BACKEND}")
 
 if(EMSCRIPTEN)
     # ASYNCIFY: required for synchronous MnNexusCreate / MnDeviceQueueWaitIdle.

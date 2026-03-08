@@ -5,6 +5,26 @@
 // TU header --------------------------------------------
 #include "mnexus_test_harness.h"
 
+// ----------------------------------------------------------------------------------------------------
+// Backend selection helpers
+//
+
+MnBackendType MnTestGetBackendType(void) {
+#ifndef MNEXUS_TESTS_USE_BACKEND_STRING
+  return MnBackendTypeWebGpu;
+#else
+  if (strcmp(MNEXUS_TESTS_USE_BACKEND_STRING, "Vulkan") == 0) return MnBackendTypeVulkan;
+  return MnBackendTypeWebGpu;
+#endif
+}
+
+MnNexusDesc MnTestGetDefaultNexusDesc(void) {
+  MnNexusDesc desc = { 0 };
+  desc.headless = MnBoolTrue;
+  desc.backend_type = MnTestGetBackendType();
+  return desc;
+}
+
 // external headers -------------------------------------
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb/stb_image_write.h"

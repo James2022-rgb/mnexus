@@ -23,8 +23,7 @@ int MnTestMain(int argc, char** argv) {
   uint32_t const kBufferSize = kBytesPerRow * kHeight;
 
   /* Create headless nexus and device. */
-  MnNexusDesc nexus_desc = { 0 };
-  nexus_desc.headless = MnBoolTrue;
+  MnNexusDesc nexus_desc = MnTestGetDefaultNexusDesc();
   MnNexus nexus = MnNexusCreate(&nexus_desc);
   MnDevice device = MnNexusGetDevice(nexus);
 

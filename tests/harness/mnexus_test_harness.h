@@ -2,9 +2,17 @@
 
 #include <stdint.h>
 
+#include "mnexus/public/types.h"
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
+
+// Returns the MnBackendType selected by MNEXUS_TESTS_USE_BACKEND.
+MnBackendType MnTestGetBackendType(void);
+
+// Returns a pre-filled MnNexusDesc with headless=true and the selected backend.
+MnNexusDesc MnTestGetDefaultNexusDesc(void);
 
 // Each test implements this function.
 // Called by the harness after Logger initialization.
