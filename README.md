@@ -3,7 +3,7 @@
 
 # `mnexus`
 
-**Thin abstraction layer layer providing a unified API over WebGPU (native and Emscipten) and Vulkan (planned)**
+**Thin abstraction layer providing a unified API over WebGPU (native and Emscipten) and Vulkan (planned)**
 
 </div>
 
