@@ -8,9 +8,14 @@
 
 namespace mnexus_backend::vulkan {
 
+struct BackendVulkanCreateDesc {
+  bool headless = false;
+  char const* app_name = "app";
+};
+
 class IBackendVulkan : public IBackend {
 public:
-  static std::unique_ptr<IBackendVulkan> Create();
+  static std::unique_ptr<IBackendVulkan> Create(BackendVulkanCreateDesc const& desc);
 
   ~IBackendVulkan() override = default;
 

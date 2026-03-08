@@ -83,6 +83,7 @@ typedef enum MnColorSpace {
 typedef struct MnNexusDesc {
   MnBool32 headless;
   MnBackendType backend_type _MN_INIT(MnBackendTypeWebGpu);
+  char const* app_name _MN_INIT(NULL);
 } MnNexusDesc;
 
 // ----------------------------------------------------------------------------------------------------
@@ -152,6 +153,18 @@ typedef enum MnQueueFamilyCapabilityFlagBits {
   MnQueueFamilyCapabilityFlagForce32     = 0x7FFFFFFF,
 } MnQueueFamilyCapabilityFlagBits;
 typedef uint32_t MnQueueFamilyCapabilityFlags;
+
+typedef struct MnQueueSelection _MN_FINAL {
+  MnQueueId present_capable;
+  MnBool32  has_dedicated_compute _MN_INIT(MnBoolFalse);
+  MnQueueId dedicated_compute;
+  MnBool32  has_dedicated_transfer _MN_INIT(MnBoolFalse);
+  MnQueueId dedicated_transfer;
+  MnBool32  has_dedicated_video_decode _MN_INIT(MnBoolFalse);
+  MnQueueId dedicated_video_decode;
+  MnBool32  has_dedicated_video_encode _MN_INIT(MnBoolFalse);
+  MnQueueId dedicated_video_encode;
+} MnQueueSelection;
 
 // ----------------------------------------------------------------------------------------------------
 // Command List
@@ -829,6 +842,14 @@ static_assert(sizeof(QueueId) == sizeof(MnQueueId) && alignof(QueueId) == aligno
 /// - A value V is "completed" when `IDevice::QueueGetCompletedValue() >= V`.
 using IntraQueueSubmissionId = mbase::TypesafeHandle<struct MnIntraQueueSubmissionIdTag, uint64_t, 0>;
 _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(IntraQueueSubmissionId, MnIntraQueueSubmissionId);
+
+struct QueueSelection final {
+  QueueId present_capable;
+  std::optional<QueueId> dedicated_compute;
+  std::optional<QueueId> dedicated_transfer;
+  std::optional<QueueId> dedicated_video_decode;
+  std::optional<QueueId> dedicated_video_encode;
+};
 
 // ----------------------------------------------------------------------------------------------------
 // Command List

@@ -296,8 +296,34 @@ if(EMSCRIPTEN AND ${_enable_tint})
 endif()
 
 #
+# Vulkan SDK
+#
+
+if(${_enable_backend_vulkan})
+  if(NOT DEFINED ENV{VULKAN_SDK})
+    message(FATAL_ERROR "VULKAN_SDK environment variable is not set")
+  endif()
+  if(NOT EXISTS $ENV{VULKAN_SDK})
+    message(FATAL_ERROR "VULKAN_SDK path '$ENV{VULKAN_SDK}' does not exist")
+  endif()
+
+  target_include_directories(${TARGET_NAME} PRIVATE "$ENV{VULKAN_SDK}/Include")
+endif()
+
+# TODO: VulkanMemoryAllocator.
+
+if(${_enable_backend_vulkan})
+  if(NOT TARGET volk)
+    # TODO: `add_subdirectory` volk
+  endif()
+
+  target_link_libraries(${TARGET_NAME} PRIVATE volk)
+endif()
+
+#
 # SPIRV-Reflect
 #
+
 if(NOT TARGET spirv-reflect-static)
   set(SPIRV_REFLECT_EXECUTABLE OFF CACHE BOOL "" FORCE)
   set(SPIRV_REFLECT_STATIC_LIB ON CACHE BOOL "" FORCE)
@@ -388,10 +414,20 @@ source_group("Private/Backend-WebGPU" FILES ${_sources_private_backend_webgpu})
 set(_private_backend_vulkan_dir "${_private_root_dir}/backend-vulkan")
 if(${_enable_backend_vulkan})
   set(_sources_private_backend_vulkan
+    ${_private_backend_vulkan_dir}/depend/vulkan.h
+    ${_private_backend_vulkan_dir}/depend/vulkan_fwd.h
     ${_private_backend_vulkan_dir}/backend-vulkan.cpp
     ${_private_backend_vulkan_dir}/backend-vulkan.h
     ${_private_backend_vulkan_dir}/backend-vulkan-command_list.cpp
     ${_private_backend_vulkan_dir}/backend-vulkan-command_list.h
+    ${_private_backend_vulkan_dir}/vk-device.cpp
+    ${_private_backend_vulkan_dir}/vk-device.h
+    ${_private_backend_vulkan_dir}/vk-instance.cpp
+    ${_private_backend_vulkan_dir}/vk-instance.h
+    ${_private_backend_vulkan_dir}/vk-physical_device.cpp
+    ${_private_backend_vulkan_dir}/vk-physical_device.h
+    ${_private_backend_vulkan_dir}/vk-wsi_surface.cpp
+    ${_private_backend_vulkan_dir}/vk-wsi_surface.h
   )
 endif()
 source_group("Private/Backend-Vulkan" FILES ${_sources_private_backend_vulkan})

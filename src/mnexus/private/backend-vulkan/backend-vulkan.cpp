@@ -7,6 +7,8 @@
 // project headers --------------------------------------
 #include "backend-vulkan/backend-vulkan-command_list.h"
 
+#include "backend-vulkan/vk-device.h"
+
 namespace mnexus_backend::vulkan {
 
 // ==================================================================================================
@@ -266,7 +268,10 @@ public:
 
 class BackendVulkan final : public IBackendVulkan {
 public:
-  BackendVulkan() = default;
+  explicit BackendVulkan(VulkanInstance instance, VulkanDevice vk_device) :
+    vk_instance_(std::move(instance)),
+    vk_device_(std::move(vk_device))
+  {}
   ~BackendVulkan() override = default;
 
   // ----------------------------------------------------------------------------------------------
@@ -302,7 +307,21 @@ public:
     return &device_;
   }
 
+  // ----------------------------------------------------------------------------------------------
+  // Local.
+
+  void Shutdown() {
+    MBASE_LOG_WARN("Vulkan backend: Shutdown() not implemented");
+
+    vk_device_.Shutdown();
+
+    vk_instance_.Shutdown();
+    VulkanInstance::ShutdownVolk();
+  }
+
 private:
+  VulkanInstance vk_instance_;
+  VulkanDevice vk_device_;
   MnexusDeviceVulkan device_;
 };
 
@@ -310,9 +329,113 @@ private:
 // Factory
 //
 
-std::unique_ptr<IBackendVulkan> IBackendVulkan::Create() {
-  MBASE_LOG_WARN("Vulkan backend: creating stub backend (no Vulkan calls)");
-  return std::make_unique<BackendVulkan>();
+std::unique_ptr<IBackendVulkan> IBackendVulkan::Create(BackendVulkanCreateDesc const& desc) {
+  MBASE_LOG_WARN("Vulkan backend: creating stub backend");
+
+  constexpr uint32_t kVulkanApiVersion = VK_API_VERSION_1_1;
+
+  VulkanInstance::InitializeVolk();
+
+  VulkanInstance instance;
+  instance.CheckCapabilities();
+
+  std::vector<std::string> instance_extensions;
+  if (!desc.headless) {
+    instance_extensions.emplace_back(VK_KHR_SURFACE_EXTENSION_NAME);
+#if MBASE_PLATFORM_WINDOWS
+    instance_extensions.emplace_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+#elif MBASE_PLATFORM_ANDROID
+    instance_extensions.emplace_back(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
+#else
+# error "Unsupported platform"
+#endif
+  }
+
+  {
+    auto AddExtensionIfAvailable = [&](std::string_view extension_name) {
+      if (instance.QueryExtensionSupport(extension_name) != nullptr) {
+        instance_extensions.emplace_back(extension_name);
+      } else {
+        MBASE_LOG_WARN("Vulkan instance extension '{}' is not available", extension_name);
+      }
+    };
+
+    AddExtensionIfAvailable(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+  }
+
+  mbase::ArrayProxy<VkValidationFeatureEnableEXT const> enabled_validation_features;
+  mbase::ArrayProxy<VkValidationFeatureDisableEXT const> disabled_validation_features;
+
+  bool result = instance.Initialize(
+    desc.app_name,
+    kVulkanApiVersion,
+    {},
+    instance_extensions,
+    enabled_validation_features,
+    disabled_validation_features
+  );
+  if (!result) {
+    MBASE_LOG_ERROR("Failed to create Vulkan instance.");
+    VulkanInstance::ShutdownVolk();
+    return nullptr;
+  }
+
+  std::vector<std::string> mandatory_device_extensions;
+  if (!desc.headless) {
+    mandatory_device_extensions.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+  }
+
+#if 0
+  {
+    auto AddExtensionIfAvailable = [&](std::string_view extension_name) {
+      if (instance.QueryExtensionSupport(extension_name) != nullptr) {
+        device_extensions.emplace_back(std::string(extension_name));
+      } else {
+        MBASE_LOG_WARN("Vulkan instance extension '{}' is not available", extension_name);
+      }
+    };
+    AddExtensionIfAvailable(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    AddExtensionIfAvailable(VK_KHR_MULTIVIEW_EXTENSION_NAME);
+    AddExtensionIfAvailable(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME);
+    AddExtensionIfAvailable(VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME);
+    AddExtensionIfAvailable(VK_KHR_16BIT_STORAGE_EXTENSION_NAME);
+    AddExtensionIfAvailable(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+    AddExtensionIfAvailable(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+    AddExtensionIfAvailable(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+    AddExtensionIfAvailable(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
+    AddExtensionIfAvailable(VK_KHR_SPIRV_1_4_EXTENSION_NAME);
+    AddExtensionIfAvailable(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+    AddExtensionIfAvailable(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+  }
+#endif
+
+  std::optional<PhysicalDeviceDesc> opt_physical_device_desc = SelectPhysicalDevice(
+    instance,
+    mandatory_device_extensions,
+    mbase::ArrayProxy<char const* const>{}
+  );
+  if (!opt_physical_device_desc.has_value()) {
+    MBASE_LOG_ERROR("Failed to select a physical device for Vulkan backend.");
+    return nullptr;
+  }
+  PhysicalDeviceDesc physical_device_desc = std::move(opt_physical_device_desc.value());
+
+  VulkanDeviceDesc device_desc {
+    .physical_device_desc = &physical_device_desc,
+    .headless = desc.headless,
+  };
+
+  std::optional<VulkanDevice> opt_device = VulkanDevice::Create(
+    instance,
+    device_desc
+  );
+  if (!opt_device.has_value()) {
+    MBASE_LOG_ERROR("Failed to create Vulkan device.");
+    return nullptr;
+  }
+  VulkanDevice device = std::move(opt_device.value());
+
+  return std::make_unique<BackendVulkan>(std::move(instance), std::move(device));
 }
 
 } // namespace mnexus_backend::vulkan

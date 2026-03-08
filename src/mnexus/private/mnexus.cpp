@@ -100,7 +100,11 @@ INexus* INexus::Create(NexusDesc const& desc) {
 #endif
 #if MNEXUS_ENABLE_BACKEND_VULKAN
   case BackendType::kVulkan:
-    backend = mnexus_backend::vulkan::IBackendVulkan::Create();
+    {
+      mnexus_backend::vulkan::BackendVulkanCreateDesc vulkan_desc {};
+      vulkan_desc.app_name = desc.app_name ? desc.app_name : "mnexus_app";
+      backend = mnexus_backend::vulkan::IBackendVulkan::Create(vulkan_desc);
+    }
     break;
 #endif
   default:

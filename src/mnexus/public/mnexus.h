@@ -82,6 +82,7 @@ class ICommandList;
 struct NexusDesc final {
   bool headless = false;
   BackendType backend_type = BackendType::kWebGpu;
+  char const* app_name = nullptr;
 };
 
 class INexus {
