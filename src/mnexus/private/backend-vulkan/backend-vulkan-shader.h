@@ -1,6 +1,7 @@
 #pragma once
 
 // c++ headers ------------------------------------------
+#include <functional>
 #include <memory>
 
 // public project headers -------------------------------
@@ -23,8 +24,17 @@ namespace mnexus_backend::vulkan {
 // ShaderModule
 //
 
+class VulkanShaderModule final : public TVulkanObjectBase<VkShaderModule> {
+public:
+  VulkanShaderModule() = default;
+  VulkanShaderModule(VkShaderModule handle, std::function<void()> destroy_func) :
+    TVulkanObjectBase(handle, std::move(destroy_func))
+  {
+  }
+};
+
 struct ShaderModuleHot final {
-  TVulkanObject<VkShaderModule> vk_shader_module;
+  VulkanShaderModule vk_shader_module;
 };
 
 struct ShaderModuleCold final {
@@ -46,15 +56,15 @@ container::ResourceHandle EmplaceShaderModuleResourcePool(
 // Not RAII -- deferred destruction handles cleanup via destroy_func.
 //
 
-struct VulkanPipelineLayout final {
-  TVulkanObject<VkPipelineLayout> layout;
-  mbase::SmallVector<VkDescriptorSetLayout, 4> descriptor_set_layouts;
-
+class VulkanPipelineLayout final : public TVulkanObjectBase<VkPipelineLayout> {
+public:
   VulkanPipelineLayout() = default;
-  ~VulkanPipelineLayout() = default;
-  MBASE_DISALLOW_COPY(VulkanPipelineLayout);
-  VulkanPipelineLayout(VulkanPipelineLayout&&) noexcept = default;
-  VulkanPipelineLayout& operator=(VulkanPipelineLayout&&) noexcept = default;
+  VulkanPipelineLayout(VkPipelineLayout handle, std::function<void()> destroy_func) :
+    TVulkanObjectBase(handle, std::move(destroy_func))
+  {
+  }
+
+  mbase::SmallVector<VkDescriptorSetLayout, 4> descriptor_set_layouts;
 };
 
 using VulkanPipelineLayoutPtr = std::shared_ptr<VulkanPipelineLayout>;

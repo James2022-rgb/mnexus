@@ -14,7 +14,7 @@
 namespace mnexus_backend::vulkan {
 
 // ----------------------------------------------------------------------------------------------------
-// TVulkanObject<T>
+// TVulkanObjectBase<T>
 //
 // Bundles a Vulkan handle with a ResourceSyncStamp and a destroy callback.
 // This is NOT an RAII wrapper -- the destructor does NOT destroy the Vulkan handle.
@@ -23,38 +23,8 @@ namespace mnexus_backend::vulkan {
 //
 
 template<class T>
-class TVulkanObject final {
+class TVulkanObjectBase {
 public:
-  TVulkanObject() = default;
-
-  TVulkanObject(T handle, std::function<void()> destroy_func) :
-    handle_(handle),
-    destroy_func_(std::move(destroy_func))
-  {
-  }
-
-  ~TVulkanObject() = default;
-
-  MBASE_DISALLOW_COPY(TVulkanObject);
-
-  TVulkanObject(TVulkanObject&& other) noexcept :
-    handle_(other.handle_),
-    destroy_func_(std::move(other.destroy_func_)),
-    sync_stamp_(std::move(other.sync_stamp_))
-  {
-    other.handle_ = VK_NULL_HANDLE;
-  }
-
-  TVulkanObject& operator=(TVulkanObject&& other) noexcept {
-    if (this != &other) {
-      handle_ = other.handle_;
-      destroy_func_ = std::move(other.destroy_func_);
-      sync_stamp_ = std::move(other.sync_stamp_);
-      other.handle_ = VK_NULL_HANDLE;
-    }
-    return *this;
-  }
-
   [[nodiscard]] T handle() const { return handle_; }
   [[nodiscard]] bool IsValid() const { return handle_ != VK_NULL_HANDLE; }
   [[nodiscard]] explicit operator bool() const { return this->IsValid(); }
@@ -64,6 +34,37 @@ public:
 
   /// Returns the destroy callback (for deferred destruction system to invoke).
   [[nodiscard]] std::function<void()> const& destroy_func() const { return destroy_func_; }
+
+protected:
+  TVulkanObjectBase() = default;
+
+  TVulkanObjectBase(T handle, std::function<void()> destroy_func) :
+    handle_(handle),
+    destroy_func_(std::move(destroy_func))
+  {
+  }
+
+  ~TVulkanObjectBase() = default;
+
+  MBASE_DISALLOW_COPY(TVulkanObjectBase);
+
+  TVulkanObjectBase(TVulkanObjectBase&& other) noexcept :
+    handle_(other.handle_),
+    destroy_func_(std::move(other.destroy_func_)),
+    sync_stamp_(std::move(other.sync_stamp_))
+  {
+    other.handle_ = VK_NULL_HANDLE;
+  }
+
+  TVulkanObjectBase& operator=(TVulkanObjectBase&& other) noexcept {
+    if (this != &other) {
+      handle_ = other.handle_;
+      destroy_func_ = std::move(other.destroy_func_);
+      sync_stamp_ = std::move(other.sync_stamp_);
+      other.handle_ = VK_NULL_HANDLE;
+    }
+    return *this;
+  }
 
 private:
   T handle_ = VK_NULL_HANDLE;

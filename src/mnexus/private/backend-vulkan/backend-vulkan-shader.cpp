@@ -47,7 +47,7 @@ container::ResourceHandle EmplaceShaderModuleResourcePool(
 
   VkDevice vk_device = device.handle();
   ShaderModuleHot hot {
-    .vk_shader_module = TVulkanObject<VkShaderModule>(
+    .vk_shader_module = VulkanShaderModule(
       vk_shader_module,
       [vk_device, vk_shader_module] { vkDestroyShaderModule(vk_device, vk_shader_module, nullptr); }
     ),
@@ -95,9 +95,8 @@ container::ResourceHandle EmplaceProgramResourcePool(
   VulkanPipelineLayoutPtr pipeline_layout_ptr = pipeline_layout_cache.FindOrInsert(
     layout_key,
     [&](pipeline::PipelineLayoutCacheKey const&) -> VulkanPipelineLayoutPtr {
-      auto layout = std::make_shared<VulkanPipelineLayout>();
-
       // Convert merged layouts to Vulkan descriptor set layouts.
+      mbase::SmallVector<VkDescriptorSetLayout, 4> dsls;
       std::vector<VkDescriptorSetLayout> raw_dsls;
       raw_dsls.reserve(merged_layouts.size());
 
@@ -156,7 +155,7 @@ container::ResourceHandle EmplaceProgramResourcePool(
           return nullptr;
         }
 
-        layout->descriptor_set_layouts.emplace_back(vk_dsl);
+        dsls.emplace_back(vk_dsl);
         raw_dsls.push_back(vk_dsl);
       }
 
@@ -175,27 +174,29 @@ container::ResourceHandle EmplaceProgramResourcePool(
         return nullptr;
       }
 
+      // Construct VulkanPipelineLayout with handle + destroy callback, then attach DSLs.
       VkDevice dev = device.handle();
-      layout->layout = TVulkanObject<VkPipelineLayout>(
+      auto layout = std::make_shared<VulkanPipelineLayout>(
         vk_pl,
-        [dev, vk_pl, dsls = layout->descriptor_set_layouts] {
+        [dev, vk_pl, dsls] {
           vkDestroyPipelineLayout(dev, vk_pl, nullptr);
           for (auto dsl : dsls) {
             vkDestroyDescriptorSetLayout(dev, dsl, nullptr);
           }
         }
       );
+      layout->descriptor_set_layouts = std::move(dsls);
       return layout;
     }
   );
 
-  if (!pipeline_layout_ptr || !pipeline_layout_ptr->layout.IsValid()) {
+  if (!pipeline_layout_ptr || !pipeline_layout_ptr->IsValid()) {
     return container::ResourceHandle::Null();
   }
 
   // Phase 3: Emplace into pool and return handle.
   ProgramHot hot {
-    .vk_pipeline_layout = pipeline_layout_ptr->layout.handle(),
+    .vk_pipeline_layout = pipeline_layout_ptr->handle(),
     .pipeline_layout_ref = pipeline_layout_ptr,
     .sync_stamp {},
   };
