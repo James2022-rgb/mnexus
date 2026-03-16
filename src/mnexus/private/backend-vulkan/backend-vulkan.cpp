@@ -3,13 +3,23 @@
 
 // public project headers -------------------------------
 #include "mbase/public/log.h"
+#include "mbase/public/trap.h"
 
 // project headers --------------------------------------
+#include "container/generational_pool.h"
+
+#include "impl/impl_macros.h"
+
 #include "backend-vulkan/backend-vulkan-command_list.h"
+#include "backend-vulkan/backend-vulkan-shader.h"
 
 #include "backend-vulkan/vk-device.h"
+#include "backend-vulkan/resource_storage.h"
 
 namespace mnexus_backend::vulkan {
+
+#define STUB_NOT_IMPLEMENTED() \
+  do { MBASE_LOG_ERROR("Vulkan backend: {}() not implemented", __func__); mbase::Trap(); } while (0)
 
 // ==================================================================================================
 // MnexusDeviceVulkan
@@ -17,85 +27,87 @@ namespace mnexus_backend::vulkan {
 
 class MnexusDeviceVulkan final : public mnexus::IDevice {
 public:
-  MnexusDeviceVulkan() = default;
+  explicit MnexusDeviceVulkan(VulkanDevice* vk_device, ResourceStorage* resource_storage) :
+    vk_device_(vk_device),
+    resource_storage_(resource_storage)
+  {}
   ~MnexusDeviceVulkan() override = default;
 
   // ----------------------------------------------------------------------------------------------
   // Queue
   //
 
-  MNEXUS_NO_THROW uint32_t MNEXUS_CALL QueueGetFamilyCount() override {
-    MBASE_LOG_WARN("Vulkan backend: QueueGetFamilyCount() not implemented");
+  IMPL_VAPI(uint32_t, QueueGetFamilyCount) {
+    STUB_NOT_IMPLEMENTED();
     return 1;
   }
 
-  MNEXUS_NO_THROW MnBool32 MNEXUS_CALL QueueGetFamilyDesc(
+  IMPL_VAPI(MnBool32, QueueGetFamilyDesc,
     uint32_t /*queue_family_index*/,
     mnexus::QueueFamilyDesc& /*out_desc*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: QueueGetFamilyDesc() not implemented");
+  ) {
+    STUB_NOT_IMPLEMENTED();
     return MnBoolFalse;
   }
 
-  MNEXUS_NO_THROW mnexus::IntraQueueSubmissionId MNEXUS_CALL QueueSubmitCommandList(
+  IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueSubmitCommandList,
     mnexus::QueueId const& /*queue_id*/,
     mnexus::ICommandList* command_list
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: QueueSubmitCommandList() not implemented");
+  ) {
+    STUB_NOT_IMPLEMENTED();
     delete command_list;
     return mnexus::IntraQueueSubmissionId{0};
   }
 
-  MNEXUS_NO_THROW mnexus::IntraQueueSubmissionId MNEXUS_CALL QueueWriteBuffer(
+  IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueWriteBuffer,
     mnexus::QueueId const& /*queue_id*/,
     mnexus::BufferHandle /*buffer_handle*/,
     uint32_t /*buffer_offset*/,
     void const* /*data*/,
     uint32_t /*data_size_in_bytes*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: QueueWriteBuffer() not implemented");
+  ) {
+    STUB_NOT_IMPLEMENTED();
     return mnexus::IntraQueueSubmissionId{0};
   }
 
-  MNEXUS_NO_THROW mnexus::IntraQueueSubmissionId MNEXUS_CALL QueueReadBuffer(
+  IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueReadBuffer,
     mnexus::QueueId const& /*queue_id*/,
     mnexus::BufferHandle /*buffer_handle*/,
     uint32_t /*buffer_offset*/,
     void* /*dst*/,
     uint32_t /*size_in_bytes*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: QueueReadBuffer() not implemented");
+  ) {
+    STUB_NOT_IMPLEMENTED();
     return mnexus::IntraQueueSubmissionId{0};
   }
 
-  MNEXUS_NO_THROW mnexus::IntraQueueSubmissionId MNEXUS_CALL QueueGetCompletedValue(
-    mnexus::QueueId const& /*queue_id*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: QueueGetCompletedValue() not implemented");
-    return mnexus::IntraQueueSubmissionId{0};
+  IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueGetCompletedValue,
+    mnexus::QueueId const& queue_id
+  ) {
+    return mnexus::IntraQueueSubmissionId { vk_device_->QueueGetCompletedValue(queue_id) };
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL QueueWaitIdle(
-    mnexus::QueueId const& /*queue_id*/,
-    mnexus::IntraQueueSubmissionId /*value*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: QueueWaitIdle() not implemented");
+  IMPL_VAPI(void, QueueWaitIdle,
+    mnexus::QueueId const& queue_id,
+    mnexus::IntraQueueSubmissionId value
+  ) {
+    vk_device_->QueueWaitSubmitSerial(queue_id, value.Get());
   }
 
   // ----------------------------------------------------------------------------------------------
   // Command List
   //
 
-  MNEXUS_NO_THROW mnexus::ICommandList* MNEXUS_CALL CreateCommandList(
+  IMPL_VAPI(mnexus::ICommandList*, CreateCommandList,
     mnexus::CommandListDesc const& /*desc*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: CreateCommandList() not implemented");
+  ) {
+    STUB_NOT_IMPLEMENTED();
     return new MnexusCommandListVulkan();
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL DiscardCommandList(
+  IMPL_VAPI(void, DiscardCommandList,
     mnexus::ICommandList* command_list
-  ) override {
+  ) {
     delete command_list;
   }
 
@@ -103,131 +115,154 @@ public:
   // Buffer
   //
 
-  MNEXUS_NO_THROW mnexus::BufferHandle MNEXUS_CALL CreateBuffer(
+  IMPL_VAPI(mnexus::BufferHandle, CreateBuffer,
     mnexus::BufferDesc const& /*desc*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: CreateBuffer() not implemented");
+  ) {
+    STUB_NOT_IMPLEMENTED();
     return mnexus::BufferHandle::Invalid();
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL DestroyBuffer(
+  IMPL_VAPI(void, DestroyBuffer,
     mnexus::BufferHandle /*buffer_handle*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: DestroyBuffer() not implemented");
+  ) {
+    STUB_NOT_IMPLEMENTED();
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL GetBufferDesc(
+  IMPL_VAPI(void, GetBufferDesc,
     mnexus::BufferHandle /*buffer_handle*/,
     mnexus::BufferDesc& /*out_desc*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: GetBufferDesc() not implemented");
+  ) {
+    STUB_NOT_IMPLEMENTED();
   }
 
   // ----------------------------------------------------------------------------------------------
   // Texture
   //
 
-  MNEXUS_NO_THROW mnexus::TextureHandle MNEXUS_CALL GetSwapchainTexture() override {
-    MBASE_LOG_WARN("Vulkan backend: GetSwapchainTexture() not implemented");
+  IMPL_VAPI(mnexus::TextureHandle, GetSwapchainTexture) {
+    STUB_NOT_IMPLEMENTED();
     return mnexus::TextureHandle::Invalid();
   }
 
-  MNEXUS_NO_THROW mnexus::TextureHandle MNEXUS_CALL CreateTexture(
+  IMPL_VAPI(mnexus::TextureHandle, CreateTexture,
     mnexus::TextureDesc const& /*desc*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: CreateTexture() not implemented");
+  ) {
+    STUB_NOT_IMPLEMENTED();
     return mnexus::TextureHandle::Invalid();
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL DestroyTexture(
+  IMPL_VAPI(void, DestroyTexture,
     mnexus::TextureHandle /*texture_handle*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: DestroyTexture() not implemented");
+  ) {
+    STUB_NOT_IMPLEMENTED();
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL GetTextureDesc(
+  IMPL_VAPI(void, GetTextureDesc,
     mnexus::TextureHandle /*texture_handle*/,
     mnexus::TextureDesc& /*out_desc*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: GetTextureDesc() not implemented");
+  ) {
+    STUB_NOT_IMPLEMENTED();
   }
 
   // ----------------------------------------------------------------------------------------------
   // Sampler
   //
 
-  MNEXUS_NO_THROW mnexus::SamplerHandle MNEXUS_CALL CreateSampler(
+  IMPL_VAPI(mnexus::SamplerHandle, CreateSampler,
     mnexus::SamplerDesc const& /*desc*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: CreateSampler() not implemented");
+  ) {
+    STUB_NOT_IMPLEMENTED();
     return mnexus::SamplerHandle::Invalid();
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL DestroySampler(
+  IMPL_VAPI(void, DestroySampler,
     mnexus::SamplerHandle /*sampler_handle*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: DestroySampler() not implemented");
+  ) {
+    STUB_NOT_IMPLEMENTED();
   }
 
   // ----------------------------------------------------------------------------------------------
   // ShaderModule
   //
 
-  MNEXUS_NO_THROW mnexus::ShaderModuleHandle MNEXUS_CALL CreateShaderModule(
-    mnexus::ShaderModuleDesc const& /*desc*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: CreateShaderModule() not implemented");
-    return mnexus::ShaderModuleHandle::Invalid();
+  IMPL_VAPI(mnexus::ShaderModuleHandle, CreateShaderModule,
+    mnexus::ShaderModuleDesc const& desc
+  ) {
+    container::ResourceHandle pool_handle = EmplaceShaderModuleResourcePool(
+      resource_storage_->shader_modules,
+      *vk_device_,
+      desc
+    );
+
+    if (pool_handle.IsNull()) {
+      return mnexus::ShaderModuleHandle::Invalid();
+    }
+
+    return mnexus::ShaderModuleHandle { pool_handle.AsU64() };
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL DestroyShaderModule(
-    mnexus::ShaderModuleHandle /*shader_module_handle*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: DestroyShaderModule() not implemented");
+  IMPL_VAPI(void, DestroyShaderModule,
+    mnexus::ShaderModuleHandle shader_module_handle
+  ) {
+    auto pool_handle = container::ResourceHandle::FromU64(shader_module_handle.Get());
+    resource_storage_->shader_modules.Erase(pool_handle);
   }
 
   // ----------------------------------------------------------------------------------------------
   // Program
   //
 
-  MNEXUS_NO_THROW mnexus::ProgramHandle MNEXUS_CALL CreateProgram(
-    mnexus::ProgramDesc const& /*desc*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: CreateProgram() not implemented");
-    return mnexus::ProgramHandle::Invalid();
+  IMPL_VAPI(mnexus::ProgramHandle, CreateProgram,
+    mnexus::ProgramDesc const& desc
+  ) {
+    container::ResourceHandle pool_handle = EmplaceProgramResourcePool(
+      resource_storage_->programs,
+      *vk_device_,
+      desc,
+      resource_storage_->shader_modules,
+      resource_storage_->pipeline_layout_cache
+    );
+
+    if (pool_handle.IsNull()) {
+      return mnexus::ProgramHandle::Invalid();
+    }
+
+    return mnexus::ProgramHandle { pool_handle.AsU64() };
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL DestroyProgram(
-    mnexus::ProgramHandle /*program_handle*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: DestroyProgram() not implemented");
+  IMPL_VAPI(void, DestroyProgram,
+    mnexus::ProgramHandle program_handle
+  ) {
+    // FIXME: Should defer destruction until the GPU is done using this program.
+    auto pool_handle = container::ResourceHandle::FromU64(program_handle.Get());
+    resource_storage_->programs.Erase(pool_handle);
   }
 
   // ----------------------------------------------------------------------------------------------
   // ComputePipeline
   //
 
-  MNEXUS_NO_THROW mnexus::ComputePipelineHandle MNEXUS_CALL CreateComputePipeline(
+  IMPL_VAPI(mnexus::ComputePipelineHandle, CreateComputePipeline,
     mnexus::ComputePipelineDesc const& /*desc*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: CreateComputePipeline() not implemented");
+  ) {
+    STUB_NOT_IMPLEMENTED();
     return mnexus::ComputePipelineHandle::Invalid();
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL DestroyComputePipeline(
+  IMPL_VAPI(void, DestroyComputePipeline,
     mnexus::ComputePipelineHandle /*compute_pipeline_handle*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: DestroyComputePipeline() not implemented");
+  ) {
+    STUB_NOT_IMPLEMENTED();
   }
 
   // ----------------------------------------------------------------------------------------------
   // RenderPipeline
   //
 
-  MNEXUS_NO_THROW mnexus::RenderPipelineHandle MNEXUS_CALL CreateRenderPipeline(
+  IMPL_VAPI(mnexus::RenderPipelineHandle, CreateRenderPipeline,
     mnexus::RenderPipelineDesc const& /*desc*/
-  ) override {
-    MBASE_LOG_WARN("Vulkan backend: CreateRenderPipeline() not implemented");
+  ) {
+    STUB_NOT_IMPLEMENTED();
     return mnexus::RenderPipelineHandle::Invalid();
   }
 
@@ -235,20 +270,20 @@ public:
   // Device Capability
   //
 
-  MNEXUS_NO_THROW mnexus::AdapterCapability MNEXUS_CALL GetAdapterCapability() override {
-    MBASE_LOG_WARN("Vulkan backend: GetAdapterCapability() not implemented");
+  IMPL_VAPI(mnexus::AdapterCapability, GetAdapterCapability) {
+    STUB_NOT_IMPLEMENTED();
     return {};
   }
 
-  MNEXUS_NO_THROW mnexus::ClipSpaceConvention MNEXUS_CALL GetClipSpaceConvention() override {
+  IMPL_VAPI(mnexus::ClipSpaceConvention, GetClipSpaceConvention) {
     return mnexus::ClipSpaceConvention {
       .y_direction = mnexus::ClipSpaceYDirection::kDown,
       .depth_range = mnexus::ClipSpaceDepthRange::kZeroToOne,
     };
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL GetAdapterInfo(mnexus::AdapterInfo& out_info) override {
-    MBASE_LOG_WARN("Vulkan backend: GetAdapterInfo() not implemented");
+  IMPL_VAPI(void, GetAdapterInfo, mnexus::AdapterInfo& out_info) {
+    STUB_NOT_IMPLEMENTED();
     out_info = {};
   }
 
@@ -256,10 +291,14 @@ public:
   // Diagnostics
   //
 
-  MNEXUS_NO_THROW mnexus::RenderPipelineCacheSnapshot MNEXUS_CALL GetRenderPipelineCacheSnapshot() override {
-    MBASE_LOG_WARN("Vulkan backend: GetRenderPipelineCacheSnapshot() not implemented");
+  IMPL_VAPI(mnexus::RenderPipelineCacheSnapshot, GetRenderPipelineCacheSnapshot) {
+    STUB_NOT_IMPLEMENTED();
     return {};
   }
+
+private:
+  VulkanDevice* vk_device_ = nullptr;
+  ResourceStorage* resource_storage_ = nullptr;
 };
 
 // ==================================================================================================
@@ -268,36 +307,38 @@ public:
 
 class BackendVulkan final : public IBackendVulkan {
 public:
-  explicit BackendVulkan(VulkanInstance instance, VulkanDevice vk_device) :
+  explicit BackendVulkan(VulkanInstance instance, std::unique_ptr<VulkanDevice> vk_device) :
     vk_instance_(std::move(instance)),
-    vk_device_(std::move(vk_device))
+    vk_device_(std::move(vk_device)),
+    device_(vk_device_.get(), &resource_storage_)
   {}
   ~BackendVulkan() override = default;
+  MBASE_DISALLOW_COPY_MOVE(BackendVulkan);
 
   // ----------------------------------------------------------------------------------------------
   // Surface lifecycle.
 
   void OnDisplayChanged() override {
-    MBASE_LOG_WARN("Vulkan backend: OnDisplayChanged() not implemented");
+    STUB_NOT_IMPLEMENTED();
   }
 
   void OnSurfaceDestroyed() override {
-    MBASE_LOG_WARN("Vulkan backend: OnSurfaceDestroyed() not implemented");
+    STUB_NOT_IMPLEMENTED();
   }
 
   void OnSurfaceRecreated(mnexus::SurfaceSourceDesc const& /*surface_source_desc*/) override {
-    MBASE_LOG_WARN("Vulkan backend: OnSurfaceRecreated() not implemented");
+    STUB_NOT_IMPLEMENTED();
   }
 
   // ----------------------------------------------------------------------------------------------
   // Presentation.
 
   void OnPresentPrologue() override {
-    MBASE_LOG_WARN("Vulkan backend: OnPresentPrologue() not implemented");
+    STUB_NOT_IMPLEMENTED();
   }
 
   void OnPresentEpilogue() override {
-    MBASE_LOG_WARN("Vulkan backend: OnPresentEpilogue() not implemented");
+    STUB_NOT_IMPLEMENTED();
   }
 
   // ----------------------------------------------------------------------------------------------
@@ -311,9 +352,9 @@ public:
   // Local.
 
   void Shutdown() {
-    MBASE_LOG_WARN("Vulkan backend: Shutdown() not implemented");
+    STUB_NOT_IMPLEMENTED();
 
-    vk_device_.Shutdown();
+    vk_device_->Shutdown();
 
     vk_instance_.Shutdown();
     VulkanInstance::ShutdownVolk();
@@ -321,7 +362,9 @@ public:
 
 private:
   VulkanInstance vk_instance_;
-  VulkanDevice vk_device_;
+  std::unique_ptr<VulkanDevice> vk_device_;
+
+  ResourceStorage resource_storage_;
   MnexusDeviceVulkan device_;
 };
 
@@ -425,17 +468,16 @@ std::unique_ptr<IBackendVulkan> IBackendVulkan::Create(BackendVulkanCreateDesc c
     .headless = desc.headless,
   };
 
-  std::optional<VulkanDevice> opt_device = VulkanDevice::Create(
+  std::unique_ptr<VulkanDevice> vk_device = VulkanDevice::Create(
     instance,
     device_desc
   );
-  if (!opt_device.has_value()) {
+  if (!vk_device) {
     MBASE_LOG_ERROR("Failed to create Vulkan device.");
     return nullptr;
   }
-  VulkanDevice device = std::move(opt_device.value());
 
-  return std::make_unique<BackendVulkan>(std::move(instance), std::move(device));
+  return std::make_unique<BackendVulkan>(std::move(instance), std::move(vk_device));
 }
 
 } // namespace mnexus_backend::vulkan

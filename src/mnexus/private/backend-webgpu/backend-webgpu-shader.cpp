@@ -44,6 +44,7 @@ container::ResourceHandle EmplaceShaderModuleResourcePool(
   );
 
   if (!wgpu_shader_module) {
+    MBASE_LOG_ERROR("Failed to create WebGPU shader module!");
     return container::ResourceHandle::Null();
   }
 
@@ -59,10 +60,10 @@ container::ResourceHandle EmplaceShaderModuleResourcePool(
   }
 
   ShaderModuleHot hot {
-    .wgpu_shader_module = std::move(wgpu_shader_module)
+    .wgpu_shader_module = std::move(wgpu_shader_module),
   };
   ShaderModuleCold cold {
-    .reflection = std::move(*opt_reflection)
+    .reflection = std::move(*opt_reflection),
   };
 
   return out_pool.Emplace(

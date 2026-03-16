@@ -26,6 +26,8 @@
 
 #include "pipeline/pipeline_layout_cache.h"
 #include "pipeline/render_pipeline_cache.h"
+#include "impl/impl_macros.h"
+
 #include "pipeline/render_pipeline_state_tracker.h"
 
 namespace mnexus_backend::webgpu {
@@ -46,9 +48,6 @@ struct ResourceStorage final {
   std::mutex swapchain_texture_mutex; // Protects `TextureHot` and `TextureCold`.
   container::ResourceHandle swapchain_texture_handle = container::ResourceHandle::Null(); // Not protected; set only during initialization.
 };
-
-#define IMPL_VAPI(ret, func, ...) \
-  MNEXUS_NO_THROW ret MNEXUS_CALL func(__VA_ARGS__) override
 
 class MnexusCommandListWebGpu : public mnexus::ICommandList {
 public:

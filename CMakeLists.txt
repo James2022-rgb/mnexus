@@ -418,10 +418,23 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/depend/vulkan_fwd.h
     ${_private_backend_vulkan_dir}/backend-vulkan.cpp
     ${_private_backend_vulkan_dir}/backend-vulkan.h
+    ${_private_backend_vulkan_dir}/backend-vulkan-buffer.cpp
+    ${_private_backend_vulkan_dir}/backend-vulkan-buffer.h
     ${_private_backend_vulkan_dir}/backend-vulkan-command_list.cpp
     ${_private_backend_vulkan_dir}/backend-vulkan-command_list.h
+    ${_private_backend_vulkan_dir}/backend-vulkan-compute_pipeline.cpp
+    ${_private_backend_vulkan_dir}/backend-vulkan-compute_pipeline.h
+    ${_private_backend_vulkan_dir}/backend-vulkan-shader.cpp
+    ${_private_backend_vulkan_dir}/backend-vulkan-shader.h
+    ${_private_backend_vulkan_dir}/backend-vulkan-texture.cpp
+    ${_private_backend_vulkan_dir}/backend-vulkan-texture.h
+    ${_private_backend_vulkan_dir}/resource_storage.cpp
+    ${_private_backend_vulkan_dir}/resource_storage.h
+    ${_private_backend_vulkan_dir}/shader_module.cpp
+    ${_private_backend_vulkan_dir}/shader_module.h
     ${_private_backend_vulkan_dir}/vk-device.cpp
     ${_private_backend_vulkan_dir}/vk-device.h
+    ${_private_backend_vulkan_dir}/vk-object.h
     ${_private_backend_vulkan_dir}/vk-instance.cpp
     ${_private_backend_vulkan_dir}/vk-instance.h
     ${_private_backend_vulkan_dir}/vk-physical_device.cpp
@@ -432,6 +445,12 @@ if(${_enable_backend_vulkan})
 endif()
 source_group("Private/Backend-Vulkan" FILES ${_sources_private_backend_vulkan})
 
+
+set(_private_impl_dir "${_private_root_dir}/impl")
+set(_sources_private_impl
+  ${_private_impl_dir}/impl_macros.h
+)
+source_group("Private/Impl" FILES ${_sources_private_impl})
 
 set(_private_container_dir "${_private_root_dir}/container")
 set(_sources_private_container
@@ -464,6 +483,13 @@ set(_sources_private_pipeline
 )
 source_group("Private/Pipeline" FILES ${_sources_private_pipeline})
 
+set(_private_sync_dir "${_private_root_dir}/sync")
+set(_sources_private_sync
+  ${_private_sync_dir}/resource_sync.cpp
+  ${_private_sync_dir}/resource_sync.h
+)
+source_group("Private/Sync" FILES ${_sources_private_sync})
+
 set(_private_shader_dir "${_private_root_dir}/shader")
 set(_sources_private_shader
   ${_private_shader_dir}/reflection.cpp
@@ -482,8 +508,10 @@ target_sources(${TARGET_NAME} PRIVATE
   ${_sources_private_backend_webgpu}
   ${_sources_private_binding}
   ${_sources_private_container}
+  ${_sources_private_impl}
   ${_sources_private_pipeline}
   ${_sources_private_shader}
+  ${_sources_private_sync}
 )
 
 # Fetch mbase from GitHub if not already provided by a parent project.

@@ -11,6 +11,11 @@
 
 namespace mnexus_backend::vulkan {
 
+#define RESOLVE_QUEUE_INDEX(var_name, queue_id) \
+  std::optional<uint32_t> opt_##var_name = queue_index_map_.Find(queue_id); \
+  MBASE_ASSERT_MSG(opt_##var_name.has_value(), "Unknown QueueId ({}, {})", (queue_id).queue_family_index, (queue_id).queue_index); \
+  uint32_t const var_name = *opt_##var_name
+
 namespace {
 
 // ----------------------------------------------------------------------------------------------------
@@ -279,7 +284,7 @@ std::vector<QueueFamilyRequest> BuildQueueCreateInfos(
 // VulkanDevice::Create
 //
 
-std::optional<VulkanDevice> VulkanDevice::Create(
+std::unique_ptr<VulkanDevice> VulkanDevice::Create(
   VulkanInstance const& instance,
   VulkanDeviceDesc const& desc
 ) {
@@ -287,7 +292,7 @@ std::optional<VulkanDevice> VulkanDevice::Create(
   mnexus::QueueSelection const selection = SelectQueueFamilies(*desc.physical_device_desc);
 
   // Build VkDeviceQueueCreateInfo array.
-  auto const queue_requests = BuildQueueCreateInfos(selection);
+  std::vector<QueueFamilyRequest> const queue_requests = BuildQueueCreateInfos(selection);
 
   std::vector<VkDeviceQueueCreateInfo> queue_create_infos;
   for (auto const& req : queue_requests) {
@@ -299,15 +304,29 @@ std::optional<VulkanDevice> VulkanDevice::Create(
     queue_create_infos.push_back(qci);
   }
 
+  // Device extensions.
   std::vector<char const*> device_extensions;
   if (!desc.headless) {
     device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
   }
 
+  // VK_KHR_timeline_semaphore is mandatory for the mnexus Vulkan backend.
+  if (desc.physical_device_desc->CheckExtensionSupport(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME) == nullptr) {
+    MBASE_LOG_ERROR("VK_KHR_timeline_semaphore is not supported by the physical device.");
+    return nullptr;
+  }
+  device_extensions.push_back(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+
+  // Features.
   VkPhysicalDeviceFeatures device_features {};
+
+  VkPhysicalDeviceTimelineSemaphoreFeaturesKHR timeline_semaphore_features {};
+  timeline_semaphore_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR;
+  timeline_semaphore_features.timelineSemaphore = VK_TRUE;
 
   VkPhysicalDeviceVulkan11Features device_features_11 {};
   device_features_11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+  device_features_11.pNext = &timeline_semaphore_features;
 
   VkDeviceCreateInfo info {};
   info.sType                = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -320,29 +339,142 @@ std::optional<VulkanDevice> VulkanDevice::Create(
   info.ppEnabledExtensionNames = device_extensions.data();
   info.pEnabledFeatures = &device_features;
 
-  // TODO: Additional extensions, pNext feature chain, vkCreateDevice, volkLoadDevice.
-
   VkDevice vk_device = VK_NULL_HANDLE;
   VkResult const result = vkCreateDevice(desc.physical_device_desc->handle(), &info, nullptr, &vk_device);
   if (result != VK_SUCCESS) {
     MBASE_LOG_ERROR("vkCreateDevice failed \"{}\".", string_VkResult(result));
-    return std::nullopt;
+    return nullptr;
   }
 
-  return VulkanDevice(
+  // Retrieve VkQueues and create timeline semaphores.
+  mnexus_backend::QueueIndexMap queue_index_map(selection);
+  VulkanQueueState queue_states[mnexus_backend::kMaxQueues] {};
+
+  auto InitQueueState = [&](mnexus::QueueId const& queue_id) -> bool {
+    std::optional<uint32_t> opt_index = queue_index_map.Find(queue_id);
+    MBASE_ASSERT(opt_index.has_value());
+    uint32_t const index = *opt_index;
+
+    vkGetDeviceQueue(
+      vk_device,
+      queue_id.queue_family_index,
+      queue_id.queue_index,
+      &queue_states[index].vk_queue
+    );
+
+    VkSemaphoreTypeCreateInfoKHR type_info {
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO_KHR,
+      .pNext = nullptr,
+      .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR,
+      .initialValue = 0,
+    };
+    VkSemaphoreCreateInfo sem_info {
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+      .pNext = &type_info,
+      .flags = 0,
+    };
+    VkResult sem_result = vkCreateSemaphore(vk_device, &sem_info, nullptr, &queue_states[index].timeline_semaphore);
+    if (sem_result != VK_SUCCESS) {
+      MBASE_LOG_ERROR("vkCreateSemaphore (timeline) failed: {}", string_VkResult(sem_result));
+      return false;
+    }
+    return true;
+  };
+
+  // TODO: Use a finally-like scope guard here to clean up the device if any of these fail.
+
+  if (!InitQueueState(selection.present_capable)) {
+    vkDestroyDevice(vk_device, nullptr);
+    return nullptr;
+  }
+  if (selection.dedicated_compute.has_value() && !InitQueueState(*selection.dedicated_compute)) {
+    vkDestroyDevice(vk_device, nullptr);
+    return nullptr;
+  }
+  if (selection.dedicated_transfer.has_value() && !InitQueueState(*selection.dedicated_transfer)) {
+    vkDestroyDevice(vk_device, nullptr);
+    return nullptr;
+  }
+  if (selection.dedicated_video_decode.has_value() && !InitQueueState(*selection.dedicated_video_decode)) {
+    vkDestroyDevice(vk_device, nullptr);
+    return nullptr;
+  }
+  if (selection.dedicated_video_encode.has_value() && !InitQueueState(*selection.dedicated_video_encode)) {
+    vkDestroyDevice(vk_device, nullptr);
+    return nullptr;
+  }
+
+  return std::unique_ptr<VulkanDevice>(new VulkanDevice(
     &instance,
     *desc.physical_device_desc,
     vk_device,
-    selection
-  );
+    selection,
+    queue_index_map,
+    queue_states,
+    queue_index_map.Count()
+  ));
 }
 
 // ----------------------------------------------------------------------------------------------------
-// VulkanDevice::Shudown
+// VulkanDevice::QueueGetCompletedValue
+//
+
+uint64_t VulkanDevice::QueueGetCompletedValue(mnexus::QueueId const& queue_id) {
+  RESOLVE_QUEUE_INDEX(index, queue_id);
+
+  uint64_t value = 0;
+  vkGetSemaphoreCounterValueKHR(handle_, queue_states_[index].timeline_semaphore, &value);
+  return value;
+}
+
+// ----------------------------------------------------------------------------------------------------
+// VulkanDevice::QueueWaitSubmitSerial
+//
+
+void VulkanDevice::QueueWaitSubmitSerial(mnexus::QueueId const& queue_id, uint64_t value) {
+  if (value == 0) {
+    return;
+  }
+
+  RESOLVE_QUEUE_INDEX(index, queue_id);
+
+  VulkanQueueState& qs = queue_states_[index];
+  VkSemaphoreWaitInfoKHR wait_info {
+    .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO_KHR,
+    .pNext = nullptr,
+    .flags = 0,
+    .semaphoreCount = 1,
+    .pSemaphores = &qs.timeline_semaphore,
+    .pValues = &value,
+  };
+  vkWaitSemaphoresKHR(handle_, &wait_info, UINT64_MAX);
+}
+
+// ----------------------------------------------------------------------------------------------------
+// VulkanDevice::QueueWaitIdle
+//
+
+uint64_t VulkanDevice::QueueWaitIdle(mnexus::QueueId const& queue_id) {
+  RESOLVE_QUEUE_INDEX(index, queue_id);
+
+  uint64_t const last_submitted = queue_states_[index].next_submit_serial.load(std::memory_order_acquire) - 1;
+  this->QueueWaitSubmitSerial(queue_id, last_submitted);
+  return last_submitted;
+}
+
+// ----------------------------------------------------------------------------------------------------
+// VulkanDevice::Shutdown
 //
 
 void VulkanDevice::Shutdown() {
   if (handle_ != VK_NULL_HANDLE) {
+    for (auto& qs : queue_states_) {
+      if (qs.timeline_semaphore != VK_NULL_HANDLE) {
+        vkDestroySemaphore(handle_, qs.timeline_semaphore, nullptr);
+        qs.timeline_semaphore = VK_NULL_HANDLE;
+      }
+    }
+
     vkDestroyDevice(handle_, nullptr);
     handle_ = VK_NULL_HANDLE;
   }
