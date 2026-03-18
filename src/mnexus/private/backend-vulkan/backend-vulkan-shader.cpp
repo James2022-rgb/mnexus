@@ -49,7 +49,8 @@ container::ResourceHandle EmplaceShaderModuleResourcePool(
   ShaderModuleHot hot {
     .vk_shader_module = VulkanShaderModule(
       vk_shader_module,
-      [vk_device, vk_shader_module] { vkDestroyShaderModule(vk_device, vk_shader_module, nullptr); }
+      [vk_device, vk_shader_module] { vkDestroyShaderModule(vk_device, vk_shader_module, nullptr); },
+      device.deferred_destroyer()
     ),
   };
   ShaderModuleCold cold {
@@ -183,7 +184,8 @@ container::ResourceHandle EmplaceProgramResourcePool(
           for (auto dsl : dsls) {
             vkDestroyDescriptorSetLayout(dev, dsl, nullptr);
           }
-        }
+        },
+        device.deferred_destroyer()
       );
       layout->descriptor_set_layouts = std::move(dsls);
       return layout;

@@ -27,8 +27,8 @@ namespace mnexus_backend::vulkan {
 class VulkanShaderModule final : public TVulkanObjectBase<VkShaderModule> {
 public:
   VulkanShaderModule() = default;
-  VulkanShaderModule(VkShaderModule handle, std::function<void()> destroy_func) :
-    TVulkanObjectBase(handle, std::move(destroy_func))
+  VulkanShaderModule(VkShaderModule handle, std::function<void()> destroy_func, IVulkanDeferredDestroyer* deferred_destroyer) :
+    TVulkanObjectBase(handle, std::move(destroy_func), deferred_destroyer)
   {
   }
 };
@@ -59,8 +59,8 @@ container::ResourceHandle EmplaceShaderModuleResourcePool(
 class VulkanPipelineLayout final : public TVulkanObjectBase<VkPipelineLayout> {
 public:
   VulkanPipelineLayout() = default;
-  VulkanPipelineLayout(VkPipelineLayout handle, std::function<void()> destroy_func) :
-    TVulkanObjectBase(handle, std::move(destroy_func))
+  VulkanPipelineLayout(VkPipelineLayout handle, std::function<void()> destroy_func, IVulkanDeferredDestroyer* deferred_destroyer) :
+    TVulkanObjectBase(handle, std::move(destroy_func), deferred_destroyer)
   {
   }
 

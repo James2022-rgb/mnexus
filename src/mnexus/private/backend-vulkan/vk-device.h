@@ -13,6 +13,7 @@
 // project headers --------------------------------------
 #include "sync/resource_sync.h"
 
+#include "backend-vulkan/vk-deferred_destroyer.h"
 #include "backend-vulkan/vk-physical_device.h"
 
 namespace mnexus_backend::vulkan {
@@ -28,7 +29,7 @@ struct VulkanQueueState final {
   std::atomic<uint64_t> next_submit_serial {1}; // Valid serials start at 1.
 };
 
-class VulkanDevice final {
+class VulkanDevice final : public IVulkanDeferredDestroyer {
 public:
   ~VulkanDevice() = default;
   MBASE_DISALLOW_COPY_MOVE(VulkanDevice);
@@ -52,6 +53,16 @@ public:
   /// Blocks until all submitted work on the given queue has completed.
   /// Returns the last submitted serial (0 if nothing has been submitted).
   uint64_t QueueWaitIdle(mnexus::QueueId const& queue_id);
+
+  // IVulkanDeferredDestroyer
+  void EnqueueDestroy(
+    std::function<void()> destroy_func,
+    ResourceSyncStamp::Snapshot snapshot
+  ) override;
+
+  // The returned pointer is non-const; the destroyer mutates internal state.
+  // Safe to call on a const VulkanDevice because the interface is logically separate.
+  IVulkanDeferredDestroyer* deferred_destroyer() const { return const_cast<VulkanDevice*>(this); }
 
 private:
   explicit VulkanDevice(

@@ -416,6 +416,18 @@ std::unique_ptr<VulkanDevice> VulkanDevice::Create(
 }
 
 // ----------------------------------------------------------------------------------------------------
+// VulkanDevice::EnqueueDestroy
+//
+
+void VulkanDevice::EnqueueDestroy(
+  std::function<void()> destroy_func,
+  ResourceSyncStamp::Snapshot /*snapshot*/
+) {
+  // TODO: Check completed serials against snapshot and defer if needed.
+  destroy_func();
+}
+
+// ----------------------------------------------------------------------------------------------------
 // VulkanDevice::QueueGetCompletedValue
 //
 

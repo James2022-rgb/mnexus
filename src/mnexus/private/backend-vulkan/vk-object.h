@@ -9,6 +9,7 @@
 
 // project headers --------------------------------------
 #include "backend-vulkan/depend/vulkan.h"
+#include "backend-vulkan/vk-deferred_destroyer.h"
 #include "sync/resource_sync.h"
 
 namespace mnexus_backend::vulkan {
@@ -17,9 +18,7 @@ namespace mnexus_backend::vulkan {
 // TVulkanObjectBase<T>
 //
 // Bundles a Vulkan handle with a ResourceSyncStamp and a destroy callback.
-// This is NOT an RAII wrapper -- the destructor does NOT destroy the Vulkan handle.
-// The destroy callback is stored for the deferred destruction system to invoke
-// at the right time (after GPU completion).
+// Works something like an RAII wrapper, but the destructor delegates to the deferred destruction system instead of immediately destroying the Vulkan handle.
 //
 
 template<class T>
@@ -32,36 +31,42 @@ public:
   ResourceSyncStamp& sync_stamp() { return sync_stamp_; }
   ResourceSyncStamp const& sync_stamp() const { return sync_stamp_; }
 
-  /// Returns the destroy callback (for deferred destruction system to invoke).
-  [[nodiscard]] std::function<void()> const& destroy_func() const { return destroy_func_; }
-
 protected:
   TVulkanObjectBase() = default;
 
-  TVulkanObjectBase(T handle, std::function<void()> destroy_func) :
+  TVulkanObjectBase(T handle, std::function<void()> destroy_func, IVulkanDeferredDestroyer* deferred_destroyer) :
     handle_(handle),
-    destroy_func_(std::move(destroy_func))
+    destroy_func_(std::move(destroy_func)),
+    deferred_destroyer_(deferred_destroyer)
   {
   }
 
-  ~TVulkanObjectBase() = default;
+  ~TVulkanObjectBase() {
+    if (deferred_destroyer_ != nullptr) {
+      deferred_destroyer_->EnqueueDestroy(destroy_func_, sync_stamp_.TakeSnapshot());
+    }
+  }
 
   MBASE_DISALLOW_COPY(TVulkanObjectBase);
 
   TVulkanObjectBase(TVulkanObjectBase&& other) noexcept :
     handle_(other.handle_),
     destroy_func_(std::move(other.destroy_func_)),
+    deferred_destroyer_(other.deferred_destroyer_),
     sync_stamp_(std::move(other.sync_stamp_))
   {
     other.handle_ = VK_NULL_HANDLE;
+    other.deferred_destroyer_ = nullptr;
   }
 
   TVulkanObjectBase& operator=(TVulkanObjectBase&& other) noexcept {
     if (this != &other) {
       handle_ = other.handle_;
       destroy_func_ = std::move(other.destroy_func_);
+      deferred_destroyer_ = other.deferred_destroyer_;
       sync_stamp_ = std::move(other.sync_stamp_);
       other.handle_ = VK_NULL_HANDLE;
+      other.deferred_destroyer_ = nullptr;
     }
     return *this;
   }
@@ -69,6 +74,7 @@ protected:
 private:
   T handle_ = VK_NULL_HANDLE;
   std::function<void()> destroy_func_;
+  IVulkanDeferredDestroyer* deferred_destroyer_ = nullptr;
   ResourceSyncStamp sync_stamp_;
 };
 

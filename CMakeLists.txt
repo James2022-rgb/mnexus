@@ -433,6 +433,7 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/shader_module.cpp
     ${_private_backend_vulkan_dir}/shader_module.h
     ${_private_backend_vulkan_dir}/vk-device.cpp
+    ${_private_backend_vulkan_dir}/vk-deferred_destroyer.h
     ${_private_backend_vulkan_dir}/vk-device.h
     ${_private_backend_vulkan_dir}/vk-object.h
     ${_private_backend_vulkan_dir}/vk-instance.cpp
