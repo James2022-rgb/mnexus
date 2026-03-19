@@ -7,11 +7,12 @@ namespace mnexus_backend::webgpu {
 
 wgpu::ComputePipeline CreateWgpuComputePipeline(
   wgpu::Device const& wgpu_device,
+  wgpu::PipelineLayout const& wgpu_pipeline_layout,
   wgpu::ShaderModule const& wgpu_shader_module
 ) {
   wgpu::ComputePipelineDescriptor wgpu_compute_pipeline_desc {};
 
-  wgpu_compute_pipeline_desc.layout = nullptr; // use default pipeline layout
+  wgpu_compute_pipeline_desc.layout = wgpu_pipeline_layout;
 
   wgpu_compute_pipeline_desc.compute = wgpu::ComputeState {
     .nextInChain = nullptr,

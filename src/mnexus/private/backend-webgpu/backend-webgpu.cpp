@@ -500,14 +500,27 @@ public:
   IMPL_VAPI(mnexus::ComputePipelineHandle, CreateComputePipeline,
     mnexus::ComputePipelineDesc const& desc
   ) {
-    auto shader_module_pool_handle = container::ResourceHandle::FromU64(desc.shader_module.Get());
+    auto program_pool_handle = container::ResourceHandle::FromU64(desc.program.Get());
 
-    auto [shader_module_hot, lock] = resource_storage_->shader_modules.GetHotConstRefWithSharedLockGuard(
+    auto [program_hot, program_hot_lock] = resource_storage_->programs.GetHotConstRefWithSharedLockGuard(
+      program_pool_handle
+    );
+    auto [program_cold, program_cold_lock] = resource_storage_->programs.GetColdConstRefWithSharedLockGuard(
+      program_pool_handle
+    );
+
+    // Compute pipeline uses the first (and only) shader module from the program.
+    MBASE_ASSERT_MSG(!program_cold.shader_module_handles.empty(), "Program has no shader modules");
+    auto shader_module_pool_handle = container::ResourceHandle::FromU64(
+      program_cold.shader_module_handles[0].Get()
+    );
+    auto [shader_module_hot, shader_module_lock] = resource_storage_->shader_modules.GetHotConstRefWithSharedLockGuard(
       shader_module_pool_handle
     );
 
     wgpu::ComputePipeline wgpu_compute_pipeline = CreateWgpuComputePipeline(
       wgpu_device_,
+      program_hot.wgpu_pipeline_layout,
       shader_module_hot.wgpu_shader_module
     );
 

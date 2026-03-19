@@ -20,6 +20,7 @@ using ComputePipelineResourcePool = container::TResourceGenerationalPool<Compute
 
 wgpu::ComputePipeline CreateWgpuComputePipeline(
   wgpu::Device const& wgpu_device,
+  wgpu::PipelineLayout const& wgpu_pipeline_layout,
   wgpu::ShaderModule const& wgpu_shader_module
 );
 

@@ -515,9 +515,9 @@ public:
   // ComputePipeline
   //
 
-  /// Creates a compute pipeline from a compute shader module.
+  /// Creates a compute pipeline from a program containing a compute shader.
   ///
-  /// - `desc.shader_module`: **MUST** be a valid `ShaderModuleHandle`
+  /// - `desc.program`: **MUST** be a valid `ProgramHandle`
   ///   containing a compute shader entry point.
   /// - Returns: A valid `ComputePipelineHandle`.
   _MNEXUS_VAPI(ComputePipelineHandle, CreateComputePipeline,

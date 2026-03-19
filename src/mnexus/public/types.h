@@ -470,7 +470,7 @@ typedef struct MnBindingId _MN_FINAL {
 //
 
 typedef struct MnComputePipelineDesc _MN_FINAL {
-  MnResourceHandle shader_module _MN_INIT(MnInvalidResourceHandle);
+  MnResourceHandle program _MN_INIT(MnInvalidResourceHandle);
   // N.B.: Placeholder for future expansion.
   // N.B.: See `mnexus::ComputePipelineDesc`.
 } MnComputePipelineDesc;
@@ -1129,7 +1129,7 @@ _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(BindingId, MnBindingId);
 //
 
 struct ComputePipelineDesc final {
-  ShaderModuleHandle shader_module;
+  ProgramHandle program;
   // N.B.: Placeholder for future expansion.
 };
 _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(ComputePipelineDesc, MnComputePipelineDesc);
