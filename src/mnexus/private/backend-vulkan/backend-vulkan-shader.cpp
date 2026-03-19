@@ -24,12 +24,12 @@ container::ResourceHandle EmplaceShaderModuleResourcePool(
 
   // TODO: Shader Source Language Capability
 
-  VkShaderModule vk_shader_module = CreateVkShaderModule(
+  VkShaderModule vk_shader_module_handle = CreateVkShaderModule(
     device,
     shader_module_desc
   );
 
-  if (vk_shader_module == VK_NULL_HANDLE) {
+  if (vk_shader_module_handle == VK_NULL_HANDLE) {
     MBASE_LOG_ERROR("Failed to create Vulkan shader module!");
     return container::ResourceHandle::Null();
   }
@@ -48,8 +48,8 @@ container::ResourceHandle EmplaceShaderModuleResourcePool(
   VkDevice vk_device = device.handle();
   ShaderModuleHot hot {
     .vk_shader_module = VulkanShaderModule(
-      vk_shader_module,
-      [vk_device, vk_shader_module] { vkDestroyShaderModule(vk_device, vk_shader_module, nullptr); },
+      vk_shader_module_handle,
+      [vk_device, vk_shader_module_handle] { vkDestroyShaderModule(vk_device, vk_shader_module_handle, nullptr); },
       device.deferred_destroyer()
     ),
   };

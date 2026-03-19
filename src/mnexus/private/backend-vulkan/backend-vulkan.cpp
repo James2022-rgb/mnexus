@@ -12,6 +12,7 @@
 
 #include "backend-vulkan/backend-vulkan-command_list.h"
 #include "backend-vulkan/backend-vulkan-shader.h"
+#include "backend-vulkan/backend-vulkan-compute_pipeline.h"
 
 #include "backend-vulkan/vk-device.h"
 #include "backend-vulkan/resource_storage.h"
@@ -215,7 +216,7 @@ public:
   IMPL_VAPI(mnexus::ProgramHandle, CreateProgram,
     mnexus::ProgramDesc const& desc
   ) {
-    container::ResourceHandle pool_handle = EmplaceProgramResourcePool(
+    container::ResourceHandle const pool_handle = EmplaceProgramResourcePool(
       resource_storage_->programs,
       *vk_device_,
       desc,
@@ -243,16 +244,36 @@ public:
   //
 
   IMPL_VAPI(mnexus::ComputePipelineHandle, CreateComputePipeline,
-    mnexus::ComputePipelineDesc const& /*desc*/
+    mnexus::ComputePipelineDesc const& desc
   ) {
-    STUB_NOT_IMPLEMENTED();
-    return mnexus::ComputePipelineHandle::Invalid();
+    auto program_pool_handle = container::ResourceHandle::FromU64(desc.program.Get());
+
+    auto [program_hot, program_cold, lock] = resource_storage_->programs.GetConstRefWithSharedLockGuard(
+      program_pool_handle
+    );
+
+    container::ResourceHandle const pool_handle = EmplaceComputePipelineResourcePool(
+      resource_storage_->compute_pipelines,
+      *vk_device_,
+      desc,
+      program_hot,
+      program_cold,
+      resource_storage_->shader_modules
+    );
+
+    if (pool_handle.IsNull()) {
+      return mnexus::ComputePipelineHandle::Invalid();
+    }
+
+    return mnexus::ComputePipelineHandle{ pool_handle.AsU64() };
   }
 
   IMPL_VAPI(void, DestroyComputePipeline,
-    mnexus::ComputePipelineHandle /*compute_pipeline_handle*/
+    mnexus::ComputePipelineHandle compute_pipeline_handle
   ) {
-    STUB_NOT_IMPLEMENTED();
+    // FIXME: Should defer destruction until the GPU is done using this program.
+    auto pool_handle = container::ResourceHandle::FromU64(compute_pipeline_handle.Get());
+    resource_storage_->compute_pipelines.Erase(pool_handle);
   }
 
   // ----------------------------------------------------------------------------------------------
