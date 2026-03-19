@@ -117,23 +117,36 @@ public:
   //
 
   IMPL_VAPI(mnexus::BufferHandle, CreateBuffer,
-    mnexus::BufferDesc const& /*desc*/
+    mnexus::BufferDesc const& desc
   ) {
-    STUB_NOT_IMPLEMENTED();
-    return mnexus::BufferHandle::Invalid();
+    container::ResourceHandle const pool_handle = EmplaceBufferResourcePool(
+      resource_storage_->buffers,
+      *vk_device_,
+      desc
+    );
+
+    if (pool_handle.IsNull()) {
+      return mnexus::BufferHandle::Invalid();
+    }
+
+    return mnexus::BufferHandle { pool_handle.AsU64() };
   }
 
   IMPL_VAPI(void, DestroyBuffer,
-    mnexus::BufferHandle /*buffer_handle*/
+    mnexus::BufferHandle buffer_handle
   ) {
-    STUB_NOT_IMPLEMENTED();
+    // FIXME: Should defer destruction until the GPU is done using this buffer.
+    auto pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+    resource_storage_->buffers.Erase(pool_handle);
   }
 
   IMPL_VAPI(void, GetBufferDesc,
-    mnexus::BufferHandle /*buffer_handle*/,
-    mnexus::BufferDesc& /*out_desc*/
+    mnexus::BufferHandle buffer_handle,
+    mnexus::BufferDesc& out_desc
   ) {
-    STUB_NOT_IMPLEMENTED();
+    auto pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+    auto [cold, lock] = resource_storage_->buffers.GetColdConstRefWithSharedLockGuard(pool_handle);
+    out_desc = cold.desc;
   }
 
   // ----------------------------------------------------------------------------------------------

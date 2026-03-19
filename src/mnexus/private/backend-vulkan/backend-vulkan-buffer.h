@@ -6,9 +6,22 @@
 // project headers --------------------------------------
 #include "container/resource_generational_pool.h"
 
+#include "backend-vulkan/vk-device.h"
+#include "backend-vulkan/vk-object.h"
+
 namespace mnexus_backend::vulkan {
 
+class VulkanBuffer final : public TVulkanObjectBase<VkBuffer> {
+public:
+  VulkanBuffer() = default;
+  VulkanBuffer(VkBuffer handle, std::function<void()> destroy_func, IVulkanDeferredDestroyer* deferred_destroyer) :
+    TVulkanObjectBase(handle, std::move(destroy_func), deferred_destroyer)
+  {
+  }
+};
+
 struct BufferHot final {
+  VulkanBuffer vk_buffer;
 };
 
 struct BufferCold final {
@@ -16,5 +29,11 @@ struct BufferCold final {
 };
 
 using BufferResourcePool = container::TResourceGenerationalPool<BufferHot, BufferCold>;
+
+container::ResourceHandle EmplaceBufferResourcePool(
+  BufferResourcePool& out_pool,
+  VulkanDevice const& vk_device,
+  mnexus::BufferDesc const& buffer_desc
+);
 
 } // namespace mnexus_backend::vulkan
