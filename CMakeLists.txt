@@ -310,7 +310,20 @@ if(${_enable_backend_vulkan})
   target_include_directories(${TARGET_NAME} PRIVATE "$ENV{VULKAN_SDK}/Include")
 endif()
 
-# TODO: VulkanMemoryAllocator.
+#
+# VulkanMemoryAllocator (VMA)
+#
+
+if(${_enable_backend_vulkan})
+  if(NOT TARGET VulkanMemoryAllocator)
+    set(_old_folder "${CMAKE_FOLDER}")
+    set(CMAKE_FOLDER "external/VulkanMemoryAllocator")
+    add_subdirectory(${_thirdparty_dir}/VulkanMemoryAllocator ${CMAKE_CURRENT_BINARY_DIR}/VulkanMemoryAllocator)
+    set(CMAKE_FOLDER "${_old_folder}")
+  endif()
+
+  target_link_libraries(${TARGET_NAME} PRIVATE VulkanMemoryAllocator)
+endif()
 
 if(${_enable_backend_vulkan})
   if(NOT TARGET volk)
@@ -416,6 +429,8 @@ if(${_enable_backend_vulkan})
   set(_sources_private_backend_vulkan
     ${_private_backend_vulkan_dir}/depend/vulkan.h
     ${_private_backend_vulkan_dir}/depend/vulkan_fwd.h
+    ${_private_backend_vulkan_dir}/depend/vulkan_vma.cpp
+    ${_private_backend_vulkan_dir}/depend/vulkan_vma.h
     ${_private_backend_vulkan_dir}/backend-vulkan.cpp
     ${_private_backend_vulkan_dir}/backend-vulkan.h
     ${_private_backend_vulkan_dir}/backend-vulkan-buffer.cpp
