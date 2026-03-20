@@ -31,7 +31,6 @@ using ComputePipelineResourcePool = container::TResourceGenerationalPool<Compute
 container::ResourceHandle EmplaceComputePipelineResourcePool(
   ComputePipelineResourcePool& out_pool,
   VulkanDevice const& vk_device,
-  mnexus::ComputePipelineDesc const& compute_pipeline_desc,
   ProgramHot const& program_hot,
   ProgramCold const& program_cold,
   ShaderModuleResourcePool const& shader_module_pool

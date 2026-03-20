@@ -308,7 +308,6 @@ public:
     container::ResourceHandle const pool_handle = EmplaceComputePipelineResourcePool(
       resource_storage_->compute_pipelines,
       *vk_device_,
-      desc,
       program_hot,
       program_cold,
       resource_storage_->shader_modules
