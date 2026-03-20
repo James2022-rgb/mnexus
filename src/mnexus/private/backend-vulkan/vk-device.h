@@ -13,6 +13,7 @@
 // project headers --------------------------------------
 #include "sync/resource_sync.h"
 
+#include "backend-vulkan/depend/vulkan_vma.h"
 #include "backend-vulkan/vk-deferred_destroyer.h"
 #include "backend-vulkan/vk-physical_device.h"
 
@@ -72,13 +73,15 @@ private:
     mnexus::QueueSelection queue_selection,
     QueueIndexMap queue_index_map,
     VulkanQueueState const* queue_states,
-    uint32_t queue_count
+    uint32_t queue_count,
+    VmaAllocator vma_allocator
   ) :
     instance_(instance),
     physical_device_desc_(std::make_unique<PhysicalDeviceDesc>(physical_device_desc)),
     queue_selection_(queue_selection),
     handle_(handle),
-    queue_index_map_(queue_index_map)
+    queue_index_map_(queue_index_map),
+    vma_allocator_(vma_allocator)
   {
     for (uint32_t i = 0; i < queue_count; ++i) {
       queue_states_[i].vk_queue = queue_states[i].vk_queue;
@@ -92,6 +95,7 @@ private:
   mnexus::QueueSelection queue_selection_;
   QueueIndexMap queue_index_map_;
   VulkanQueueState queue_states_[kMaxQueues] {};
+  VmaAllocator vma_allocator_ = VK_NULL_HANDLE;
 };
 
 } // namespace mnexus_backend::vulkan

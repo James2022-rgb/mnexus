@@ -9,6 +9,8 @@
 // public project headers -------------------------------
 #include "mbase/public/log.h"
 
+// project headers --------------------------------------
+
 namespace mnexus_backend::vulkan {
 
 #define RESOLVE_QUEUE_INDEX(var_name, queue_id) \
@@ -404,6 +406,35 @@ std::unique_ptr<VulkanDevice> VulkanDevice::Create(
     return nullptr;
   }
 
+  VmaAllocator vma_allocator = VK_NULL_HANDLE;
+  {
+    VmaVulkanFunctions vulkan_functions {};
+    vulkan_functions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+    vulkan_functions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+
+    VmaAllocatorCreateInfo vma_info {
+      .flags = 0,
+      .physicalDevice = desc.physical_device_desc->handle(),
+      .device = vk_device,
+      .preferredLargeHeapBlockSize = 0,
+      .pAllocationCallbacks = nullptr,
+      .pDeviceMemoryCallbacks = nullptr,
+      .pHeapSizeLimit = nullptr,
+      .pVulkanFunctions = &vulkan_functions,
+      .instance = instance.handle(),
+      .vulkanApiVersion = 0,
+      .pTypeExternalMemoryHandleTypes = nullptr,
+    };
+
+    
+    VkResult const vma_result = vmaCreateAllocator(&vma_info, &vma_allocator);
+    if (vma_result != VK_SUCCESS) {
+      MBASE_LOG_ERROR("vmaCreateAllocator failed: {}", string_VkResult(vma_result));
+      vkDestroyDevice(vk_device, nullptr);
+      return nullptr;
+    }
+  }
+
   return std::unique_ptr<VulkanDevice>(new VulkanDevice(
     &instance,
     *desc.physical_device_desc,
@@ -411,7 +442,8 @@ std::unique_ptr<VulkanDevice> VulkanDevice::Create(
     selection,
     queue_index_map,
     queue_states,
-    queue_index_map.Count()
+    queue_index_map.Count(),
+    vma_allocator
   ));
 }
 
@@ -479,6 +511,11 @@ uint64_t VulkanDevice::QueueWaitIdle(mnexus::QueueId const& queue_id) {
 //
 
 void VulkanDevice::Shutdown() {
+  if (vma_allocator_ != VK_NULL_HANDLE) {
+    vmaDestroyAllocator(vma_allocator_);
+    vma_allocator_ = VK_NULL_HANDLE;
+  }
+
   if (handle_ != VK_NULL_HANDLE) {
     for (auto& qs : queue_states_) {
       if (qs.timeline_semaphore != VK_NULL_HANDLE) {

@@ -1,5 +1,9 @@
 #pragma once
 
+// Include volk-based Vulkan headers first so that vk_mem_alloc.h sees
+// VULKAN_H_ already defined and skips its own #include <vulkan/vulkan.h>.
+#include "backend-vulkan/depend/vulkan.h"
+
 #if defined(__clang__)
 # pragma clang diagnostic push
 # pragma clang diagnostic ignored "-Wnullability-completeness"
