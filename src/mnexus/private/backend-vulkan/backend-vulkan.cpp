@@ -105,8 +105,8 @@ public:
 
     uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, cmd);
 
-    vk_device_->transient_command_pool().Release(cmd);
-    vk_device_->staging_buffer_pool().Release(staging);
+    vk_device_->transient_command_pool().Release(cmd, queue_id, serial);
+    vk_device_->staging_buffer_pool().Release(staging, queue_id, serial);
 
     return mnexus::IntraQueueSubmissionId { serial };
   }
