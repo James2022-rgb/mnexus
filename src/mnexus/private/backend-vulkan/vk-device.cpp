@@ -319,6 +319,13 @@ std::unique_ptr<VulkanDevice> VulkanDevice::Create(
   }
   device_extensions.push_back(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
 
+  // VK_KHR_synchronization2 is mandatory for the mnexus Vulkan backend.
+  if (desc.physical_device_desc->CheckExtensionSupport(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME) == nullptr) {
+    MBASE_LOG_ERROR("VK_KHR_synchronization2 is not supported by the physical device.");
+    return nullptr;
+  }
+  device_extensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+
   // Features.
   VkPhysicalDeviceFeatures device_features {};
 
@@ -326,9 +333,14 @@ std::unique_ptr<VulkanDevice> VulkanDevice::Create(
   timeline_semaphore_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR;
   timeline_semaphore_features.timelineSemaphore = VK_TRUE;
 
+  VkPhysicalDeviceSynchronization2Features sync2_features {};
+  sync2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+  sync2_features.pNext = &timeline_semaphore_features;
+  sync2_features.synchronization2 = VK_TRUE;
+
   VkPhysicalDeviceVulkan11Features device_features_11 {};
   device_features_11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
-  device_features_11.pNext = &timeline_semaphore_features;
+  device_features_11.pNext = &sync2_features;
 
   VkDeviceCreateInfo info {};
   info.sType                = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -435,7 +447,7 @@ std::unique_ptr<VulkanDevice> VulkanDevice::Create(
     }
   }
 
-  return std::unique_ptr<VulkanDevice>(new VulkanDevice(
+  auto device = std::unique_ptr<VulkanDevice>(new VulkanDevice(
     &instance,
     *desc.physical_device_desc,
     vk_device,
@@ -445,6 +457,12 @@ std::unique_ptr<VulkanDevice> VulkanDevice::Create(
     queue_index_map.Count(),
     vma_allocator
   ));
+
+  // Initialize staging infrastructure.
+  device->staging_buffer_pool_.Initialize(device.get());
+  device->transient_command_pool_.Initialize(device.get(), selection.present_capable.queue_family_index);
+
+  return device;
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -507,10 +525,68 @@ uint64_t VulkanDevice::QueueWaitIdle(mnexus::QueueId const& queue_id) {
 }
 
 // ----------------------------------------------------------------------------------------------------
+// VulkanDevice::QueueAdvanceTimeline
+//
+
+uint64_t VulkanDevice::QueueAdvanceTimeline(mnexus::QueueId const& queue_id) {
+  RESOLVE_QUEUE_INDEX(index, queue_id);
+  return queue_states_[index].next_submit_serial.fetch_add(1, std::memory_order_acq_rel);
+}
+
+// ----------------------------------------------------------------------------------------------------
+// VulkanDevice::QueueSubmitSingle
+//
+
+uint64_t VulkanDevice::QueueSubmitSingle(mnexus::QueueId const& queue_id, VkCommandBuffer command_buffer) {
+  RESOLVE_QUEUE_INDEX(index, queue_id);
+
+  VulkanQueueState& qs = queue_states_[index];
+  uint64_t const serial = qs.next_submit_serial.fetch_add(1, std::memory_order_acq_rel);
+
+  VkCommandBufferSubmitInfoKHR cmd_info {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO_KHR,
+    .pNext = nullptr,
+    .commandBuffer = command_buffer,
+    .deviceMask = 0,
+  };
+
+  VkSemaphoreSubmitInfoKHR signal_info {
+    .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR,
+    .pNext = nullptr,
+    .semaphore = qs.timeline_semaphore,
+    .value = serial,
+    .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR,
+    .deviceIndex = 0,
+  };
+
+  VkSubmitInfo2KHR submit_info {
+    .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR,
+    .pNext = nullptr,
+    .flags = 0,
+    .waitSemaphoreInfoCount = 0,
+    .pWaitSemaphoreInfos = nullptr,
+    .commandBufferInfoCount = 1,
+    .pCommandBufferInfos = &cmd_info,
+    .signalSemaphoreInfoCount = 1,
+    .pSignalSemaphoreInfos = &signal_info,
+  };
+
+  VkResult const result = vkQueueSubmit2KHR(qs.vk_queue, 1, &submit_info, VK_NULL_HANDLE);
+  if (result != VK_SUCCESS) {
+    MBASE_LOG_ERROR("vkQueueSubmit2KHR failed: {}", string_VkResult(result));
+  }
+
+  return serial;
+}
+
+// ----------------------------------------------------------------------------------------------------
 // VulkanDevice::Shutdown
 //
 
 void VulkanDevice::Shutdown() {
+  transient_command_pool_.Shutdown();
+  staging_buffer_pool_.Shutdown();
+
   if (vma_allocator_ != VK_NULL_HANDLE) {
     vmaDestroyAllocator(vma_allocator_);
     vma_allocator_ = VK_NULL_HANDLE;

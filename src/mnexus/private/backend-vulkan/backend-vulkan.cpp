@@ -1,6 +1,9 @@
 // TU header --------------------------------------------
 #include "backend-vulkan/backend-vulkan.h"
 
+// c++ headers ------------------------------------------
+#include <cstring>
+
 // public project headers -------------------------------
 #include "mbase/public/log.h"
 #include "mbase/public/trap.h"
@@ -61,14 +64,51 @@ public:
   }
 
   IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueWriteBuffer,
-    mnexus::QueueId const& /*queue_id*/,
-    mnexus::BufferHandle /*buffer_handle*/,
-    uint32_t /*buffer_offset*/,
-    void const* /*data*/,
-    uint32_t /*data_size_in_bytes*/
+    mnexus::QueueId const& queue_id,
+    mnexus::BufferHandle buffer_handle,
+    uint32_t buffer_offset,
+    void const* data,
+    uint32_t data_size_in_bytes
   ) {
-    STUB_NOT_IMPLEMENTED();
-    return mnexus::IntraQueueSubmissionId{0};
+    auto const pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+    auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
+
+    if (hot.mapped_data != nullptr) {
+      // Mappable buffer: direct memcpy + flush.
+      std::memcpy(static_cast<uint8_t*>(hot.mapped_data) + buffer_offset, data, data_size_in_bytes);
+      vmaFlushAllocation(hot.vma_allocator, hot.vma_allocation, buffer_offset, data_size_in_bytes);
+
+      // No actual queue submit needed; data is visible after flush.
+      // Advance timeline to satisfy the API contract.
+      uint64_t const serial = vk_device_->QueueAdvanceTimeline(queue_id);
+      return mnexus::IntraQueueSubmissionId { serial };
+    }
+
+    // Non-mappable buffer: staging path.
+    StagingBuffer* staging = vk_device_->staging_buffer_pool().Acquire(data_size_in_bytes);
+    if (staging == nullptr) {
+      MBASE_LOG_ERROR("Failed to acquire staging buffer for QueueWriteBuffer");
+      return mnexus::IntraQueueSubmissionId{0};
+    }
+
+    std::memcpy(staging->mapped_data, data, data_size_in_bytes);
+    vmaFlushAllocation(vk_device_->vma_allocator(), staging->allocation, 0, data_size_in_bytes);
+
+    VkCommandBuffer cmd = vk_device_->transient_command_pool().Acquire();
+    VkBufferCopy region {
+      .srcOffset = 0,
+      .dstOffset = buffer_offset,
+      .size = data_size_in_bytes,
+    };
+    vkCmdCopyBuffer(cmd, staging->vk_buffer, hot.vk_buffer.handle(), 1, &region);
+    vkEndCommandBuffer(cmd);
+
+    uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, cmd);
+
+    vk_device_->transient_command_pool().Release(cmd);
+    vk_device_->staging_buffer_pool().Release(staging);
+
+    return mnexus::IntraQueueSubmissionId { serial };
   }
 
   IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueReadBuffer,
@@ -136,7 +176,7 @@ public:
     mnexus::BufferHandle buffer_handle
   ) {
     // FIXME: Should defer destruction until the GPU is done using this buffer.
-    auto pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+    auto const pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
     resource_storage_->buffers.Erase(pool_handle);
   }
 
@@ -144,7 +184,7 @@ public:
     mnexus::BufferHandle buffer_handle,
     mnexus::BufferDesc& out_desc
   ) {
-    auto pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+    auto const pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
     auto [cold, lock] = resource_storage_->buffers.GetColdConstRefWithSharedLockGuard(pool_handle);
     out_desc = cold.desc;
   }
@@ -305,8 +345,12 @@ public:
   //
 
   IMPL_VAPI(mnexus::AdapterCapability, GetAdapterCapability) {
-    STUB_NOT_IMPLEMENTED();
-    return {};
+    return mnexus::AdapterCapability {
+      .vertex_shader_storage_write = MnBoolTrue, // Vulkan guarantees this.
+      .polygon_mode_line = MnBoolTrue,
+      .polygon_mode_point = MnBoolTrue,
+      .buffer_mappable = MnBoolTrue,
+    };
   }
 
   IMPL_VAPI(mnexus::ClipSpaceConvention, GetClipSpaceConvention) {

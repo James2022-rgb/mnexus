@@ -120,6 +120,7 @@ typedef struct MnAdapterCapability _MN_FINAL {
   MnBool32 vertex_shader_storage_write _MN_INIT(MnBoolFalse);
   MnBool32 polygon_mode_line _MN_INIT(MnBoolFalse);
   MnBool32 polygon_mode_point _MN_INIT(MnBoolFalse);
+  MnBool32 buffer_mappable _MN_INIT(MnBoolFalse);
   // N.B.: See `mnexus::AdapterCapability`.
 } MnAdapterCapability;
 
@@ -187,6 +188,7 @@ typedef enum MnBufferUsageFlagBits {
   MnBufferUsageFlagBitTransferSrc     = 1 << 4,
   MnBufferUsageFlagBitTransferDst     = 1 << 5,
   MnBufferUsageFlagBitIndirect        = 1 << 6,
+  MnBufferUsageFlagBitMappable        = 1 << 7,
   MnBufferUsageFlagForce32            = 0x7FFFFFFF,
 } MnBufferUsageFlagBits;
 typedef uint32_t MnBufferUsageFlags;
@@ -757,6 +759,7 @@ struct AdapterCapability final {
   MnBool32 vertex_shader_storage_write = MnBoolFalse;
   MnBool32 polygon_mode_line = MnBoolFalse;
   MnBool32 polygon_mode_point = MnBoolFalse;
+  MnBool32 buffer_mappable = MnBoolFalse;
   // N.B.: See `MnAdapterCapability`.
 };
 _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(AdapterCapability, MnAdapterCapability);
@@ -872,6 +875,7 @@ enum class BufferUsageFlagBits : uint32_t {
   kTransferSrc   = MnBufferUsageFlagBitTransferSrc,
   kTransferDst   = MnBufferUsageFlagBitTransferDst,
   kIndirect      = MnBufferUsageFlagBitIndirect,
+  kMappable      = MnBufferUsageFlagBitMappable,
 };
 MBASE_DEFINE_ENUM_CLASS_BITFLAGS_OPERATORS(BufferUsageFlagBits);
 using BufferUsageFlags = mbase::BitFlags<BufferUsageFlagBits>;

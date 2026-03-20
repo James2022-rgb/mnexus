@@ -1,6 +1,9 @@
 // TU header --------------------------------------------
 #include "backend-vulkan/backend-vulkan-buffer.h"
 
+// c++ headers ------------------------------------------
+#include <optional>
+
 // public project headers -------------------------------
 #include "mbase/public/log.h"
 
@@ -18,34 +21,38 @@ static VkBufferUsageFlags ConvertBufferUsageFlags(mnexus::BufferUsageFlags usage
   return vk_flags;
 }
 
-bool CreateVulkanBuffer(
-  VulkanBuffer& out_vk_buffer,
+struct CreateVulkanBufferResult {
+  VulkanBuffer vk_buffer;
+  void* mapped_data = nullptr;
+  VmaAllocation vma_allocation = VK_NULL_HANDLE;
+};
+
+std::optional<CreateVulkanBufferResult> CreateVulkanBuffer(
   VulkanDevice const& vk_device,
   mnexus::BufferDesc const& buffer_desc
 ) {
+  bool const mappable = buffer_desc.usage.HasAnyOf(mnexus::BufferUsageFlagBits::kMappable);
+
+  VkBufferUsageFlags const vk_usage_flags = ConvertBufferUsageFlags(buffer_desc.usage) | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
   VkBufferCreateInfo info {
     .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
     .pNext = nullptr,
     .flags = 0,
     .size = buffer_desc.size_in_bytes,
-    .usage = ConvertBufferUsageFlags(buffer_desc.usage),
+    .usage = vk_usage_flags,
     .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     .queueFamilyIndexCount = 0,
     .pQueueFamilyIndices = nullptr,
   };
 
-  VkBuffer vk_buffer_handle = VK_NULL_HANDLE;
-  VkResult result = vkCreateBuffer(vk_device.handle(), &info, nullptr, &vk_buffer_handle);
-  if (result != VK_SUCCESS) {
-    MBASE_LOG_ERROR("vkCreateBuffer failed: {}", string_VkResult(result));
-    return false;
-  }
-
-  // FIXME: No memory binding yet. Need VMA or manual vkAllocateMemory + vkBindBufferMemory.
+  VmaAllocator const vma_allocator = vk_device.vma_allocator();
 
   VmaAllocationCreateInfo alloc_info {
-    .flags = 0,
-    .usage = VMA_MEMORY_USAGE_UNKNOWN,
+    .flags = mappable
+      ? (VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
+      : static_cast<VmaAllocationCreateFlags>(0),
+    .usage = VMA_MEMORY_USAGE_AUTO,
     .requiredFlags = 0,
     .preferredFlags = 0,
     .memoryTypeBits = 0,
@@ -54,44 +61,33 @@ bool CreateVulkanBuffer(
     .priority = 0.0f,
   };
 
-  VmaAllocator const vma_allocator = vk_device.vma_allocator();
-
+  VkBuffer vk_buffer_handle = VK_NULL_HANDLE;
   VmaAllocation allocation = VK_NULL_HANDLE;
   VmaAllocationInfo allocation_info {};
-  {
-    uint32_t memory_type_index = 0;
-    vmaFindMemoryTypeIndexForBufferInfo(
-      vma_allocator,
-      &info,
-      &alloc_info,
-      &memory_type_index
-    );
 
-    alloc_info.memoryTypeBits = 1u << memory_type_index;
-
-    result = vmaAllocateMemoryForBuffer(vma_allocator, vk_buffer_handle, &alloc_info, &allocation, &allocation_info);
-    if (result != VK_SUCCESS) {
-      MBASE_LOG_ERROR("vmaAllocateMemoryForBuffer failed: {}", string_VkResult(result));
-      vkDestroyBuffer(vk_device.handle(), vk_buffer_handle, nullptr);
-      return false;
-    }
+  VkResult const result = vmaCreateBuffer(
+    vma_allocator, &info, &alloc_info,
+    &vk_buffer_handle, &allocation, &allocation_info
+  );
+  if (result != VK_SUCCESS) {
+    MBASE_LOG_ERROR("vmaCreateBuffer failed: {}", string_VkResult(result));
+    return std::nullopt;
   }
 
-  vkBindBufferMemory(vk_device.handle(), vk_buffer_handle, allocation_info.deviceMemory, allocation_info.offset);
-
   VkDevice vk_device_handle = vk_device.handle();
-  out_vk_buffer = VulkanBuffer(
+  VulkanBuffer vk_buffer(
     vk_buffer_handle,
     [vk_device_handle, vk_buffer_handle, allocation, vma_allocator] {
-      vkDestroyBuffer(vk_device_handle, vk_buffer_handle, nullptr);
-
-      if (allocation != VK_NULL_HANDLE) {
-        vmaFreeMemory(vma_allocator, allocation);
-      }
+      vmaDestroyBuffer(vma_allocator, vk_buffer_handle, allocation);
     },
     vk_device.deferred_destroyer()
   );
-  return true;
+
+  return CreateVulkanBufferResult {
+    .vk_buffer = std::move(vk_buffer),
+    .mapped_data = allocation_info.pMappedData,
+    .vma_allocation = allocation,
+  };
 }
 
 container::ResourceHandle EmplaceBufferResourcePool(
@@ -99,14 +95,18 @@ container::ResourceHandle EmplaceBufferResourcePool(
   VulkanDevice const& vk_device,
   mnexus::BufferDesc const& buffer_desc
 ) {
-  VulkanBuffer vk_buffer;
-  bool const success = CreateVulkanBuffer(vk_buffer, vk_device, buffer_desc);
-  if (!success) {
+  std::optional<CreateVulkanBufferResult> opt_result = CreateVulkanBuffer(vk_device, buffer_desc);
+  if (!opt_result.has_value()) {
     return container::ResourceHandle::Null();
   }
 
+  CreateVulkanBufferResult& buf = *opt_result;
+
   BufferHot hot {
-    .vk_buffer = std::move(vk_buffer),
+    .vk_buffer = std::move(buf.vk_buffer),
+    .mapped_data = buf.mapped_data,
+    .vma_allocation = buf.vma_allocation,
+    .vma_allocator = vk_device.vma_allocator(),
   };
   BufferCold cold {
     .desc = buffer_desc,

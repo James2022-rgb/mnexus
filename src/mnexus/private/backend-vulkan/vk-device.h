@@ -16,6 +16,7 @@
 #include "backend-vulkan/depend/vulkan_vma.h"
 #include "backend-vulkan/vk-deferred_destroyer.h"
 #include "backend-vulkan/vk-physical_device.h"
+#include "backend-vulkan/vk-staging.h"
 
 namespace mnexus_backend::vulkan {
 
@@ -55,6 +56,18 @@ public:
   /// Blocks until all submitted work on the given queue has completed.
   /// Returns the last submitted serial (0 if nothing has been submitted).
   uint64_t QueueWaitIdle(mnexus::QueueId const& queue_id);
+
+  /// Advances the queue timeline without an actual GPU submit.
+  /// Returns the new serial. Used for mappable buffer writes where
+  /// the data is visible immediately after a host flush.
+  uint64_t QueueAdvanceTimeline(mnexus::QueueId const& queue_id);
+
+  /// Submits a command buffer to the given queue, signaling the timeline semaphore.
+  /// Returns the new serial.
+  uint64_t QueueSubmitSingle(mnexus::QueueId const& queue_id, VkCommandBuffer command_buffer);
+
+  StagingBufferPool& staging_buffer_pool() { return staging_buffer_pool_; }
+  TransientCommandPool& transient_command_pool() { return transient_command_pool_; }
 
   // IVulkanDeferredDestroyer
   void EnqueueDestroy(
@@ -97,6 +110,9 @@ private:
   QueueIndexMap queue_index_map_;
   VulkanQueueState queue_states_[kMaxQueues] {};
   VmaAllocator vma_allocator_ = VK_NULL_HANDLE;
+
+  StagingBufferPool staging_buffer_pool_;
+  TransientCommandPool transient_command_pool_;
 };
 
 } // namespace mnexus_backend::vulkan

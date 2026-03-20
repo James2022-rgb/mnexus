@@ -22,6 +22,9 @@ public:
 
 struct BufferHot final {
   VulkanBuffer vk_buffer;
+  void* mapped_data = nullptr;                     // Non-null if mappable.
+  VmaAllocation vma_allocation = VK_NULL_HANDLE;   // For flush.
+  VmaAllocator vma_allocator = VK_NULL_HANDLE;     // For flush.
 };
 
 struct BufferCold final {
