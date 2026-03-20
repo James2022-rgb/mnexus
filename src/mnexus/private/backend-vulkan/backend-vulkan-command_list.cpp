@@ -102,8 +102,13 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindExplicitComputePip
   mnexus::ComputePipelineHandle compute_pipeline_handle
 ) {
   auto const pool_handle = container::ResourceHandle::FromU64(compute_pipeline_handle.Get());
-  auto [hot, lock] = resource_storage_->compute_pipelines.GetHotConstRefWithSharedLockGuard(pool_handle);
+  auto [hot, cold, lock] = resource_storage_->compute_pipelines.GetConstRefWithSharedLockGuard(pool_handle);
   encoder_.BindComputePipeline(hot.vk_compute_pipeline.handle(), hot.vk_pipeline_layout);
+
+  // Track referenced resources for submit-time stamping.
+  referenced_resources_.push_back(pool_handle);
+  referenced_resources_.push_back(container::ResourceHandle::FromU64(cold.program_handle.Get()));
+  referenced_resources_.push_back(container::ResourceHandle::FromU64(cold.shader_module_handle.Get()));
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::DispatchCompute(

@@ -1,10 +1,17 @@
 #pragma once
 
+// c++ headers ------------------------------------------
+#include <vector>
+
 // public project headers -------------------------------
+#include "mbase/public/array_proxy.h"
+
 #include "mnexus/public/mnexus.h"
 #include "mnexus/public/render_state_event_log.h"
 
 // project headers --------------------------------------
+#include "container/resource_generational_pool.h"
+
 #include "backend-vulkan/command_encoder.h"
 
 namespace mnexus_backend::vulkan {
@@ -17,6 +24,7 @@ public:
   ~MnexusCommandListVulkan() override = default;
 
   [[nodiscard]] CommandEncoder& encoder() { return encoder_; }
+  [[nodiscard]] mbase::ArrayProxy<container::ResourceHandle const> GetReferencedResources() const { return referenced_resources_; }
 
   // --------------------------------------------------------------------------------------------------
   // mnexus::ICommandList implementation
@@ -222,6 +230,7 @@ public:
 private:
   CommandEncoder encoder_;
   ResourceStorage* resource_storage_ = nullptr;
+  std::vector<container::ResourceHandle> referenced_resources_;
   mnexus::RenderStateEventLog render_state_event_log_;
 };
 
