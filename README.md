@@ -11,7 +11,13 @@
 
 | Backend (API) | Windows 🖥         | Linux 🖥 | Android 📱         | Web 🌐             |
 | ------------- | ------------------ | -------- | ------------------ | ------------------ |
-| WebGPU        | ✅ Dawn            | ⚠️ Dawn  | 🚧 Dawn            | ✅ Emscripten      |
 | Vulkan        | 📋                 | 📋       | 📋                 | ➖                 |
+| WebGPU        | ✅ Dawn            | ⚠️ Dawn  | 🚧 Dawn            | ✅ Emscripten      |
 
 > ✅ Supported &ensp; ⚠️ Implemented, not yet tested &ensp; 📋 Planned &ensp; 🚧 Impractical &ensp; ➖ N/A
+
+## Vulkan Backend Requirements
+
+- Vulkan 1.1
+- `VK_KHR_timeline_semaphore`
+- `VK_KHR_synchronization2`
