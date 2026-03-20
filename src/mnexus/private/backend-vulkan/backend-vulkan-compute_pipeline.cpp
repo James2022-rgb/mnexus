@@ -56,19 +56,22 @@ bool CreateVulkanComputePipeline(
 container::ResourceHandle EmplaceComputePipelineResourcePool(
   ComputePipelineResourcePool& out_pool,
   VulkanDevice const& vk_device,
-  ProgramHot const& program_hot,
-  ProgramCold const& program_cold,
+  mnexus::ProgramHandle program_handle,
+  ProgramResourcePool const& program_pool,
   ShaderModuleResourcePool const& shader_module_pool
 ) {
+  auto const program_pool_handle = container::ResourceHandle::FromU64(program_handle.Get());
+  auto [program_hot, program_cold, program_lock] = program_pool.GetConstRefWithSharedLockGuard(
+    program_pool_handle
+  );
+
   mnexus::ShaderModuleHandle const shader_module_handle = program_cold.shader_module_handles[0];
   auto const shader_module_pool_handle = container::ResourceHandle::FromU64(shader_module_handle.Get());
 
-  auto [shader_module_hot, lock] = shader_module_pool.GetHotConstRefWithSharedLockGuard(
+  auto [shader_module_hot, shader_module_lock] = shader_module_pool.GetHotConstRefWithSharedLockGuard(
     shader_module_pool_handle
   );
 
-  
-  
   VulkanComputePipeline vk_compute_pipeline;
   bool const success = CreateVulkanComputePipeline(
     vk_compute_pipeline,
@@ -84,7 +87,10 @@ container::ResourceHandle EmplaceComputePipelineResourcePool(
     .vk_compute_pipeline = std::move(vk_compute_pipeline),
     .vk_pipeline_layout = program_hot.pipeline_layout_ref->handle(),
   };
-  ComputePipelineCold cold {};
+  ComputePipelineCold cold {
+    .program_handle = program_handle,
+    .shader_module_handle = shader_module_handle,
+  };
 
   return out_pool.Emplace(
     std::forward_as_tuple(std::move(hot)),

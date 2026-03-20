@@ -74,7 +74,7 @@ container::ResourceHandle EmplaceProgramResourcePool(
   shader::MergedPipelineLayout merged_pipeline_layout;
 
   for (uint32_t shader_module_index = 0; shader_module_index < program_desc.shader_modules.size(); ++shader_module_index) {
-    auto shader_module_pool_handle = container::ResourceHandle::FromU64(
+    auto const shader_module_pool_handle = container::ResourceHandle::FromU64(
       program_desc.shader_modules[shader_module_index].Get()
     );
 

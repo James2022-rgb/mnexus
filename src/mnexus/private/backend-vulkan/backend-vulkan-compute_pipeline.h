@@ -25,6 +25,8 @@ struct ComputePipelineHot final {
 };
 
 struct ComputePipelineCold final {
+  mnexus::ProgramHandle program_handle;
+  mnexus::ShaderModuleHandle shader_module_handle;
 };
 
 using ComputePipelineResourcePool = container::TResourceGenerationalPool<ComputePipelineHot, ComputePipelineCold>;
@@ -32,8 +34,8 @@ using ComputePipelineResourcePool = container::TResourceGenerationalPool<Compute
 container::ResourceHandle EmplaceComputePipelineResourcePool(
   ComputePipelineResourcePool& out_pool,
   VulkanDevice const& vk_device,
-  ProgramHot const& program_hot,
-  ProgramCold const& program_cold,
+  mnexus::ProgramHandle program_handle,
+  ProgramResourcePool const& program_pool,
   ShaderModuleResourcePool const& shader_module_pool
 );
 

@@ -307,17 +307,11 @@ public:
   IMPL_VAPI(mnexus::ComputePipelineHandle, CreateComputePipeline,
     mnexus::ComputePipelineDesc const& desc
   ) {
-    auto program_pool_handle = container::ResourceHandle::FromU64(desc.program.Get());
-
-    auto [program_hot, program_cold, lock] = resource_storage_->programs.GetConstRefWithSharedLockGuard(
-      program_pool_handle
-    );
-
     container::ResourceHandle const pool_handle = EmplaceComputePipelineResourcePool(
       resource_storage_->compute_pipelines,
       *vk_device_,
-      program_hot,
-      program_cold,
+      desc.program,
+      resource_storage_->programs,
       resource_storage_->shader_modules
     );
 
