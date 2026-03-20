@@ -610,7 +610,7 @@ public:
   _MNEXUS_VAPI(void, PopDebugGroup);
 
   void PushDebugGroup(char const* name, float const* color = nullptr) {
-    this->PushDebugGroup(container::ArrayProxy<char const>(name, std::strlen(name)), color);
+    this->PushDebugGroup(container::ArrayProxy<char const>(name, static_cast<uint32_t>(std::strlen(name))), color);
   }
 
   //
