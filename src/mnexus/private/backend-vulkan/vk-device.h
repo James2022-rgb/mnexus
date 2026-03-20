@@ -44,6 +44,7 @@ public:
 
   MBASE_ACCESSOR_GETV(VkDevice, handle);
   MBASE_ACCESSOR_GETCR(mnexus::QueueSelection, queue_selection);
+  MBASE_ACCESSOR_GETV(VmaAllocator, vma_allocator);
 
   /// Returns the highest completed serial on the given queue.
   uint64_t QueueGetCompletedValue(mnexus::QueueId const& queue_id);

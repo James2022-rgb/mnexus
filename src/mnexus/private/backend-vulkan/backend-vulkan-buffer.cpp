@@ -35,18 +35,60 @@ bool CreateVulkanBuffer(
   };
 
   VkBuffer vk_buffer_handle = VK_NULL_HANDLE;
-  VkResult const result = vkCreateBuffer(vk_device.handle(), &info, nullptr, &vk_buffer_handle);
+  VkResult result = vkCreateBuffer(vk_device.handle(), &info, nullptr, &vk_buffer_handle);
   if (result != VK_SUCCESS) {
-    MBASE_LOG_ERROR("vkCreateBuffer failed: {}", static_cast<int32_t>(result));
+    MBASE_LOG_ERROR("vkCreateBuffer failed: {}", string_VkResult(result));
     return false;
   }
 
   // FIXME: No memory binding yet. Need VMA or manual vkAllocateMemory + vkBindBufferMemory.
 
+  VmaAllocationCreateInfo alloc_info {
+    .flags = 0,
+    .usage = VMA_MEMORY_USAGE_UNKNOWN,
+    .requiredFlags = 0,
+    .preferredFlags = 0,
+    .memoryTypeBits = 0,
+    .pool = VK_NULL_HANDLE,
+    .pUserData = nullptr,
+    .priority = 0.0f,
+  };
+
+  VmaAllocator const vma_allocator = vk_device.vma_allocator();
+
+  VmaAllocation allocation = VK_NULL_HANDLE;
+  VmaAllocationInfo allocation_info {};
+  {
+    uint32_t memory_type_index = 0;
+    vmaFindMemoryTypeIndexForBufferInfo(
+      vma_allocator,
+      &info,
+      &alloc_info,
+      &memory_type_index
+    );
+
+    alloc_info.memoryTypeBits = 1u << memory_type_index;
+
+    result = vmaAllocateMemoryForBuffer(vma_allocator, vk_buffer_handle, &alloc_info, &allocation, &allocation_info);
+    if (result != VK_SUCCESS) {
+      MBASE_LOG_ERROR("vmaAllocateMemoryForBuffer failed: {}", string_VkResult(result));
+      vkDestroyBuffer(vk_device.handle(), vk_buffer_handle, nullptr);
+      return false;
+    }
+  }
+
+  vkBindBufferMemory(vk_device.handle(), vk_buffer_handle, allocation_info.deviceMemory, allocation_info.offset);
+
   VkDevice vk_device_handle = vk_device.handle();
   out_vk_buffer = VulkanBuffer(
     vk_buffer_handle,
-    [vk_device_handle, vk_buffer_handle] { vkDestroyBuffer(vk_device_handle, vk_buffer_handle, nullptr); },
+    [vk_device_handle, vk_buffer_handle, allocation, vma_allocator] {
+      vkDestroyBuffer(vk_device_handle, vk_buffer_handle, nullptr);
+
+      if (allocation != VK_NULL_HANDLE) {
+        vmaFreeMemory(vma_allocator, allocation);
+      }
+    },
     vk_device.deferred_destroyer()
   );
   return true;
