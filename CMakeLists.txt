@@ -443,10 +443,14 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/backend-vulkan-shader.h
     ${_private_backend_vulkan_dir}/backend-vulkan-texture.cpp
     ${_private_backend_vulkan_dir}/backend-vulkan-texture.h
+    ${_private_backend_vulkan_dir}/command_encoder.cpp
+    ${_private_backend_vulkan_dir}/command_encoder.h
     ${_private_backend_vulkan_dir}/resource_storage.cpp
     ${_private_backend_vulkan_dir}/resource_storage.h
     ${_private_backend_vulkan_dir}/shader_module.cpp
     ${_private_backend_vulkan_dir}/shader_module.h
+    ${_private_backend_vulkan_dir}/thread_command_pool.cpp
+    ${_private_backend_vulkan_dir}/thread_command_pool.h
     ${_private_backend_vulkan_dir}/vk-device.cpp
     ${_private_backend_vulkan_dir}/vk-deferred_destroyer.h
     ${_private_backend_vulkan_dir}/vk-device.h

@@ -4,14 +4,26 @@
 // public project headers -------------------------------
 #include "mbase/public/log.h"
 
+// project headers --------------------------------------
+#include "backend-vulkan/resource_storage.h"
+
 namespace mnexus_backend::vulkan {
+
+MnexusCommandListVulkan::MnexusCommandListVulkan(
+  CommandEncoder encoder,
+  ResourceStorage* resource_storage
+) :
+  encoder_(std::move(encoder)),
+  resource_storage_(resource_storage)
+{
+}
 
 // --------------------------------------------------------------------------------------------------
 // mnexus::ICommandList implementation
 //
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::End() {
-  MBASE_LOG_WARN("Vulkan backend: End() not implemented");
+  encoder_.End();
 }
 
 //
@@ -87,17 +99,19 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BlitTexture(
 //
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindExplicitComputePipeline(
-  mnexus::ComputePipelineHandle /*compute_pipeline_handle*/
+  mnexus::ComputePipelineHandle compute_pipeline_handle
 ) {
-  MBASE_LOG_WARN("Vulkan backend: BindExplicitComputePipeline() not implemented");
+  auto const pool_handle = container::ResourceHandle::FromU64(compute_pipeline_handle.Get());
+  auto [hot, lock] = resource_storage_->compute_pipelines.GetHotConstRefWithSharedLockGuard(pool_handle);
+  encoder_.BindComputePipeline(hot.vk_compute_pipeline.handle(), hot.vk_pipeline_layout);
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::DispatchCompute(
-  uint32_t /*workgroup_count_x*/,
-  uint32_t /*workgroup_count_y*/,
-  uint32_t /*workgroup_count_z*/
+  uint32_t workgroup_count_x,
+  uint32_t workgroup_count_y,
+  uint32_t workgroup_count_z
 ) {
-  MBASE_LOG_WARN("Vulkan backend: DispatchCompute() not implemented");
+  encoder_.DispatchCompute(workgroup_count_x, workgroup_count_y, workgroup_count_z);
 }
 
 //

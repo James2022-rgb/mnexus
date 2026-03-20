@@ -585,6 +585,15 @@ protected:
   IDevice() = default;
 };
 
+/// ## Thread Safety
+///
+/// A command list is **thread-affine**: all recording methods (including
+/// `End()`) **MUST** be called on the same thread that called
+/// `IDevice::CreateCommandList`. Calling recording methods from a
+/// different thread is undefined behavior.
+///
+/// Different `ICommandList` instances **MAY** be recorded concurrently on
+/// different threads.
 class ICommandList {
 public:
   virtual ~ICommandList() = default;

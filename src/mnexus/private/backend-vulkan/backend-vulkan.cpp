@@ -55,12 +55,17 @@ public:
   }
 
   IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueSubmitCommandList,
-    mnexus::QueueId const& /*queue_id*/,
+    mnexus::QueueId const& queue_id,
     mnexus::ICommandList* command_list
   ) {
-    STUB_NOT_IMPLEMENTED();
-    delete command_list;
-    return mnexus::IntraQueueSubmissionId{0};
+    auto* vk_cmd_list = static_cast<MnexusCommandListVulkan*>(command_list);
+    VkCommandBuffer cmd = vk_cmd_list->encoder().command_buffer();
+
+    uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, cmd);
+    vk_device_->thread_command_pool_registry().FreeCommandBuffer(cmd, queue_id, serial);
+
+    delete vk_cmd_list;
+    return mnexus::IntraQueueSubmissionId { serial };
   }
 
   IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueWriteBuffer,
@@ -142,14 +147,17 @@ public:
   IMPL_VAPI(mnexus::ICommandList*, CreateCommandList,
     mnexus::CommandListDesc const& /*desc*/
   ) {
-    STUB_NOT_IMPLEMENTED();
-    return new MnexusCommandListVulkan();
+    VkCommandBuffer cmd = vk_device_->thread_command_pool_registry().AllocateCommandBuffer();
+    return new MnexusCommandListVulkan(CommandEncoder(cmd), resource_storage_);
   }
 
   IMPL_VAPI(void, DiscardCommandList,
     mnexus::ICommandList* command_list
   ) {
-    delete command_list;
+    auto* vk_cmd_list = static_cast<MnexusCommandListVulkan*>(command_list);
+    VkCommandBuffer cmd = vk_cmd_list->encoder().command_buffer();
+    vk_device_->thread_command_pool_registry().FreeCommandBuffer(cmd, {}, 0);
+    delete vk_cmd_list;
   }
 
   // ----------------------------------------------------------------------------------------------

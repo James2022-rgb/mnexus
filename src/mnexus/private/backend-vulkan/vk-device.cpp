@@ -461,6 +461,7 @@ std::unique_ptr<VulkanDevice> VulkanDevice::Create(
   // Initialize staging infrastructure.
   device->staging_buffer_pool_.Initialize(device.get());
   device->transient_command_pool_.Initialize(device.get(), selection.present_capable.queue_family_index);
+  device->thread_command_pool_registry_.Initialize(device.get(), selection.present_capable.queue_family_index);
 
   return device;
 }
@@ -584,6 +585,7 @@ uint64_t VulkanDevice::QueueSubmitSingle(mnexus::QueueId const& queue_id, VkComm
 //
 
 void VulkanDevice::Shutdown() {
+  thread_command_pool_registry_.Shutdown();
   transient_command_pool_.Shutdown();
   staging_buffer_pool_.Shutdown();
 

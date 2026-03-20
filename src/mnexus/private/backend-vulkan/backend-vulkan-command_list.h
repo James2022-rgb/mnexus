@@ -4,12 +4,19 @@
 #include "mnexus/public/mnexus.h"
 #include "mnexus/public/render_state_event_log.h"
 
+// project headers --------------------------------------
+#include "backend-vulkan/command_encoder.h"
+
 namespace mnexus_backend::vulkan {
+
+struct ResourceStorage;
 
 class MnexusCommandListVulkan : public mnexus::ICommandList {
 public:
-  MnexusCommandListVulkan() = default;
+  MnexusCommandListVulkan(CommandEncoder encoder, ResourceStorage* resource_storage);
   ~MnexusCommandListVulkan() override = default;
+
+  [[nodiscard]] CommandEncoder& encoder() { return encoder_; }
 
   // --------------------------------------------------------------------------------------------------
   // mnexus::ICommandList implementation
@@ -213,6 +220,8 @@ public:
   ) override;
 
 private:
+  CommandEncoder encoder_;
+  ResourceStorage* resource_storage_ = nullptr;
   mnexus::RenderStateEventLog render_state_event_log_;
 };
 

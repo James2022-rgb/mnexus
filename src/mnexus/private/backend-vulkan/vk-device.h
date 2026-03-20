@@ -17,6 +17,7 @@
 #include "backend-vulkan/vk-deferred_destroyer.h"
 #include "backend-vulkan/vk-physical_device.h"
 #include "backend-vulkan/vk-staging.h"
+#include "backend-vulkan/thread_command_pool.h"
 
 namespace mnexus_backend::vulkan {
 
@@ -68,6 +69,7 @@ public:
 
   StagingBufferPool& staging_buffer_pool() { return staging_buffer_pool_; }
   TransientCommandPool& transient_command_pool() { return transient_command_pool_; }
+  ThreadCommandPoolRegistry& thread_command_pool_registry() { return thread_command_pool_registry_; }
 
   // IVulkanDeferredDestroyer
   void EnqueueDestroy(
@@ -113,6 +115,7 @@ private:
 
   StagingBufferPool staging_buffer_pool_;
   TransientCommandPool transient_command_pool_;
+  ThreadCommandPoolRegistry thread_command_pool_registry_;
 };
 
 } // namespace mnexus_backend::vulkan

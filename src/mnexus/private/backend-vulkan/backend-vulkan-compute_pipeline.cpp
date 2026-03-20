@@ -82,6 +82,7 @@ container::ResourceHandle EmplaceComputePipelineResourcePool(
 
   ComputePipelineHot hot {
     .vk_compute_pipeline = std::move(vk_compute_pipeline),
+    .vk_pipeline_layout = program_hot.pipeline_layout_ref->handle(),
   };
   ComputePipelineCold cold {};
 
