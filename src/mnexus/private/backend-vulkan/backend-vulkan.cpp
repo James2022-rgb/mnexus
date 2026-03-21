@@ -4,9 +4,12 @@
 // c++ headers ------------------------------------------
 #include <cstring>
 
+#include <vector>
+
 // public project headers -------------------------------
 #include "mbase/public/log.h"
 #include "mbase/public/trap.h"
+#include "mbase/public/tsa.h"
 
 // project headers --------------------------------------
 #include "container/generational_pool.h"
@@ -125,14 +128,58 @@ public:
   }
 
   IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueReadBuffer,
-    mnexus::QueueId const& /*queue_id*/,
-    mnexus::BufferHandle /*buffer_handle*/,
-    uint32_t /*buffer_offset*/,
-    void* /*dst*/,
-    uint32_t /*size_in_bytes*/
+    mnexus::QueueId const& queue_id,
+    mnexus::BufferHandle buffer_handle,
+    uint32_t buffer_offset,
+    void* dst,
+    uint32_t size_in_bytes
   ) {
-    STUB_NOT_IMPLEMENTED();
-    return mnexus::IntraQueueSubmissionId{0};
+    auto const pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+    auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
+
+    if (hot.mapped_data != nullptr) {
+      // Mappable buffer: direct read after invalidate.
+      vmaInvalidateAllocation(hot.vma_allocator, hot.vma_allocation, buffer_offset, size_in_bytes);
+      std::memcpy(dst, static_cast<uint8_t const*>(hot.mapped_data) + buffer_offset, size_in_bytes);
+      uint64_t const serial = vk_device_->QueueAdvanceTimeline(queue_id);
+      return mnexus::IntraQueueSubmissionId { serial };
+    }
+
+    // Non-mappable buffer: staging + deferred copy.
+    StagingBuffer* staging = vk_device_->staging_buffer_pool().Acquire(size_in_bytes);
+    if (staging == nullptr) {
+      MBASE_LOG_ERROR("Failed to acquire staging buffer for QueueReadBuffer");
+      return mnexus::IntraQueueSubmissionId{0};
+    }
+
+    VkCommandBuffer cmd = vk_device_->transient_command_pool().Acquire();
+    VkBufferCopy region {
+      .srcOffset = buffer_offset,
+      .dstOffset = 0,
+      .size = size_in_bytes,
+    };
+    vkCmdCopyBuffer(cmd, hot.vk_buffer.handle(), staging->vk_buffer, 1, &region);
+    vkEndCommandBuffer(cmd);
+
+    uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, cmd);
+
+    vk_device_->transient_command_pool().Release(cmd, queue_id, serial);
+
+    {
+      mbase::LockGuard mtx_lock(pending_readbacks_mutex_);
+
+      pending_readbacks_.emplace_back(
+        PendingReadback {
+          .dst = dst,
+          .size_in_bytes = size_in_bytes,
+          .staging = staging,
+          .queue_id = queue_id,
+          .serial = serial,
+        }
+      );
+    }
+
+    return mnexus::IntraQueueSubmissionId { serial };
   }
 
   IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueGetCompletedValue,
@@ -146,6 +193,7 @@ public:
     mnexus::IntraQueueSubmissionId value
   ) {
     vk_device_->QueueWaitSubmitSerial(queue_id, value.Get());
+    this->ProcessPendingReadbacks();
   }
 
   // ----------------------------------------------------------------------------------------------
@@ -387,9 +435,36 @@ public:
   }
 
 private:
+  struct PendingReadback {
+    void* dst;
+    uint32_t size_in_bytes;
+    StagingBuffer* staging;
+    mnexus::QueueId queue_id;
+    uint64_t serial;
+  };
+
+  void ProcessPendingReadbacks() {
+    mbase::LockGuard lock(pending_readbacks_mutex_);
+
+    for (uint32_t i = 0; i < pending_readbacks_.size();) {
+      PendingReadback& rb = pending_readbacks_[i];
+      uint64_t const completed = vk_device_->QueueGetCompletedValue(rb.queue_id);
+      if (completed >= rb.serial) {
+        vmaInvalidateAllocation(vk_device_->vma_allocator(), rb.staging->allocation, 0, rb.size_in_bytes);
+        std::memcpy(rb.dst, rb.staging->mapped_data, rb.size_in_bytes);
+        vk_device_->staging_buffer_pool().Release(rb.staging, rb.queue_id, rb.serial);
+        pending_readbacks_.erase(pending_readbacks_.begin() + static_cast<ptrdiff_t>(i));
+      } else {
+        ++i;
+      }
+    }
+  }
+
   VulkanDevice* vk_device_ = nullptr;
   ResourceStorage* resource_storage_ = nullptr;
   IDescriptorSetAllocator* descriptor_set_allocator_ = nullptr;
+  std::vector<PendingReadback> pending_readbacks_;
+  mbase::Lockable<std::mutex> pending_readbacks_mutex_;
 };
 
 // ==================================================================================================
