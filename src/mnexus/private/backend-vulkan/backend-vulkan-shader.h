@@ -50,6 +50,30 @@ container::ResourceHandle EmplaceShaderModuleResourcePool(
 );
 
 //
+// VulkanDescriptorSetLayout
+//
+// Wraps VkDescriptorSetLayout + stores its binding composition.
+// Needed by DescriptorSetAllocator to compute VkDescriptorPoolSize for pool creation.
+//
+
+class VulkanDescriptorSetLayout final : public TVulkanObjectBase<VkDescriptorSetLayout> {
+public:
+  VulkanDescriptorSetLayout() = default;
+  VulkanDescriptorSetLayout(
+    VkDescriptorSetLayout handle,
+    std::function<void()> destroy_func,
+    IVulkanDeferredDestroyer* deferred_destroyer,
+    mbase::SmallVector<VkDescriptorSetLayoutBinding, 4> bindings
+  ) :
+    TVulkanObjectBase(handle, std::move(destroy_func), deferred_destroyer),
+    bindings(std::move(bindings))
+  {
+  }
+
+  mbase::SmallVector<VkDescriptorSetLayoutBinding, 4> bindings;
+};
+
+//
 // VulkanPipelineLayout
 //
 // Bundles a VkPipelineLayout and its VkDescriptorSetLayouts.
@@ -64,7 +88,7 @@ public:
   {
   }
 
-  mbase::SmallVector<VkDescriptorSetLayout, 4> descriptor_set_layouts;
+  mbase::SmallVector<VulkanDescriptorSetLayout, 4> descriptor_set_layouts;
 };
 
 using VulkanPipelineLayoutPtr = std::shared_ptr<VulkanPipelineLayout>;

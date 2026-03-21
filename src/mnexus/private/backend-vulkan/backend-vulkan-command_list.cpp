@@ -103,7 +103,12 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindExplicitComputePip
 ) {
   auto const pool_handle = container::ResourceHandle::FromU64(compute_pipeline_handle.Get());
   auto [hot, cold, lock] = resource_storage_->compute_pipelines.GetConstRefWithSharedLockGuard(pool_handle);
-  encoder_.BindComputePipeline(hot.vk_compute_pipeline.handle(), hot.vk_pipeline_layout);
+  encoder_.BindComputePipeline(
+    hot.vk_compute_pipeline.handle(),
+    hot.vk_pipeline_layout,
+    hot.pipeline_layout_ref->descriptor_set_layouts.data(),
+    static_cast<uint32_t>(hot.pipeline_layout_ref->descriptor_set_layouts.size())
+  );
 
   // Track referenced resources for submit-time stamping.
   referenced_resources_.push_back(pool_handle);
@@ -124,21 +129,27 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::DispatchCompute(
 //
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindUniformBuffer(
-  mnexus::BindingId const& /*id*/,
-  mnexus::BufferHandle /*buffer_handle*/,
-  uint64_t /*offset*/,
-  uint64_t /*size*/
+  mnexus::BindingId const& id,
+  mnexus::BufferHandle buffer_handle,
+  uint64_t offset,
+  uint64_t size
 ) {
-  MBASE_LOG_WARN("Vulkan backend: BindUniformBuffer() not implemented");
+  auto const pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+  auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
+  encoder_.BindBuffer(id.group, id.binding, id.array_element, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, hot.vk_buffer.handle(), offset, size);
+  referenced_resources_.push_back(pool_handle);
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindStorageBuffer(
-  mnexus::BindingId const& /*id*/,
-  mnexus::BufferHandle /*buffer_handle*/,
-  uint64_t /*offset*/,
-  uint64_t /*size*/
+  mnexus::BindingId const& id,
+  mnexus::BufferHandle buffer_handle,
+  uint64_t offset,
+  uint64_t size
 ) {
-  MBASE_LOG_WARN("Vulkan backend: BindStorageBuffer() not implemented");
+  auto const pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+  auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
+  encoder_.BindBuffer(id.group, id.binding, id.array_element, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, hot.vk_buffer.handle(), offset, size);
+  referenced_resources_.push_back(pool_handle);
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindSampledTexture(

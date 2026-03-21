@@ -97,7 +97,7 @@ container::ResourceHandle EmplaceProgramResourcePool(
     layout_key,
     [&](pipeline::PipelineLayoutCacheKey const&) -> VulkanPipelineLayoutPtr {
       // Convert merged layouts to Vulkan descriptor set layouts.
-      mbase::SmallVector<VkDescriptorSetLayout, 4> dsls;
+      mbase::SmallVector<VulkanDescriptorSetLayout, 4> dsls;
       std::vector<VkDescriptorSetLayout> raw_dsls;
       raw_dsls.reserve(merged_layouts.size());
 
@@ -156,7 +156,15 @@ container::ResourceHandle EmplaceProgramResourcePool(
           return nullptr;
         }
 
-        dsls.emplace_back(vk_dsl);
+        VkDevice dev = device.handle();
+        dsls.emplace_back(
+          VulkanDescriptorSetLayout(
+            vk_dsl,
+            [dev, vk_dsl] { vkDestroyDescriptorSetLayout(dev, vk_dsl, nullptr); },
+            device.deferred_destroyer(),
+            vk_bindings
+          )
+        );
         raw_dsls.push_back(vk_dsl);
       }
 
@@ -179,12 +187,7 @@ container::ResourceHandle EmplaceProgramResourcePool(
       VkDevice dev = device.handle();
       auto layout = std::make_shared<VulkanPipelineLayout>(
         vk_pl,
-        [dev, vk_pl, dsls] {
-          vkDestroyPipelineLayout(dev, vk_pl, nullptr);
-          for (auto dsl : dsls) {
-            vkDestroyDescriptorSetLayout(dev, dsl, nullptr);
-          }
-        },
+        [dev, vk_pl] { vkDestroyPipelineLayout(dev, vk_pl, nullptr); },
         device.deferred_destroyer()
       );
       layout->descriptor_set_layouts = std::move(dsls);

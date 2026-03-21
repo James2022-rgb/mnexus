@@ -22,6 +22,7 @@ public:
 struct ComputePipelineHot final {
   VulkanComputePipeline vk_compute_pipeline;
   VkPipelineLayout vk_pipeline_layout = VK_NULL_HANDLE; // Non-owning; kept alive by the pipeline layout cache.
+  VulkanPipelineLayoutPtr pipeline_layout_ref;           // Shared ownership — keeps DSLs alive.
 };
 
 struct ComputePipelineCold final {

@@ -16,6 +16,7 @@
 #include "backend-vulkan/backend-vulkan-command_list.h"
 #include "backend-vulkan/backend-vulkan-shader.h"
 #include "backend-vulkan/backend-vulkan-compute_pipeline.h"
+#include "backend-vulkan/descriptor_set_allocator.h"
 
 #include "backend-vulkan/vk-device.h"
 #include "backend-vulkan/resource_storage.h"
@@ -34,7 +35,9 @@ public:
   explicit MnexusDeviceVulkan(VulkanDevice* vk_device, ResourceStorage* resource_storage) :
     vk_device_(vk_device),
     resource_storage_(resource_storage)
-  {}
+  {
+    descriptor_set_allocator_.Initialize(vk_device);
+  }
   ~MnexusDeviceVulkan() override = default;
 
   // ----------------------------------------------------------------------------------------------
@@ -148,7 +151,10 @@ public:
     mnexus::CommandListDesc const& /*desc*/
   ) {
     VkCommandBuffer cmd = vk_device_->thread_command_pool_registry().AllocateCommandBuffer();
-    return new MnexusCommandListVulkan(CommandEncoder(cmd), resource_storage_);
+    return new MnexusCommandListVulkan(
+      CommandEncoder(cmd, vk_device_->handle(), &descriptor_set_allocator_, resource_storage_),
+      resource_storage_
+    );
   }
 
   IMPL_VAPI(void, DiscardCommandList,
@@ -378,6 +384,7 @@ public:
 private:
   VulkanDevice* vk_device_ = nullptr;
   ResourceStorage* resource_storage_ = nullptr;
+  DescriptorSetAllocator descriptor_set_allocator_;
 };
 
 // ==================================================================================================

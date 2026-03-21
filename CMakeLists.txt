@@ -445,6 +445,10 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/backend-vulkan-texture.h
     ${_private_backend_vulkan_dir}/command_encoder.cpp
     ${_private_backend_vulkan_dir}/command_encoder.h
+    ${_private_backend_vulkan_dir}/descriptor_set_allocator.cpp
+    ${_private_backend_vulkan_dir}/descriptor_set_allocator.h
+    ${_private_backend_vulkan_dir}/descriptor_set_binder.cpp
+    ${_private_backend_vulkan_dir}/descriptor_set_binder.h
     ${_private_backend_vulkan_dir}/resource_storage.cpp
     ${_private_backend_vulkan_dir}/resource_storage.h
     ${_private_backend_vulkan_dir}/shader_module.cpp
