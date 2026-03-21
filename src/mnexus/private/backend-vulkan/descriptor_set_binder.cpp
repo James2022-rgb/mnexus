@@ -64,7 +64,7 @@ void DescriptorSetBinder::CmdBindDescriptorSets(
   VkCommandBuffer command_buffer,
   VkPipelineBindPoint bind_point,
   VkDevice device,
-  DescriptorSetAllocator& allocator
+  IDescriptorSetAllocator* ds_allocator
 ) {
   uint32_t first_set_to_rebind = std::numeric_limits<uint32_t>::max();
   uint32_t inclusive_last_set_to_rebind = 0;
@@ -85,7 +85,7 @@ void DescriptorSetBinder::CmdBindDescriptorSets(
     VulkanDescriptorSetLayout const& dsl = current_descriptor_set_layouts_[set_index];
 
     // Allocate a descriptor set for this layout.
-    VkDescriptorSet vk_set = allocator.Allocate(dsl);
+    VkDescriptorSet vk_set = ds_allocator->Allocate(dsl);
     if (vk_set == VK_NULL_HANDLE) {
       continue;
     }

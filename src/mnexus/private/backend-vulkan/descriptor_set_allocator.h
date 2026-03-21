@@ -1,13 +1,6 @@
 #pragma once
 
-// c++ headers ------------------------------------------
-#include <mutex>
-#include <unordered_map>
-#include <vector>
-
 // public project headers -------------------------------
-#include "mbase/public/tsa.h"
-
 #include "mnexus/public/types.h"
 
 // project headers --------------------------------------
@@ -19,47 +12,29 @@ class VulkanDescriptorSetLayout;
 class VulkanDevice;
 
 // ----------------------------------------------------------------------------------------------------
-// DescriptorSetAllocator
+// IDescriptorSetAllocator
 //
 // Per-layout descriptor set allocation with GPU-sync-aware reuse.
+// Implementation is hidden in the .cpp file.
 //
 
-class DescriptorSetAllocator final {
+class IDescriptorSetAllocator {
 public:
-  DescriptorSetAllocator() = default;
-  ~DescriptorSetAllocator();
-  MBASE_DISALLOW_COPY_MOVE(DescriptorSetAllocator);
+  virtual ~IDescriptorSetAllocator() = default;
 
-  void Initialize(VulkanDevice* device);
-  void Shutdown();
+  static IDescriptorSetAllocator* Create(VulkanDevice* device);
+
+  /// Clean up all Vulkan resources and delete this object.
+  virtual void Shutdown() = 0;
 
   /// Allocate a VkDescriptorSet for the given layout.
-  VkDescriptorSet Allocate(VulkanDescriptorSetLayout const& layout);
+  virtual VkDescriptorSet Allocate(VulkanDescriptorSetLayout const& layout) = 0;
 
   /// Return a descriptor set for reuse after GPU completes.
-  void Free(VulkanDescriptorSetLayout const& layout, VkDescriptorSet set,
-            mnexus::QueueId const& queue_id, uint64_t serial);
-
-private:
-  struct PendingEntry {
-    VkDescriptorSet set = VK_NULL_HANDLE;
-    mnexus::QueueId queue_id;
-    uint64_t serial = 0;
-  };
-
-  struct PerLayoutPool {
-    std::vector<VkDescriptorPool> vk_pools;
-    std::vector<VkDescriptorSet> free_sets;
-    std::vector<PendingEntry> pending_sets;
-  };
-
-  VkDescriptorPool CreatePool(VulkanDescriptorSetLayout const& layout);
-
-  static constexpr uint32_t kSetsPerPool = 16;
-
-  VulkanDevice* device_ = nullptr;
-  mbase::Lockable<std::mutex> mutex_;
-  std::unordered_map<VkDescriptorSetLayout, PerLayoutPool> pools_ MBASE_GUARDED_BY(mutex_);
+  virtual void Free(
+    VulkanDescriptorSetLayout const& layout, VkDescriptorSet set,
+    mnexus::QueueId const& queue_id, uint64_t serial
+  ) = 0;
 };
 
 } // namespace mnexus_backend::vulkan

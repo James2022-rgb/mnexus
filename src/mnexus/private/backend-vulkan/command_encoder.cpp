@@ -9,12 +9,12 @@ namespace mnexus_backend::vulkan {
 CommandEncoder::CommandEncoder(
   VkCommandBuffer command_buffer,
   VkDevice device,
-  DescriptorSetAllocator* allocator,
+  IDescriptorSetAllocator* ds_allocator,
   ResourceStorage* resource_storage
 ) :
   command_buffer_(command_buffer),
   vk_device_(device),
-  allocator_(allocator),
+  ds_allocator_(ds_allocator),
   resource_storage_(resource_storage)
 {
 }
@@ -49,8 +49,8 @@ void CommandEncoder::BindBuffer(
 }
 
 void CommandEncoder::ResolveDescriptorSets(VkPipelineBindPoint bind_point) {
-  MBASE_ASSERT(allocator_ != nullptr);
-  descriptor_set_binder_.CmdBindDescriptorSets(command_buffer_, bind_point, vk_device_, *allocator_);
+  MBASE_ASSERT(ds_allocator_ != nullptr);
+  descriptor_set_binder_.CmdBindDescriptorSets(command_buffer_, bind_point, vk_device_, ds_allocator_);
 }
 
 } // namespace mnexus_backend::vulkan

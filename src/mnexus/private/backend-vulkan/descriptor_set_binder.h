@@ -16,7 +16,7 @@
 
 namespace mnexus_backend::vulkan {
 
-class DescriptorSetAllocator;
+class IDescriptorSetAllocator;
 class VulkanDescriptorSetLayout;
 struct ResourceStorage;
 
@@ -24,7 +24,7 @@ struct ResourceStorage;
 // DescriptorSetBinder
 //
 // Tracks per-set descriptor binding state with dirty flags.
-// On dispatch/draw, resolves dirty sets into VkDescriptorSets via DescriptorSetAllocator.
+// On dispatch/draw, resolves dirty sets into VkDescriptorSets via IDescriptorSetAllocator.
 //
 
 class DescriptorSetBinder final {
@@ -53,7 +53,7 @@ public:
     VkCommandBuffer command_buffer,
     VkPipelineBindPoint bind_point,
     VkDevice device,
-    DescriptorSetAllocator& allocator
+    IDescriptorSetAllocator* ds_allocator_
   );
 
 private:

@@ -9,7 +9,7 @@
 
 namespace mnexus_backend::vulkan {
 
-class DescriptorSetAllocator;
+class IDescriptorSetAllocator;
 class VulkanDescriptorSetLayout;
 struct ResourceStorage;
 
@@ -22,7 +22,7 @@ struct ResourceStorage;
 class CommandEncoder final {
 public:
   CommandEncoder() = default;
-  CommandEncoder(VkCommandBuffer command_buffer, VkDevice device, DescriptorSetAllocator* allocator, ResourceStorage* resource_storage);
+  CommandEncoder(VkCommandBuffer command_buffer, VkDevice device, IDescriptorSetAllocator* ds_allocator, ResourceStorage* resource_storage);
 
   [[nodiscard]] VkCommandBuffer command_buffer() const { return command_buffer_; }
 
@@ -43,7 +43,7 @@ private:
 
   VkCommandBuffer command_buffer_ = VK_NULL_HANDLE;
   VkDevice vk_device_ = VK_NULL_HANDLE;
-  DescriptorSetAllocator* allocator_ = nullptr;
+  IDescriptorSetAllocator* ds_allocator_ = nullptr;
   ResourceStorage* resource_storage_ = nullptr;
 
   VkPipeline current_compute_pipeline_ = VK_NULL_HANDLE;

@@ -36,9 +36,14 @@ public:
     vk_device_(vk_device),
     resource_storage_(resource_storage)
   {
-    descriptor_set_allocator_.Initialize(vk_device);
+    descriptor_set_allocator_ = IDescriptorSetAllocator::Create(vk_device);
   }
-  ~MnexusDeviceVulkan() override = default;
+  ~MnexusDeviceVulkan() override {
+    if (descriptor_set_allocator_ != nullptr) {
+      descriptor_set_allocator_->Shutdown(); // Shutdown does delete this.
+      descriptor_set_allocator_ = nullptr;
+    }
+  }
 
   // ----------------------------------------------------------------------------------------------
   // Queue
@@ -152,7 +157,7 @@ public:
   ) {
     VkCommandBuffer cmd = vk_device_->thread_command_pool_registry().AllocateCommandBuffer();
     return new MnexusCommandListVulkan(
-      CommandEncoder(cmd, vk_device_->handle(), &descriptor_set_allocator_, resource_storage_),
+      CommandEncoder(cmd, vk_device_->handle(), descriptor_set_allocator_, resource_storage_),
       resource_storage_
     );
   }
@@ -384,7 +389,7 @@ public:
 private:
   VulkanDevice* vk_device_ = nullptr;
   ResourceStorage* resource_storage_ = nullptr;
-  DescriptorSetAllocator descriptor_set_allocator_;
+  IDescriptorSetAllocator* descriptor_set_allocator_ = nullptr;
 };
 
 // ==================================================================================================
