@@ -42,10 +42,10 @@ void CommandEncoder::DispatchCompute(uint32_t x, uint32_t y, uint32_t z) {
 
 void CommandEncoder::BindBuffer(
   uint32_t set, uint32_t binding, uint32_t array_element,
-  VkDescriptorType descriptor_type,
+  VkDescriptorType descriptor_type, uint64_t handle_id,
   VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range
 ) {
-  descriptor_set_binder_.SetBuffer(set, binding, array_element, descriptor_type, buffer, offset, range);
+  descriptor_set_binder_.SetBuffer(set, binding, array_element, descriptor_type, handle_id, buffer, offset, range);
 }
 
 void CommandEncoder::ResolveDescriptorSets(VkPipelineBindPoint bind_point) {

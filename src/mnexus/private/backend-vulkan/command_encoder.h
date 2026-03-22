@@ -35,7 +35,7 @@ public:
 
   // Binding
   void BindBuffer(uint32_t set, uint32_t binding, uint32_t array_element,
-                  VkDescriptorType descriptor_type,
+                  VkDescriptorType descriptor_type, uint64_t handle_id,
                   VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range);
 
 private:

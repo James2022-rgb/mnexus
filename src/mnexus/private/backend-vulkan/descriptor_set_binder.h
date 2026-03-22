@@ -9,22 +9,21 @@
 // public project headers -------------------------------
 #include "mbase/public/container.h"
 
-#include "mnexus/public/types.h"
-
 // project headers --------------------------------------
 #include "backend-vulkan/depend/vulkan.h"
+#include "backend-vulkan/descriptor_set_allocator.h"
+#include "backend-vulkan/descriptor_set_write.h"
 
 namespace mnexus_backend::vulkan {
 
 class IDescriptorSetAllocator;
 class VulkanDescriptorSetLayout;
-struct ResourceStorage;
 
 // ----------------------------------------------------------------------------------------------------
 // DescriptorSetBinder
 //
 // Tracks per-set descriptor binding state with dirty flags.
-// On dispatch/draw, resolves dirty sets into VkDescriptorSets via IDescriptorSetAllocator.
+// On dispatch/draw, resolves dirty sets via IDescriptorSetAllocator hash-and-cache.
 //
 
 class DescriptorSetBinder final {
@@ -34,7 +33,6 @@ public:
   DescriptorSetBinder() = default;
 
   /// Called when a new pipeline is bound.
-  /// Marks disturbed sets for reallocation/rebinding.
   void AssumePipelineLayout(
     VkPipelineLayout pipeline_layout,
     VulkanDescriptorSetLayout const* descriptor_set_layouts,
@@ -45,7 +43,8 @@ public:
   void SetBuffer(
     uint32_t set, uint32_t binding, uint32_t array_element,
     VkDescriptorType descriptor_type,
-    VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range
+    uint64_t handle_id,
+    VkBuffer vk_buffer_handle, VkDeviceSize offset, VkDeviceSize range
   );
 
   /// Resolve dirty sets and emit vkCmdBindDescriptorSets.
@@ -53,35 +52,21 @@ public:
     VkCommandBuffer command_buffer,
     VkPipelineBindPoint bind_point,
     VkDevice device,
-    IDescriptorSetAllocator* ds_allocator_
+    IDescriptorSetAllocator* ds_allocator
   );
 
 private:
-  struct BufferBinding {
-    VkBuffer buffer = VK_NULL_HANDLE;
-    VkDeviceSize offset = 0;
-    VkDeviceSize range = 0;
-  };
-
-  struct BindingEntry {
-    uint32_t binding = 0;
-    uint32_t array_element = 0;
-    VkDescriptorType descriptor_type {};
-    BufferBinding buffer;
-    // TODO: ImageBinding, SamplerBinding for texture/sampler support.
-  };
-
-  struct SetState {
-    mbase::SmallVector<BindingEntry, 4> entries;
-  };
-
   VkPipelineLayout current_pipeline_layout_ = VK_NULL_HANDLE;
   VulkanDescriptorSetLayout const* current_descriptor_set_layouts_ = nullptr;
   uint32_t current_descriptor_set_count_ = 0;
 
-  std::array<SetState, kMaxSets> sets_;
-  std::bitset<kMaxSets> set_dirty_;
-  std::array<VkDescriptorSet, kMaxSets> bound_descriptor_sets_ {};
+  std::array<DescriptorSetWriteDesc, kMaxSets> set_write_descs_;
+
+  // TODO: Explicit descriptor set binding API.
+  std::bitset<kMaxSets> set_explicit_flag_;
+  std::bitset<kMaxSets> set_reallocation_needed_; // Content changed -> need new descriptor set.
+  std::bitset<kMaxSets> set_rebinding_needed_;    // Layout changed -> need vkCmdBindDescriptorSets.
+  std::array<VulkanDescriptorSetPtr, kMaxSets> bound_descriptor_sets_;
 };
 
 } // namespace mnexus_backend::vulkan

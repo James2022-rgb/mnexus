@@ -2,8 +2,14 @@
 #include "backend-vulkan/descriptor_set_binder.h"
 
 // c++ headers ------------------------------------------
+#include <cstdint>
+
+#include <algorithm>
 #include <limits>
-#include <vector>
+
+// public project headers -------------------------------
+#include "mbase/public/log.h"
+#include "mbase/public/trap.h"
 
 // project headers --------------------------------------
 #include "backend-vulkan/backend-vulkan-shader.h"
@@ -16,10 +22,56 @@ void DescriptorSetBinder::AssumePipelineLayout(
   VulkanDescriptorSetLayout const* descriptor_set_layouts,
   uint32_t descriptor_set_count
 ) {
-  if (current_pipeline_layout_ != pipeline_layout) {
-    // Pipeline layout changed — mark all sets dirty.
-    for (uint32_t i = 0; i < descriptor_set_count; ++i) {
-      set_dirty_.set(i);
+  if (current_pipeline_layout_ == pipeline_layout) {
+    // Identical pipeline layout; no sets disturbed.
+    current_descriptor_set_layouts_ = descriptor_set_layouts;
+    current_descriptor_set_count_ = descriptor_set_count;
+    return;
+  }
+
+  // Find the first set with an incompatible descriptor set layout.
+  uint32_t first_disturbed = kMaxSets;
+  uint32_t const old_set_count = current_descriptor_set_count_;
+  uint32_t const new_set_count = descriptor_set_count;
+  uint32_t const min_set_count = std::min(old_set_count, new_set_count);
+
+  for (uint32_t set_index = 0; set_index < min_set_count; ++set_index) {
+    VkDescriptorSetLayout old_layout_handle = current_descriptor_set_layouts_
+      ? current_descriptor_set_layouts_[set_index].handle() : VK_NULL_HANDLE;
+    VkDescriptorSetLayout new_layout_handle = descriptor_set_layouts[set_index].handle();
+
+    if (old_layout_handle != new_layout_handle) {
+      first_disturbed = set_index;
+      break;
+    }
+  }
+
+  if (first_disturbed == kMaxSets && old_set_count != new_set_count) {
+    // Set counts differ but shared layouts match -- first new/missing set is disturbed.
+    first_disturbed = min_set_count;
+  }
+
+  if (first_disturbed == kMaxSets) {
+    // Pipeline layouts differ but all descriptor set layouts match.
+    // The difference should be in push constants -- all sets are disturbed.
+    first_disturbed = 0;
+  }
+
+  for (uint32_t set_index = first_disturbed; set_index < kMaxSets; ++set_index) {
+    // Set is disturbed and needs to be rebound.
+    set_rebinding_needed_.set(set_index);
+
+    if (set_index < new_set_count) {
+      VkDescriptorSetLayout old_layout_handle =
+        (current_descriptor_set_layouts_ && set_index < old_set_count)
+        ? current_descriptor_set_layouts_[set_index].handle() : VK_NULL_HANDLE;
+      VkDescriptorSetLayout new_layout_handle = descriptor_set_layouts[set_index].handle();
+
+      if (old_layout_handle != new_layout_handle) {
+        // Descriptor set layout changed -- content must be rewritten.
+        set_reallocation_needed_.set(set_index);
+        set_write_descs_[set_index].AssumeDescriptorSetLayout(descriptor_set_layouts[set_index]);
+      }
     }
   }
 
@@ -31,33 +83,22 @@ void DescriptorSetBinder::AssumePipelineLayout(
 void DescriptorSetBinder::SetBuffer(
   uint32_t set, uint32_t binding, uint32_t array_element,
   VkDescriptorType descriptor_type,
-  VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range
+  uint64_t handle_id,
+  VkBuffer vk_buffer_handle, VkDeviceSize offset, VkDeviceSize range
 ) {
   if (set >= kMaxSets) {
+    MBASE_LOG_ERROR(
+      "DescriptorSetBinder: set index {} exceeds max of {}. SetBuffer(({}, {}, {}), {}, {}, {}, {})",
+      set, kMaxSets - 1, set, binding, array_element, string_VkDescriptorType(descriptor_type), handle_id, offset, range
+    );
     return;
   }
 
-  SetState& state = sets_[set];
+  set_explicit_flag_[set] = false;
 
-  // Upsert: find existing entry or update in-place.
-  for (auto& entry : state.entries) {
-    if (entry.binding == binding && entry.array_element == array_element) {
-      entry.descriptor_type = descriptor_type;
-      entry.buffer = { buffer, offset, range };
-      set_dirty_.set(set);
-      return;
-    }
-  }
-
-  state.entries.emplace_back(
-    BindingEntry {
-      .binding = binding,
-      .array_element = array_element,
-      .descriptor_type = descriptor_type,
-      .buffer = { buffer, offset, range },
-    }
-  );
-  set_dirty_.set(set);
+  DescriptorSetWriteDesc::ReallocationNeeded const reallocation_needed =
+    set_write_descs_[set].SetBufferDescriptorValue(binding, array_element, descriptor_type, handle_id, vk_buffer_handle, offset, range);
+  set_reallocation_needed_[set] = set_reallocation_needed_[set] || reallocation_needed.value;
 }
 
 void DescriptorSetBinder::CmdBindDescriptorSets(
@@ -66,108 +107,97 @@ void DescriptorSetBinder::CmdBindDescriptorSets(
   VkDevice device,
   IDescriptorSetAllocator* ds_allocator
 ) {
+  if (set_reallocation_needed_.none() && set_rebinding_needed_.none()) {
+    return;
+  }
+
   uint32_t first_set_to_rebind = std::numeric_limits<uint32_t>::max();
   uint32_t inclusive_last_set_to_rebind = 0;
   uint32_t sets_to_rebind_count = 0;
 
-  // Phase 1: Allocate + update dirty sets.
+  mbase::StaticVector<VkDescriptorSet, kMaxSets> vk_descriptor_sets(current_descriptor_set_count_);
+  mbase::SmallVector<uint32_t, 8> dense_dynamic_offsets;
+
   for (uint32_t set_index = 0; set_index < current_descriptor_set_count_; ++set_index) {
-    if (!set_dirty_.test(set_index)) {
+    DescriptorSetWriteDesc& set_write_desc = set_write_descs_[set_index];
+
+    if (set_write_desc.GetDescriptorCount() == 0) {
+      // Mark for non-use.
+      vk_descriptor_sets[set_index] = VK_NULL_HANDLE;
       continue;
     }
 
-    SetState& state = sets_[set_index];
-    if (state.entries.empty()) {
-      set_dirty_.reset(set_index);
-      continue;
+    if (set_reallocation_needed_[set_index]) {
+      set_write_desc.ComputeHash();
+
+      VulkanDescriptorSetLayout const& dsl = current_descriptor_set_layouts_[set_index];
+      VulkanDescriptorSetPtr new_set = ds_allocator->Allocate(device, dsl, set_write_desc);
+
+      if (new_set) {
+        bound_descriptor_sets_[set_index] = std::move(new_set);
+      }
     }
 
-    VulkanDescriptorSetLayout const& dsl = current_descriptor_set_layouts_[set_index];
+    if (set_reallocation_needed_[set_index] || set_rebinding_needed_[set_index]) {
+      first_set_to_rebind = std::min(first_set_to_rebind, set_index);
+      inclusive_last_set_to_rebind = std::max(inclusive_last_set_to_rebind, set_index);
+      ++sets_to_rebind_count;
 
-    // Allocate a descriptor set for this layout.
-    VkDescriptorSet vk_set = ds_allocator->Allocate(dsl);
-    if (vk_set == VK_NULL_HANDLE) {
-      continue;
-    }
+      vk_descriptor_sets[set_index] = bound_descriptor_sets_[set_index]
+        ? bound_descriptor_sets_[set_index]->handle() : VK_NULL_HANDLE;
 
-    // Build VkWriteDescriptorSet + VkDescriptorBufferInfo arrays.
-    std::vector<VkWriteDescriptorSet> writes;
-    std::vector<VkDescriptorBufferInfo> buffer_infos;
-    writes.reserve(state.entries.size());
-    buffer_infos.reserve(state.entries.size());
+      if (!set_explicit_flag_[set_index]) {
+        std::span<uint32_t const> const dynamic_offsets = set_write_desc.GetDenseDescriptorDynamicOffsets();
 
-    for (auto const& entry : state.entries) {
-      buffer_infos.emplace_back(
-        VkDescriptorBufferInfo {
-          .buffer = entry.buffer.buffer,
-          .offset = entry.buffer.offset,
-          .range = entry.buffer.range,
+        if (!dynamic_offsets.empty()) {
+          dense_dynamic_offsets.append_memcpyable_unsafe(dynamic_offsets.begin(), dynamic_offsets.end());
         }
-      );
-
-      writes.emplace_back(
-        VkWriteDescriptorSet {
-          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-          .pNext = nullptr,
-          .dstSet = vk_set,
-          .dstBinding = entry.binding,
-          .dstArrayElement = entry.array_element,
-          .descriptorCount = 1,
-          .descriptorType = entry.descriptor_type,
-          .pImageInfo = nullptr,
-          .pBufferInfo = &buffer_infos.back(),
-          .pTexelBufferView = nullptr,
-        }
-      );
+      } else {
+        // TODO: Implement dynamic offsets handling for explicit sets.
+        mbase::Trap();
+      }
     }
 
-    vkUpdateDescriptorSets(
-      device,
-      static_cast<uint32_t>(writes.size()),
-      writes.data(),
-      0,
-      nullptr
-    );
-
-    bound_descriptor_sets_[set_index] = vk_set;
-
-    first_set_to_rebind = std::min(first_set_to_rebind, set_index);
-    inclusive_last_set_to_rebind = std::max(inclusive_last_set_to_rebind, set_index);
-    ++sets_to_rebind_count;
-
-    set_dirty_.reset(set_index);
+    set_reallocation_needed_[set_index] = false;
+    set_rebinding_needed_[set_index] = false;
   }
 
   if (sets_to_rebind_count == 0) {
     return;
   }
 
-  // Phase 2: Emit vkCmdBindDescriptorSets.
   if (inclusive_last_set_to_rebind - first_set_to_rebind == sets_to_rebind_count - 1) {
-    // Sets are contiguous — single call.
+    // Contiguous -- single call.
     vkCmdBindDescriptorSets(
       command_buffer,
       bind_point,
       current_pipeline_layout_,
       first_set_to_rebind, sets_to_rebind_count,
-      &bound_descriptor_sets_[first_set_to_rebind],
-      0, nullptr
+      vk_descriptor_sets.data() + first_set_to_rebind,
+      static_cast<uint32_t>(dense_dynamic_offsets.size()), dense_dynamic_offsets.data()
     );
   } else {
-    // Sets are sparse — individual calls.
+    // Sparse -- individual calls with per-set dynamic offset tracking.
+    uint32_t first_dynamic_offset_index = 0;
+
     for (uint32_t set_index = first_set_to_rebind; set_index <= inclusive_last_set_to_rebind; ++set_index) {
-      if (bound_descriptor_sets_[set_index] == VK_NULL_HANDLE) {
+      if (vk_descriptor_sets[set_index] == VK_NULL_HANDLE) {
         continue;
       }
+
+      uint32_t const dynamic_descriptor_count =
+        static_cast<uint32_t>(set_write_descs_[set_index].GetDenseDescriptorDynamicOffsets().size());
 
       vkCmdBindDescriptorSets(
         command_buffer,
         bind_point,
         current_pipeline_layout_,
         set_index, 1,
-        &bound_descriptor_sets_[set_index],
-        0, nullptr
+        &vk_descriptor_sets[set_index],
+        dynamic_descriptor_count, dense_dynamic_offsets.data() + first_dynamic_offset_index
       );
+
+      first_dynamic_offset_index += dynamic_descriptor_count;
     }
   }
 }

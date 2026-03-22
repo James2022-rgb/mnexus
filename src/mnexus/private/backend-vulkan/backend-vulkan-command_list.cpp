@@ -136,7 +136,11 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindUniformBuffer(
 ) {
   auto const pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
   auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
-  encoder_.BindBuffer(id.group, id.binding, id.array_element, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, hot.vk_buffer.handle(), offset, size);
+  encoder_.BindBuffer(
+    id.group, id.binding, id.array_element,
+    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    buffer_handle.Get(), hot.vk_buffer.handle(), offset, size
+  );
   referenced_resources_.push_back(pool_handle);
 }
 
@@ -148,7 +152,11 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindStorageBuffer(
 ) {
   auto const pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
   auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
-  encoder_.BindBuffer(id.group, id.binding, id.array_element, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, hot.vk_buffer.handle(), offset, size);
+  encoder_.BindBuffer(
+    id.group, id.binding, id.array_element,
+    VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+    buffer_handle.Get(), hot.vk_buffer.handle(), offset, size
+  );
   referenced_resources_.push_back(pool_handle);
 }
 
