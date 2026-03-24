@@ -15,7 +15,7 @@ namespace container {
 
 using ResourceHandle = container::GenerationalHandle;
 
-template<class THot, class TCold>
+template<class THot, class TCold, uint8_t ResourceType = 0>
 class TResourceGenerationalPool {
 public:
   using SharedMutexType = mbase::SharedLockable<std::shared_mutex>;
@@ -108,7 +108,7 @@ public:
 
 private:
   mbase::SharedLockable<std::shared_mutex> mutable mutex_;
-  container::GenerationalPool<THot, TCold> inner_;
+  container::GenerationalPool<THot, TCold, ResourceType> inner_;
 };
 
 } // namespace container

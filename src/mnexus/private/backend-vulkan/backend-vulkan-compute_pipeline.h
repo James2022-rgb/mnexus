@@ -30,7 +30,7 @@ struct ComputePipelineCold final {
   mnexus::ShaderModuleHandle shader_module_handle;
 };
 
-using ComputePipelineResourcePool = container::TResourceGenerationalPool<ComputePipelineHot, ComputePipelineCold>;
+using ComputePipelineResourcePool = container::TResourceGenerationalPool<ComputePipelineHot, ComputePipelineCold, mnexus::kResourceTypeComputePipeline>;
 
 container::ResourceHandle EmplaceComputePipelineResourcePool(
   ComputePipelineResourcePool& out_pool,

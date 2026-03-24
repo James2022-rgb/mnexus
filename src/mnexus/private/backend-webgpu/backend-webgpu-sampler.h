@@ -16,6 +16,6 @@ struct SamplerCold final {
   mnexus::SamplerDesc desc;
 };
 
-using SamplerResourcePool = container::TResourceGenerationalPool<SamplerHot, SamplerCold>;
+using SamplerResourcePool = container::TResourceGenerationalPool<SamplerHot, SamplerCold, mnexus::kResourceTypeSampler>;
 
 } // namespace mnexus_backend::webgpu

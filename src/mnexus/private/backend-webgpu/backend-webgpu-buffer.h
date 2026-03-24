@@ -19,7 +19,7 @@ struct BufferCold final {
   mnexus::BufferDesc desc;
 };
 
-using BufferResourcePool = container::TResourceGenerationalPool<BufferHot, BufferCold>;
+using BufferResourcePool = container::TResourceGenerationalPool<BufferHot, BufferCold, mnexus::kResourceTypeBuffer>;
 
 /// ## Remarks
 /// WebGPU requires that buffers with map read or map write access have a size

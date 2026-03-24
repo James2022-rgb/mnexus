@@ -790,6 +790,17 @@ _MNEXUS_DEFINE_TYPESAFE_HANDLE(ComputePipelineHandle);
 _MNEXUS_DEFINE_TYPESAFE_HANDLE(RenderPipelineHandle);
 _MNEXUS_DEFINE_TYPESAFE_HANDLE(SamplerHandle);
 
+// Resource type tags embedded in bits 59-63 of the handle's u64 representation.
+// Type 0 is reserved for null/invalid handles.
+inline constexpr uint8_t kResourceTypeInvalid         = 0;
+inline constexpr uint8_t kResourceTypeBuffer          = 1;
+inline constexpr uint8_t kResourceTypeTexture         = 2;
+inline constexpr uint8_t kResourceTypeShaderModule    = 3;
+inline constexpr uint8_t kResourceTypeProgram         = 4;
+inline constexpr uint8_t kResourceTypeComputePipeline = 5;
+inline constexpr uint8_t kResourceTypeRenderPipeline  = 6;
+inline constexpr uint8_t kResourceTypeSampler         = 7;
+
 // ----------------------------------------------------------------------------------------------------
 // Queue
 //

@@ -31,7 +31,7 @@ struct BufferCold final {
   mnexus::BufferDesc desc;
 };
 
-using BufferResourcePool = container::TResourceGenerationalPool<BufferHot, BufferCold>;
+using BufferResourcePool = container::TResourceGenerationalPool<BufferHot, BufferCold, mnexus::kResourceTypeBuffer>;
 
 container::ResourceHandle EmplaceBufferResourcePool(
   BufferResourcePool& out_pool,

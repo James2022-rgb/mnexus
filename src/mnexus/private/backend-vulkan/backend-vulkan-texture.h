@@ -15,6 +15,6 @@ struct TextureCold final {
   mnexus::TextureDesc desc;
 };
 
-using TextureResourcePool = container::TResourceGenerationalPool<TextureHot, TextureCold>;
+using TextureResourcePool = container::TResourceGenerationalPool<TextureHot, TextureCold, mnexus::kResourceTypeTexture>;
 
 } // namespace mnexus_backend::vulkan

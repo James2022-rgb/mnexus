@@ -16,7 +16,7 @@ struct ComputePipelineCold final {
   
 };
 
-using ComputePipelineResourcePool = container::TResourceGenerationalPool<ComputePipelineHot, ComputePipelineCold>;
+using ComputePipelineResourcePool = container::TResourceGenerationalPool<ComputePipelineHot, ComputePipelineCold, mnexus::kResourceTypeComputePipeline>;
 
 wgpu::ComputePipeline CreateWgpuComputePipeline(
   wgpu::Device const& wgpu_device,

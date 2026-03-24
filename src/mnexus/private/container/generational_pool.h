@@ -16,30 +16,38 @@ namespace container {
 
 struct GenerationalHandle {
   uint32_t index = 0;
-  uint32_t generation = 0;
+  uint32_t generation = 0;     // 27-bit effective range (bits 32-58 of u64)
+  uint8_t  resource_type = 0;  //  5-bit effective range (bits 59-63 of u64)
 
-  static constexpr GenerationalHandle Null() { return GenerationalHandle { 0xFFFFFFFFu, 0 }; }
+  static constexpr uint32_t kMaxGeneration = 0x07FFFFFFu;
+
+  static constexpr GenerationalHandle Null() { return GenerationalHandle { 0xFFFFFFFFu, 0, 0 }; }
 
   constexpr static GenerationalHandle FromU64(uint64_t value) {
     return GenerationalHandle {
-      .index = static_cast<uint32_t>(value & 0xFFFFFFFFu),
-      .generation = static_cast<uint32_t>((value >> 32) & 0xFFFFFFFFu),
+      .index         = static_cast<uint32_t>(value & 0xFFFFFFFFu),
+      .generation    = static_cast<uint32_t>((value >> 32) & 0x07FFFFFFu),
+      .resource_type = static_cast<uint8_t>((value >> 59) & 0x1Fu),
     };
   }
 
   constexpr bool IsNull() const { return index == 0xFFFFFFFFu; }
 
   constexpr uint64_t AsU64() const {
-    return (static_cast<uint64_t>(generation) << 32) | static_cast<uint64_t>(index);
+    return (static_cast<uint64_t>(resource_type & 0x1Fu) << 59)
+         | (static_cast<uint64_t>(generation & 0x07FFFFFFu) << 32)
+         | static_cast<uint64_t>(index);
   }
 
   friend constexpr bool operator==(GenerationalHandle a, GenerationalHandle b) {
-    return a.index == b.index && a.generation == b.generation;
+    return a.index == b.index && a.generation == b.generation && a.resource_type == b.resource_type;
   }
   friend constexpr bool operator!=(GenerationalHandle a, GenerationalHandle b) { return !(a == b); }
 };
 
-template <class HotT, class ColdT>
+static_assert(GenerationalHandle::Null().AsU64() == 0x00000000FFFFFFFFull);
+
+template <class HotT, class ColdT, uint8_t ResourceType = 0>
 class GenerationalPool {
 public:
   using Handle = GenerationalHandle;
@@ -72,7 +80,7 @@ public:
     cold_[idx].emplace(std::make_from_tuple<Cold>(std::move(cold_args)));
 
     ++live_count_;
-    return Handle { idx, gen_[idx] };
+    return Handle { idx, gen_[idx], ResourceType };
   }
 
   Handle Insert(Hot hot, Cold cold) {
@@ -80,7 +88,7 @@ public:
     hot_[idx]  = std::move(hot);
     cold_[idx] = std::move(cold);
     ++live_count_;
-    return Handle { idx, gen_[idx] };
+    return Handle { idx, gen_[idx], ResourceType };
   }
 
   bool Erase(Handle h) {
@@ -94,7 +102,7 @@ public:
 
     // Advance generation to invalidate stale handles.
     uint32_t g = gen_[idx] + 1u;
-    if (g == 0u) g = 1u;
+    if (g == 0u || g > Handle::kMaxGeneration) g = 1u;
     gen_[idx] = g;
 
     freelist_.emplace_back(idx);
@@ -151,7 +159,7 @@ public:
         hot_[i].reset();
         cold_[i].reset();
         uint32_t g = gen_[i] + 1u;
-        if (g == 0u) g = 1u;
+        if (g == 0u || g > Handle::kMaxGeneration) g = 1u;
         gen_[i] = g;
         freelist_.emplace_back(i);
       }
@@ -165,7 +173,7 @@ public:
     for (uint32_t i = 0; i < gen_.size(); ++i) {
       if (!hot_[i].has_value()) continue;
       // Generate `Handle` on-the-fly.
-      Handle h { i, gen_[i] };
+      Handle h { i, gen_[i], ResourceType };
       f(h, *hot_[i], *cold_[i]);
     }
   }

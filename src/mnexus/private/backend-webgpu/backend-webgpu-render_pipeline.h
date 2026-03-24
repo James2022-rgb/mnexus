@@ -15,7 +15,7 @@ struct RenderPipelineHot final {
 struct RenderPipelineCold final {
 };
 
-using RenderPipelineResourcePool = container::TResourceGenerationalPool<RenderPipelineHot, RenderPipelineCold>;
+using RenderPipelineResourcePool = container::TResourceGenerationalPool<RenderPipelineHot, RenderPipelineCold, mnexus::kResourceTypeRenderPipeline>;
 
 /// Creates a `wgpu::RenderPipeline` from a `RenderPipelineCacheKey`.
 /// Looks up the program's pipeline layout and shader modules from the resource pools.

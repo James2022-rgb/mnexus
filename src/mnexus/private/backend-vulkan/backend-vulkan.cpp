@@ -69,13 +69,15 @@ public:
     mnexus::QueueId const& queue_id,
     mnexus::ICommandList* command_list
   ) {
-    auto* vk_cmd_list = static_cast<MnexusCommandListVulkan*>(command_list);
-    VkCommandBuffer cmd = vk_cmd_list->encoder().command_buffer();
+    auto* cmd_list_vk = static_cast<MnexusCommandListVulkan*>(command_list);
+    VkCommandBuffer vk_cb_handle = cmd_list_vk->encoder().command_buffer();
 
-    uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, cmd);
-    vk_device_->thread_command_pool_registry().FreeCommandBuffer(cmd, queue_id, serial);
+    uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, vk_cb_handle);
+    vk_device_->thread_command_pool_registry().FreeCommandBuffer(vk_cb_handle, queue_id, serial);
 
-    delete vk_cmd_list;
+    mbase::ArrayProxy<container::ResourceHandle const> referenced = cmd_list_vk->GetReferencedResources();
+
+    delete cmd_list_vk;
     return mnexus::IntraQueueSubmissionId { serial };
   }
 
@@ -104,24 +106,24 @@ public:
     StagingBuffer* staging = vk_device_->staging_buffer_pool().Acquire(data_size_in_bytes);
     if (staging == nullptr) {
       MBASE_LOG_ERROR("Failed to acquire staging buffer for QueueWriteBuffer");
-      return mnexus::IntraQueueSubmissionId{0};
+      return mnexus::IntraQueueSubmissionId { 0 };
     }
 
     std::memcpy(staging->mapped_data, data, data_size_in_bytes);
     vmaFlushAllocation(vk_device_->vma_allocator(), staging->allocation, 0, data_size_in_bytes);
 
-    VkCommandBuffer cmd = vk_device_->transient_command_pool().Acquire();
+    VkCommandBuffer vk_cb_handle = vk_device_->transient_command_pool().Acquire();
     VkBufferCopy region {
       .srcOffset = 0,
       .dstOffset = buffer_offset,
       .size = data_size_in_bytes,
     };
-    vkCmdCopyBuffer(cmd, staging->vk_buffer, hot.vk_buffer.handle(), 1, &region);
-    vkEndCommandBuffer(cmd);
+    vkCmdCopyBuffer(vk_cb_handle, staging->vk_buffer, hot.vk_buffer.handle(), 1, &region);
+    vkEndCommandBuffer(vk_cb_handle);
 
-    uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, cmd);
+    uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, vk_cb_handle);
 
-    vk_device_->transient_command_pool().Release(cmd, queue_id, serial);
+    vk_device_->transient_command_pool().Release(vk_cb_handle, queue_id, serial);
     vk_device_->staging_buffer_pool().Release(staging, queue_id, serial);
 
     return mnexus::IntraQueueSubmissionId { serial };
@@ -149,21 +151,21 @@ public:
     StagingBuffer* staging = vk_device_->staging_buffer_pool().Acquire(size_in_bytes);
     if (staging == nullptr) {
       MBASE_LOG_ERROR("Failed to acquire staging buffer for QueueReadBuffer");
-      return mnexus::IntraQueueSubmissionId{0};
+      return mnexus::IntraQueueSubmissionId { 0 };
     }
 
-    VkCommandBuffer cmd = vk_device_->transient_command_pool().Acquire();
+    VkCommandBuffer vk_cb_handle = vk_device_->transient_command_pool().Acquire();
     VkBufferCopy region {
       .srcOffset = buffer_offset,
       .dstOffset = 0,
       .size = size_in_bytes,
     };
-    vkCmdCopyBuffer(cmd, hot.vk_buffer.handle(), staging->vk_buffer, 1, &region);
-    vkEndCommandBuffer(cmd);
+    vkCmdCopyBuffer(vk_cb_handle, hot.vk_buffer.handle(), staging->vk_buffer, 1, &region);
+    vkEndCommandBuffer(vk_cb_handle);
 
-    uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, cmd);
+    uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, vk_cb_handle);
 
-    vk_device_->transient_command_pool().Release(cmd, queue_id, serial);
+    vk_device_->transient_command_pool().Release(vk_cb_handle, queue_id, serial);
 
     {
       mbase::LockGuard mtx_lock(pending_readbacks_mutex_);
@@ -203,9 +205,9 @@ public:
   IMPL_VAPI(mnexus::ICommandList*, CreateCommandList,
     mnexus::CommandListDesc const& /*desc*/
   ) {
-    VkCommandBuffer cmd = vk_device_->thread_command_pool_registry().AllocateCommandBuffer();
+    VkCommandBuffer vk_cb_handle = vk_device_->thread_command_pool_registry().AllocateCommandBuffer();
     return new MnexusCommandListVulkan(
-      CommandEncoder(cmd, vk_device_->handle(), descriptor_set_allocator_, resource_storage_),
+      CommandEncoder(vk_cb_handle, vk_device_->handle(), descriptor_set_allocator_, resource_storage_),
       resource_storage_
     );
   }
@@ -213,10 +215,10 @@ public:
   IMPL_VAPI(void, DiscardCommandList,
     mnexus::ICommandList* command_list
   ) {
-    auto* vk_cmd_list = static_cast<MnexusCommandListVulkan*>(command_list);
-    VkCommandBuffer cmd = vk_cmd_list->encoder().command_buffer();
-    vk_device_->thread_command_pool_registry().FreeCommandBuffer(cmd, {}, 0);
-    delete vk_cmd_list;
+    auto* cmd_list_vk = static_cast<MnexusCommandListVulkan*>(command_list);
+    VkCommandBuffer vk_cb_handle = cmd_list_vk->encoder().command_buffer();
+    vk_device_->thread_command_pool_registry().FreeCommandBuffer(vk_cb_handle, {}, 0);
+    delete cmd_list_vk;
   }
 
   // ----------------------------------------------------------------------------------------------

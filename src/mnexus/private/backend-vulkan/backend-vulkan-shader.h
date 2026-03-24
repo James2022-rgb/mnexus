@@ -41,7 +41,7 @@ struct ShaderModuleCold final {
   shader::ShaderModuleReflection reflection;
 };
 
-using ShaderModuleResourcePool = container::TResourceGenerationalPool<ShaderModuleHot, ShaderModuleCold>;
+using ShaderModuleResourcePool = container::TResourceGenerationalPool<ShaderModuleHot, ShaderModuleCold, mnexus::kResourceTypeShaderModule>;
 
 container::ResourceHandle EmplaceShaderModuleResourcePool(
   ShaderModuleResourcePool& out_pool,
@@ -107,7 +107,7 @@ struct ProgramCold final {
   mbase::SmallVector<mnexus::ShaderModuleHandle, 2> shader_module_handles;
 };
 
-using ProgramResourcePool = container::TResourceGenerationalPool<ProgramHot, ProgramCold>;
+using ProgramResourcePool = container::TResourceGenerationalPool<ProgramHot, ProgramCold, mnexus::kResourceTypeProgram>;
 
 container::ResourceHandle EmplaceProgramResourcePool(
   ProgramResourcePool& out_pool,
