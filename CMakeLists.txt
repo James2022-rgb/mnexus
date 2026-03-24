@@ -527,6 +527,12 @@ set(_sources_private_shader
 )
 source_group("Private/Shader" FILES ${_sources_private_shader})
 
+set(_natvis_dir "natvis")
+set(_natvis_files
+  ${_natvis_dir}/mnexus.natvis
+)
+source_group("Natvis Files" FILES ${_natvis_files})
+
 target_sources(${TARGET_NAME} PRIVATE
   ${_sources_public}
   ${_sources_public_container}
@@ -540,6 +546,7 @@ target_sources(${TARGET_NAME} PRIVATE
   ${_sources_private_pipeline}
   ${_sources_private_shader}
   ${_sources_private_sync}
+  ${_natvis_files}
 )
 
 # Fetch mbase from GitHub if not already provided by a parent project.

@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <!-- container::GenerationalHandle -->
+  <!-- Bit layout: [type:5][generation:27][index:32] -->
+  <Type Name="container::GenerationalHandle">
+    <DisplayString Condition="(value_ &amp; 0xFFFFFFFF) == 0xFFFFFFFF">null</DisplayString>
+    <DisplayString Condition="((value_ &gt;&gt; 59) &amp; 0x1F) == 1">Buffer #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <DisplayString Condition="((value_ &gt;&gt; 59) &amp; 0x1F) == 2">Texture #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <DisplayString Condition="((value_ &gt;&gt; 59) &amp; 0x1F) == 3">ShaderModule #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <DisplayString Condition="((value_ &gt;&gt; 59) &amp; 0x1F) == 4">Program #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <DisplayString Condition="((value_ &gt;&gt; 59) &amp; 0x1F) == 5">ComputePipeline #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <DisplayString Condition="((value_ &gt;&gt; 59) &amp; 0x1F) == 6">RenderPipeline #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <DisplayString Condition="((value_ &gt;&gt; 59) &amp; 0x1F) == 7">Sampler #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <DisplayString>type={((value_ &gt;&gt; 59) &amp; 0x1F)} #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <Expand>
+      <Item Name="[index]">(unsigned)(value_ &amp; 0xFFFFFFFF)</Item>
+      <Item Name="[generation]">(unsigned)((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)</Item>
+      <Item Name="[resource_type]">(unsigned char)((value_ &gt;&gt; 59) &amp; 0x1F)</Item>
+      <Item Name="[raw]">value_</Item>
+    </Expand>
+  </Type>
+
+  <!-- mnexus::BufferHandle, TextureHandle, etc. (TypesafeHandle wrapping MnResourceHandle) -->
+  <!-- These share the same bit layout as GenerationalHandle -->
+  <Type Name="mbase::TypesafeHandle&lt;mnexus::BufferHandleTag,*&gt;">
+    <DisplayString Condition="value_ == 0x00000000FFFFFFFF">null</DisplayString>
+    <DisplayString>Buffer #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <Expand>
+      <Item Name="[index]">(unsigned)(value_ &amp; 0xFFFFFFFF)</Item>
+      <Item Name="[generation]">(unsigned)((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)</Item>
+      <Item Name="[raw]">value_</Item>
+    </Expand>
+  </Type>
+  <Type Name="mbase::TypesafeHandle&lt;mnexus::TextureHandleTag,*&gt;">
+    <DisplayString Condition="value_ == 0x00000000FFFFFFFF">null</DisplayString>
+    <DisplayString>Texture #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <Expand>
+      <Item Name="[index]">(unsigned)(value_ &amp; 0xFFFFFFFF)</Item>
+      <Item Name="[generation]">(unsigned)((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)</Item>
+      <Item Name="[raw]">value_</Item>
+    </Expand>
+  </Type>
+  <Type Name="mbase::TypesafeHandle&lt;mnexus::ShaderModuleHandleTag,*&gt;">
+    <DisplayString Condition="value_ == 0x00000000FFFFFFFF">null</DisplayString>
+    <DisplayString>ShaderModule #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <Expand>
+      <Item Name="[index]">(unsigned)(value_ &amp; 0xFFFFFFFF)</Item>
+      <Item Name="[generation]">(unsigned)((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)</Item>
+      <Item Name="[raw]">value_</Item>
+    </Expand>
+  </Type>
+  <Type Name="mbase::TypesafeHandle&lt;mnexus::ProgramHandleTag,*&gt;">
+    <DisplayString Condition="value_ == 0x00000000FFFFFFFF">null</DisplayString>
+    <DisplayString>Program #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <Expand>
+      <Item Name="[index]">(unsigned)(value_ &amp; 0xFFFFFFFF)</Item>
+      <Item Name="[generation]">(unsigned)((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)</Item>
+      <Item Name="[raw]">value_</Item>
+    </Expand>
+  </Type>
+  <Type Name="mbase::TypesafeHandle&lt;mnexus::ComputePipelineHandleTag,*&gt;">
+    <DisplayString Condition="value_ == 0x00000000FFFFFFFF">null</DisplayString>
+    <DisplayString>ComputePipeline #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <Expand>
+      <Item Name="[index]">(unsigned)(value_ &amp; 0xFFFFFFFF)</Item>
+      <Item Name="[generation]">(unsigned)((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)</Item>
+      <Item Name="[raw]">value_</Item>
+    </Expand>
+  </Type>
+  <Type Name="mbase::TypesafeHandle&lt;mnexus::RenderPipelineHandleTag,*&gt;">
+    <DisplayString Condition="value_ == 0x00000000FFFFFFFF">null</DisplayString>
+    <DisplayString>RenderPipeline #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <Expand>
+      <Item Name="[index]">(unsigned)(value_ &amp; 0xFFFFFFFF)</Item>
+      <Item Name="[generation]">(unsigned)((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)</Item>
+      <Item Name="[raw]">value_</Item>
+    </Expand>
+  </Type>
+  <Type Name="mbase::TypesafeHandle&lt;mnexus::SamplerHandleTag,*&gt;">
+    <DisplayString Condition="value_ == 0x00000000FFFFFFFF">null</DisplayString>
+    <DisplayString>Sampler #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <Expand>
+      <Item Name="[index]">(unsigned)(value_ &amp; 0xFFFFFFFF)</Item>
+      <Item Name="[generation]">(unsigned)((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)</Item>
+      <Item Name="[raw]">value_</Item>
+    </Expand>
+  </Type>
+</AutoVisualizer>
