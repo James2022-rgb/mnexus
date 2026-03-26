@@ -23,6 +23,10 @@ struct ComputePipelineHot final {
   VulkanComputePipeline vk_compute_pipeline;
   VkPipelineLayout vk_pipeline_layout = VK_NULL_HANDLE; // Non-owning; kept alive by the pipeline layout cache.
   VulkanPipelineLayoutPtr pipeline_layout_ref;           // Shared ownership — keeps DSLs alive.
+
+  void Stamp(uint32_t queue_compact_index, uint64_t serial) {
+    vk_compute_pipeline.sync_stamp().Stamp(queue_compact_index, serial);
+  }
 };
 
 struct ComputePipelineCold final {

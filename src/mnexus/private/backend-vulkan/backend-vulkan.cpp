@@ -75,7 +75,12 @@ public:
     uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, vk_cb_handle);
     vk_device_->thread_command_pool_registry().FreeCommandBuffer(vk_cb_handle, queue_id, serial);
 
+    uint32_t const queue_compact_index = *vk_device_->queue_index_map().Find(queue_id);
+
     mbase::ArrayProxy<container::ResourceHandle const> referenced = cmd_list_vk->GetReferencedResources();
+    for (container::ResourceHandle const& handle : referenced) {
+      resource_storage_->StampResourceUse(handle, queue_compact_index, serial);
+    }
 
     delete cmd_list_vk;
     return mnexus::IntraQueueSubmissionId { serial };

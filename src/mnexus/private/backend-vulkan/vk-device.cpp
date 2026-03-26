@@ -472,10 +472,37 @@ std::unique_ptr<VulkanDevice> VulkanDevice::Create(
 
 void VulkanDevice::EnqueueDestroy(
   std::function<void()> destroy_func,
-  ResourceSyncStamp::Snapshot /*snapshot*/
+  ResourceSyncStamp::Snapshot snapshot
 ) {
-  // TODO: Check completed serials against snapshot and defer if needed.
-  destroy_func();
+  if (snapshot.used_mask == 0) {
+    // No queues were involved in using this resource, so we can destroy immediately.
+    destroy_func();
+    return;
+  }
+
+  // Check if all queues that used this resource have passed the recorded last used serial.
+  bool completed = true;
+  for (uint32_t index = 0; index < kMaxQueues; ++index) {
+    if ((snapshot.used_mask & (1u << index)) != 0) {
+      uint64_t const last_used = snapshot.last_used[index];
+
+      uint64_t completed_value = 0;
+      vkGetSemaphoreCounterValueKHR(handle_, queue_states_[index].timeline_semaphore, &completed_value);
+
+      if (completed_value < last_used) {
+        completed = false;
+        break;
+      }
+    }
+  }
+
+  if (completed) {
+    destroy_func();
+  }
+  else {
+    // FIXME: Enqueue into a deferred destroy queue to be processed some time in the future (e.g. every frame or every few frames).
+    mbase::Trap();
+  }
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -485,9 +512,9 @@ void VulkanDevice::EnqueueDestroy(
 uint64_t VulkanDevice::QueueGetCompletedValue(mnexus::QueueId const& queue_id) {
   RESOLVE_QUEUE_INDEX(index, queue_id);
 
-  uint64_t value = 0;
-  vkGetSemaphoreCounterValueKHR(handle_, queue_states_[index].timeline_semaphore, &value);
-  return value;
+  uint64_t completed_value = 0;
+  vkGetSemaphoreCounterValueKHR(handle_, queue_states_[index].timeline_semaphore, &completed_value);
+  return completed_value;
 }
 
 // ----------------------------------------------------------------------------------------------------

@@ -35,6 +35,10 @@ public:
 
 struct ShaderModuleHot final {
   VulkanShaderModule vk_shader_module;
+
+  void Stamp(uint32_t queue_compact_index, uint64_t serial) {
+    vk_shader_module.sync_stamp().Stamp(queue_compact_index, serial);
+  }
 };
 
 struct ShaderModuleCold final {
@@ -100,7 +104,10 @@ using VulkanPipelineLayoutPtr = std::shared_ptr<VulkanPipelineLayout>;
 struct ProgramHot final {
   VkPipelineLayout vk_pipeline_layout = VK_NULL_HANDLE; // Non-owning; kept alive by the cache.
   VulkanPipelineLayoutPtr pipeline_layout_ref;           // Shared ownership with the cache.
-  ResourceSyncStamp sync_stamp;
+
+  void Stamp(uint32_t queue_compact_index, uint64_t serial) {
+    pipeline_layout_ref->sync_stamp().Stamp(queue_compact_index, serial);
+  }
 };
 
 struct ProgramCold final {

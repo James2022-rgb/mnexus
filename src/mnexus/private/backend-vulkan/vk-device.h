@@ -71,6 +71,8 @@ public:
   TransientCommandPool& transient_command_pool() { return transient_command_pool_; }
   ThreadCommandPoolRegistry& thread_command_pool_registry() { return thread_command_pool_registry_; }
 
+  QueueIndexMap const& queue_index_map() const { return queue_index_map_; }
+
   // IVulkanDeferredDestroyer
   void EnqueueDestroy(
     std::function<void()> destroy_func,

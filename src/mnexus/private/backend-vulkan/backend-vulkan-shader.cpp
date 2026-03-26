@@ -203,7 +203,6 @@ container::ResourceHandle EmplaceProgramResourcePool(
   ProgramHot hot {
     .vk_pipeline_layout = pipeline_layout_ptr->handle(),
     .pipeline_layout_ref = pipeline_layout_ptr,
-    .sync_stamp {},
   };
 
   ProgramCold cold {};
