@@ -3,7 +3,10 @@
 // c++ headers ------------------------------------------
 #include <atomic>
 
+#include <functional>
 #include <memory>
+#include <mutex>
+#include <vector>
 
 // public project headers -------------------------------
 #include "mbase/public/accessor.h"
@@ -118,6 +121,18 @@ private:
   StagingBufferPool staging_buffer_pool_;
   TransientCommandPool transient_command_pool_;
   ThreadCommandPoolRegistry thread_command_pool_registry_;
+
+  // Deferred destruction queue.
+  struct PendingDestroy {
+    std::function<void()> destroy_func;
+    ResourceSyncStamp::Snapshot snapshot;
+  };
+
+  void EnqueuePendingDestroy(std::function<void()> destroy_func, ResourceSyncStamp::Snapshot snapshot);
+  void ProcessPendingDestroys();
+
+  mbase::Lockable<std::mutex> pending_destroys_mutex_;
+  std::vector<PendingDestroy> pending_destroys_ MBASE_GUARDED_BY(pending_destroys_mutex_);
 };
 
 } // namespace mnexus_backend::vulkan

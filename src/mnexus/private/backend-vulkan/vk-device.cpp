@@ -498,10 +498,50 @@ void VulkanDevice::EnqueueDestroy(
 
   if (completed) {
     destroy_func();
+  } else {
+    this->EnqueuePendingDestroy(std::move(destroy_func), snapshot);
   }
-  else {
-    // FIXME: Enqueue into a deferred destroy queue to be processed some time in the future (e.g. every frame or every few frames).
-    mbase::Trap();
+}
+
+void VulkanDevice::EnqueuePendingDestroy(
+  std::function<void()> destroy_func,
+  ResourceSyncStamp::Snapshot snapshot
+) {
+  mbase::LockGuard lock(pending_destroys_mutex_);
+  pending_destroys_.emplace_back(
+    PendingDestroy {
+      .destroy_func = std::move(destroy_func),
+      .snapshot = snapshot,
+    }
+  );
+}
+
+void VulkanDevice::ProcessPendingDestroys() {
+  mbase::LockGuard lock(pending_destroys_mutex_);
+
+  for (size_t i = 0; i < pending_destroys_.size(); ) {
+    PendingDestroy& entry = pending_destroys_[i];
+
+    bool completed = true;
+    for (uint32_t qi = 0; qi < kMaxQueues; ++qi) {
+      if ((entry.snapshot.used_mask & (1u << qi)) != 0) {
+        uint64_t completed_value = 0;
+        vkGetSemaphoreCounterValueKHR(handle_, queue_states_[qi].timeline_semaphore, &completed_value);
+        if (completed_value < entry.snapshot.last_used[qi]) {
+          completed = false;
+          break;
+        }
+      }
+    }
+
+    if (completed) {
+      entry.destroy_func();
+      // Swap with last and pop (order doesn't matter).
+      entry = std::move(pending_destroys_.back());
+      pending_destroys_.pop_back();
+    } else {
+      ++i;
+    }
   }
 }
 
@@ -538,6 +578,8 @@ void VulkanDevice::QueueWaitSubmitSerial(mnexus::QueueId const& queue_id, uint64
     .pValues = &value,
   };
   vkWaitSemaphoresKHR(handle_, &wait_info, UINT64_MAX);
+
+  this->ProcessPendingDestroys();
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -558,7 +600,11 @@ uint64_t VulkanDevice::QueueWaitIdle(mnexus::QueueId const& queue_id) {
 
 uint64_t VulkanDevice::QueueAdvanceTimeline(mnexus::QueueId const& queue_id) {
   RESOLVE_QUEUE_INDEX(index, queue_id);
-  return queue_states_[index].next_submit_serial.fetch_add(1, std::memory_order_acq_rel);
+  uint64_t const serial = queue_states_[index].next_submit_serial.fetch_add(1, std::memory_order_acq_rel);
+
+  this->ProcessPendingDestroys();
+
+  return serial;
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -604,6 +650,8 @@ uint64_t VulkanDevice::QueueSubmitSingle(mnexus::QueueId const& queue_id, VkComm
     MBASE_LOG_ERROR("vkQueueSubmit2KHR failed: {}", string_VkResult(result));
   }
 
+  this->ProcessPendingDestroys();
+
   return serial;
 }
 
@@ -612,6 +660,13 @@ uint64_t VulkanDevice::QueueSubmitSingle(mnexus::QueueId const& queue_id, VkComm
 //
 
 void VulkanDevice::Shutdown() {
+  if (handle_ != VK_NULL_HANDLE) {
+    vkDeviceWaitIdle(handle_);
+  }
+
+  this->ProcessPendingDestroys();
+  MBASE_ASSERT_MSG(pending_destroys_.empty(), "Pending destroys remain after device idle (count: {})", pending_destroys_.size());
+
   thread_command_pool_registry_.Shutdown();
   transient_command_pool_.Shutdown();
   staging_buffer_pool_.Shutdown();
