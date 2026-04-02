@@ -25,6 +25,7 @@ When adding source files to `CMakeLists.txt`, list them in alphabetical order wi
 
 Key CMake options:
 - `MNEXUS_ENABLE_BACKEND_WGPU` - Enable WebGPU backend (default: ON)
+- `MNEXUS_ENABLE_BACKEND_VULKAN` - Enable Vulkan backend (default: ON, ignored on Emscripten). Requires `VULKAN_SDK` environment variable
 - `MNEXUS_ENABLE_DAWN` - Enable Dawn for WebGPU on native platforms (default: ON, ignored on Emscripten)
 - `MNEXUS_ENABLE_TINT_ON_WEB` - Enable Tint SPIR-V to WGSL conversion on Emscripten (default: ON)
 - `MNEXUS_BUILD_TESTS` - Build test executables (default: OFF)
@@ -35,14 +36,18 @@ Compiler warnings: `-Wall -Wextra -Werror` (GCC/Clang), `/W4` (MSVC). Thread-saf
 
 ## Architecture
 
-mnexus is a graphics abstraction layer providing a unified API over WebGPU (via Dawn on native platforms, or native WebGPU on Emscripten/Web). Additional backends under consideration: Vulkan (primary), DX12 (secondary).
+mnexus is a graphics abstraction layer providing a unified API over WebGPU (via Dawn on native platforms, or native WebGPU on Emscripten/Web) and Vulkan. The WebGPU backend is fully implemented. The Vulkan backend has substantial low-level infrastructure (device, queues, timeline semaphores, VMA memory allocation, command pools, descriptor sets, staging buffers) but most `IDevice` facade methods are still stubbed (`STUB_NOT_IMPLEMENTED`).
 
 ### Core Interfaces (`src/mnexus/public/mnexus.h`)
 
-- `INexus` - Main entry point for surface lifecycle, presentation, and device access
-- `IDevice` - Resource creation (buffers, textures, shaders, programs, pipelines, layouts) and command submission
-- `ICommandList` - Command recording for render, compute, and transfer operations. Exposes `GetStateEventLog()` for per-command-list PSO diagnostics
+- `INexus` - Main entry point; static `Create()` / `Destroy()`, surface lifecycle, presentation, and device access. `EnumerateBackends()` returns available backends at runtime
+- `IDevice` - Resource creation (buffers, textures, samplers, shaders, programs, pipelines) and command submission. Provides queue operations (`QueueSubmitCommandList`, `QueueWriteBuffer`, `QueueReadBuffer`, `QueueWaitIdle`), device capabilities (`GetAdapterCapability`, `GetClipSpaceConvention`, `GetAdapterInfo`), and PSO cache diagnostics (`GetRenderPipelineCacheSnapshot`)
+- `ICommandList` - Command recording for render, compute, and transfer operations. Thread-affine (all recording must happen on the creating thread). Supports debug markers (`PushDebugGroup` / `PopDebugGroup`), explicit pipeline binding, auto-generation render state setters, and `GetStateEventLog()` for per-command-list PSO diagnostics
 - `Texture` - RAII wrapper around texture handles
+
+### Public Utility (`src/mnexus/public/container/array_proxy.h`)
+
+`ArrayProxy<T>` - Non-owning span-like view used throughout the public API for passing arrays without requiring a specific container type. Constructible from raw pointer+count, `std::vector`, `std::array`, `std::span`, and `std::initializer_list`.
 
 Public API methods should be documented with `///` doc comments. Use RFC 2119 keywords (MUST, MUST NOT, SHOULD, MAY, etc.) to state normative requirements on each parameter. These constraints define the API contract that all backend implementations must satisfy. See `CopyBufferToTexture` / `CopyTextureToBuffer` for reference.
 
@@ -112,26 +117,59 @@ log.Clear();
   - `RenderPipelineCacheKey` - Hashable key combining program, vertex layout, fixed-function state, and render target formats
   - `PerDrawFixedFunctionStaticState` / `PerAttachmentFixedFunctionStaticState` - Packed uint8 structs for fast memcmp/memhash
   - `RenderStateEventLog` (impl) - Implementation of the public `RenderStateEventLog` class
-- `builtin_shader/` - Embedded SPIR-V for internal operations (blit, buffer row repack, full-screen quad)
-- `backend-iface/` - Abstract backend interface (`IBackend`)
+- `builtin_shader/` - Slang source files and pre-compiled SPIR-V (+ C header embeddings) for internal operations: blit, buffer row repack, full-screen quad
+- `backend-iface/` - Abstract backend interface (`IBackend`): surface lifecycle, presentation, and device access
 - `backend-webgpu/` - WebGPU implementation
-  - `backend-webgpu.cpp/.h` - Main backend: `IBackendWebGpu`, `MnexusDeviceWebGpu`, `MnexusCommandListWebGpu`
+  - `backend-webgpu.cpp/.h` - Main backend: `IBackendWebGpu`, `MnexusDeviceWebGpu`
+  - `backend-webgpu-binding.cpp/.h` - Bind group flush and invalidation
   - `backend-webgpu-buffer.cpp/.h` - Buffer resource pool (`BufferHot`, `BufferCold`)
-  - `backend-webgpu-texture.cpp/.h` - Texture resource pool (`TextureHot`, `TextureCold`)
-  - `backend-webgpu-shader.cpp/.h` - Shader module and program resource pools; SPIR-V to WGSL conversion via Tint
+  - `backend-webgpu-command_list.cpp/.h` - `MnexusCommandListWebGpu` recording implementation
   - `backend-webgpu-compute_pipeline.cpp/.h` - Compute pipeline resource pool
   - `backend-webgpu-layout.cpp/.h` - BindGroupLayout and PipelineLayout resource pools
+  - `backend-webgpu-render_pipeline.cpp/.h` - Render pipeline creation and cache integration
+  - `backend-webgpu-shader.cpp/.h` - Shader module and program resource pools; SPIR-V to WGSL conversion via Tint
+  - `backend-webgpu-texture.cpp/.h` - Texture resource pool (`TextureHot`, `TextureCold`)
+  - `blit_texture.cpp/.h` - GPU-based texture blit using built-in full-screen quad + sampling shaders
+  - `buffer_row_repack.cpp/.h` - Compute-shader based buffer row repacking for WebGPU's 256-byte `bytesPerRow` alignment
+  - `builtin_shader.cpp/.h` - Runtime loader for embedded SPIR-V from `builtin_shader/`
+  - `shader_module.cpp/.h` - Shader module management (SPIR-V storage, WGSL conversion)
   - `types_bridge.cpp/.h` - Conversion between mnexus types and wgpu types
   - `include_dawn.h` - Platform-appropriate WebGPU header inclusion
   - `webgpu_cpp_print.h` - `operator<<` for wgpu types (debug output)
   - `webgpu_format.h` - spdlog formatter specializations for wgpu types
+- `backend-vulkan/` - Vulkan implementation (infrastructure largely in place; `IDevice` facade mostly stubbed)
+  - `backend-vulkan.cpp/.h` - Main backend: `IBackendVulkan`, `MnexusDeviceVulkan`
+  - `backend-vulkan-buffer.cpp/.h` - Buffer resource management with VMA
+  - `backend-vulkan-command_list.cpp/.h` - `MnexusCommandListVulkan` recording implementation
+  - `backend-vulkan-compute_pipeline.cpp/.h` - Compute pipeline
+  - `backend-vulkan-shader.cpp/.h` - Shader module management
+  - `backend-vulkan-texture.cpp/.h` - Texture resource management
+  - `command_encoder.cpp/.h` - Vulkan command buffer encoder
+  - `descriptor_set_allocator.cpp/.h` - Descriptor set pool allocation
+  - `descriptor_set_binder.cpp/.h` - Descriptor set binding state
+  - `descriptor_set_write.cpp/.h` - Descriptor set update writes
+  - `resource_storage.cpp/.h` - Centralized resource storage with per-resource use tracking
+  - `shader_module.cpp/.h` - SPIR-V shader module wrapper
+  - `thread_command_pool.cpp/.h` - Per-thread command pool registry
+  - `vk-device.cpp/.h` - `VulkanDevice`: logical device, queue management, timeline semaphores, VMA allocator
+  - `vk-deferred_destroyer.h` - Interface for deferred GPU resource destruction
+  - `vk-instance.cpp/.h` - Vulkan instance and debug messenger
+  - `vk-object.h` - Vulkan object handle wrapper
+  - `vk-physical_device.cpp/.h` - Physical device selection and queue family enumeration
+  - `vk-staging.cpp/.h` - Staging buffer pool for CPU-to-GPU transfers
+  - `vk-wsi_surface.cpp/.h` - WSI surface creation (Win32, Android, etc.)
+  - `depend/` - Vulkan header includes (`vulkan.h`, `vulkan_fwd.h`) and VMA integration (`vulkan_vma.cpp/.h`)
 
-### Shader Reflection (`src/mnexus/private/shader/`)
+### Shader Reflection and Conversion (`src/mnexus/private/shader/`)
 
 SPIR-V shader introspection via SPIRV-Reflect:
 
-- `ShaderModuleReflection` - Reflects a single SPIR-V module into `BindGroupLayout` / `BindGroupLayoutEntry` structures (sorted by set/binding). Each entry records type, count, and `writable` flag (from the `NonWritable` SPIR-V decoration).
-- `MergedPipelineLayout` - Incrementally merges bind group layouts from multiple shader modules (e.g., vertex + fragment). Detects conflicting bindings (same set/binding but different type/count) and OR-merges the `writable` flag.
+- `ShaderModuleReflection` (`reflection.cpp/.h`) - Reflects a single SPIR-V module into `BindGroupLayout` / `BindGroupLayoutEntry` structures (sorted by set/binding). Each entry records type, count, and `writable` flag (from the `NonWritable` SPIR-V decoration).
+- `MergedPipelineLayout` (`reflection.cpp/.h`) - Incrementally merges bind group layouts from multiple shader modules (e.g., vertex + fragment). Detects conflicting bindings (same set/binding but different type/count) and OR-merges the `writable` flag.
+
+SPIR-V to WGSL conversion via Tint (required for WebGPU, which only accepts WGSL):
+
+- `wgsl.cpp/.h` - `ConvertSpirvToWgsl()` wrapper around Tint's SPIR-V reader. Enabled by `MNEXUS_INTERNAL_USE_TINT` (set when Dawn or `MNEXUS_ENABLE_TINT_ON_WEB` is active). `InitializeWgslConverter()` / `ShutdownWgslConverter()` manage Tint's global state.
 
 ### Resource Management (`src/mnexus/private/container/`)
 
@@ -190,6 +228,10 @@ Test targets are grouped under the `mnexus/tests` solution folder in Visual Stud
 
 Commits to `master` must not break existing tests. If a change includes a breaking API change, the same commit must update all affected tests so that they build and run successfully.
 
+### Synchronization (`src/mnexus/private/sync/`)
+
+- `ResourceSync` (`resource_sync.cpp/.h`) - Queue timeline management. Tracks per-queue submission serials and provides helpers for cross-queue resource synchronization.
+
 ### Dependencies
 
 - `mbase` - Base utilities (logging, assertions, `SmallVector`, `ArrayProxy`, thread safety annotations, platform detection, `BitFlags`)
@@ -198,3 +240,6 @@ Commits to `master` must not break existing tests. If a change includes a breaki
   - To skip ANGLE (not needed for WebGPU): set `submodule.third_party/angle.update none` in **Dawn's** local git config, then run `GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= git submodule update --recursive`.
   - Fork (Git client): "Update submodules after checkout" should be OFF to avoid automatic submodule updates on branch switch.
 - `thirdparty/SPIRV-Reflect` - SPIR-V reflection library for extracting bind group layouts and decorations from shader modules
+- `thirdparty/VulkanMemoryAllocator` - AMD VMA for Vulkan GPU memory allocation (Vulkan backend only)
+- `volk` - Vulkan meta-loader for dynamic function dispatch (Vulkan backend only; linked but not vendored via `add_subdirectory` yet -- see TODO in `CMakeLists.txt`)
+- `VULKAN_SDK` (environment variable) - Required for Vulkan backend builds; provides Vulkan headers
