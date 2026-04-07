@@ -12,7 +12,7 @@
 #include "mbase/public/access.h"
 #include "mbase/public/assert.h"
 
-namespace container {
+namespace resource_pool {
 
 // Bit layout: [type:5][generation:27][index:32]
 struct GenerationalHandle {
@@ -199,4 +199,4 @@ private:
   uint32_t live_count_ = 0;
 };
 
-} // namespace container
+} // namespace resource_pool

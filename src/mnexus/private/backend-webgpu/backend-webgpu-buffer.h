@@ -7,7 +7,7 @@
 #include "mnexus/public/types.h"
 
 // project headers --------------------------------------
-#include "container/resource_generational_pool.h"
+#include "resource_pool/resource_generational_pool.h"
 #include "backend-webgpu/include_dawn.h"
 
 namespace mnexus_backend::webgpu {
@@ -19,7 +19,7 @@ struct BufferCold final {
   mnexus::BufferDesc desc;
 };
 
-using BufferResourcePool = container::TResourceGenerationalPool<BufferHot, BufferCold, mnexus::kResourceTypeBuffer>;
+using BufferResourcePool = resource_pool::TResourceGenerationalPool<BufferHot, BufferCold, mnexus::kResourceTypeBuffer>;
 
 /// ## Remarks
 /// WebGPU requires that buffers with map read or map write access have a size

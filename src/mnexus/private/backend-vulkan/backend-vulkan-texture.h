@@ -4,7 +4,9 @@
 #include "mnexus/public/types.h"
 
 // project headers --------------------------------------
-#include "container/resource_generational_pool.h"
+#include "resource_pool/resource_generational_pool.h"
+
+#include "backend-vulkan/vk-object.h"
 
 namespace mnexus_backend::vulkan {
 
@@ -15,6 +17,6 @@ struct TextureCold final {
   mnexus::TextureDesc desc;
 };
 
-using TextureResourcePool = container::TResourceGenerationalPool<TextureHot, TextureCold, mnexus::kResourceTypeTexture>;
+using TextureResourcePool = resource_pool::TResourceGenerationalPool<TextureHot, TextureCold, mnexus::kResourceTypeTexture>;
 
 } // namespace mnexus_backend::vulkan

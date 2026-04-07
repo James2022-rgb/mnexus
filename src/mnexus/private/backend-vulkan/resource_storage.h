@@ -6,7 +6,7 @@
 #include "mnexus/public/types.h"
 
 // project headers --------------------------------------
-#include "container/resource_generational_pool.h"
+#include "resource_pool/resource_generational_pool.h"
 
 #include "backend-vulkan/backend-vulkan-buffer.h"
 #include "backend-vulkan/backend-vulkan-shader.h"
@@ -23,7 +23,7 @@ struct ResourceStorage final {
   pipeline::TPipelineLayoutCache<VulkanPipelineLayoutPtr> pipeline_layout_cache;
 
   /// Stamp a resource's sync stamp to record that it was used in a GPU submission.
-  void StampResourceUse(container::ResourceHandle handle, uint32_t queue_compact_index, uint64_t serial) {
+  void StampResourceUse(resource_pool::ResourceHandle handle, uint32_t queue_compact_index, uint64_t serial) {
     switch (handle.resource_type()) {
     case mnexus::kResourceTypeBuffer: {
       auto& hot = buffers.LockSharedAndGetRefHot(handle);

@@ -10,7 +10,7 @@
 #include "mnexus/public/render_state_event_log.h"
 
 // project headers --------------------------------------
-#include "container/resource_generational_pool.h"
+#include "resource_pool/resource_generational_pool.h"
 
 #include "backend-vulkan/command_encoder.h"
 
@@ -24,7 +24,7 @@ public:
   ~MnexusCommandListVulkan() override = default;
 
   [[nodiscard]] CommandEncoder& encoder() { return encoder_; }
-  [[nodiscard]] mbase::ArrayProxy<container::ResourceHandle const> GetReferencedResources() const { return referenced_resources_; }
+  [[nodiscard]] mbase::ArrayProxy<resource_pool::ResourceHandle const> GetReferencedResources() const { return referenced_resources_; }
 
   // --------------------------------------------------------------------------------------------------
   // mnexus::ICommandList implementation
@@ -230,7 +230,7 @@ public:
 private:
   CommandEncoder encoder_;
   ResourceStorage* resource_storage_ = nullptr;
-  std::vector<container::ResourceHandle> referenced_resources_;
+  std::vector<resource_pool::ResourceHandle> referenced_resources_;
   mnexus::RenderStateEventLog render_state_event_log_;
 };
 

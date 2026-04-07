@@ -53,20 +53,20 @@ bool CreateVulkanComputePipeline(
   return true;
 }
 
-container::ResourceHandle EmplaceComputePipelineResourcePool(
+resource_pool::ResourceHandle EmplaceComputePipelineResourcePool(
   ComputePipelineResourcePool& out_pool,
   VulkanDevice const& vk_device,
   mnexus::ProgramHandle program_handle,
   ProgramResourcePool const& program_pool,
   ShaderModuleResourcePool const& shader_module_pool
 ) {
-  auto const program_pool_handle = container::ResourceHandle::FromU64(program_handle.Get());
+  auto const program_pool_handle = resource_pool::ResourceHandle::FromU64(program_handle.Get());
   auto [program_hot, program_cold, program_lock] = program_pool.GetConstRefWithSharedLockGuard(
     program_pool_handle
   );
 
   mnexus::ShaderModuleHandle const shader_module_handle = program_cold.shader_module_handles[0];
-  auto const shader_module_pool_handle = container::ResourceHandle::FromU64(shader_module_handle.Get());
+  auto const shader_module_pool_handle = resource_pool::ResourceHandle::FromU64(shader_module_handle.Get());
 
   auto [shader_module_hot, shader_module_lock] = shader_module_pool.GetHotConstRefWithSharedLockGuard(
     shader_module_pool_handle
@@ -80,7 +80,7 @@ container::ResourceHandle EmplaceComputePipelineResourcePool(
     *program_hot.pipeline_layout_ref.get()
   );
   if (!success) {
-    return container::ResourceHandle::Null();
+    return resource_pool::ResourceHandle::Null();
   }
 
   ComputePipelineHot hot {

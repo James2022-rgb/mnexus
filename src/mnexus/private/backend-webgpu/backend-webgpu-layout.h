@@ -6,7 +6,7 @@
 #include "mnexus/public/types.h"
 
 // project headers --------------------------------------
-#include "container/resource_generational_pool.h"
+#include "resource_pool/resource_generational_pool.h"
 #include "backend-webgpu/include_dawn.h"
 
 namespace mnexus_backend::webgpu {

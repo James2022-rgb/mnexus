@@ -22,7 +22,7 @@
 
 #include "binding/state_tracker.h"
 
-#include "container/generational_pool.h"
+#include "resource_pool/generational_pool.h"
 
 #include "pipeline/pipeline_layout_cache.h"
 #include "pipeline/render_pipeline_cache.h"
@@ -46,7 +46,7 @@ struct ResourceStorage final {
   pipeline::TRenderPipelineCache<wgpu::RenderPipeline> render_pipeline_cache;
 
   std::mutex swapchain_texture_mutex; // Protects `TextureHot` and `TextureCold`.
-  container::ResourceHandle swapchain_texture_handle = container::ResourceHandle::Null(); // Not protected; set only during initialization.
+  resource_pool::ResourceHandle swapchain_texture_handle = resource_pool::ResourceHandle::Null(); // Not protected; set only during initialization.
 };
 
 class MnexusCommandListWebGpu : public mnexus::ICommandList {

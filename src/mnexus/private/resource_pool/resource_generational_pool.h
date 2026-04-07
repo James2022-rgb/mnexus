@@ -9,11 +9,11 @@
 #include "mbase/public/tsa.h"
 
 // project headers --------------------------------------
-#include "container/generational_pool.h"
+#include "resource_pool/generational_pool.h"
 
-namespace container {
+namespace resource_pool {
 
-using ResourceHandle = container::GenerationalHandle;
+using ResourceHandle = resource_pool::GenerationalHandle;
 
 template<class THot, class TCold, uint8_t ResourceType = 0>
 class TResourceGenerationalPool {
@@ -108,7 +108,7 @@ public:
 
 private:
   mbase::SharedLockable<std::shared_mutex> mutable mutex_;
-  container::GenerationalPool<THot, TCold, ResourceType> inner_;
+  resource_pool::GenerationalPool<THot, TCold, ResourceType> inner_;
 };
 
-} // namespace container
+} // namespace resource_pool

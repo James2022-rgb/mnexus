@@ -7,7 +7,7 @@
 #include "mnexus/public/types.h"
 
 // project headers --------------------------------------
-#include "container/resource_generational_pool.h"
+#include "resource_pool/resource_generational_pool.h"
 #include "backend-webgpu/include_dawn.h"
 
 namespace mnexus_backend::webgpu {
@@ -20,7 +20,7 @@ struct TextureCold final {
   mnexus::TextureDesc desc;
 };
 
-using TextureResourcePool = container::TResourceGenerationalPool<TextureHot, TextureCold, mnexus::kResourceTypeTexture>;
+using TextureResourcePool = resource_pool::TResourceGenerationalPool<TextureHot, TextureCold, mnexus::kResourceTypeTexture>;
 
 wgpu::TextureViewDescriptor MakeWgpuTextureViewDesc(
   wgpu::TextureFormat wgpu_texture_format,

@@ -1,7 +1,7 @@
 #pragma once
 
 // project headers --------------------------------------
-#include "container/resource_generational_pool.h"
+#include "resource_pool/resource_generational_pool.h"
 #include "backend-webgpu/include_dawn.h"
 #include "backend-webgpu/backend-webgpu-shader.h"
 
@@ -15,7 +15,7 @@ struct RenderPipelineHot final {
 struct RenderPipelineCold final {
 };
 
-using RenderPipelineResourcePool = container::TResourceGenerationalPool<RenderPipelineHot, RenderPipelineCold, mnexus::kResourceTypeRenderPipeline>;
+using RenderPipelineResourcePool = resource_pool::TResourceGenerationalPool<RenderPipelineHot, RenderPipelineCold, mnexus::kResourceTypeRenderPipeline>;
 
 /// Creates a `wgpu::RenderPipeline` from a `RenderPipelineCacheKey`.
 /// Looks up the program's pipeline layout and shader modules from the resource pools.

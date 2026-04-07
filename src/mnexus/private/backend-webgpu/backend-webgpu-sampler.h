@@ -4,7 +4,7 @@
 #include "mnexus/public/types.h"
 
 // project headers --------------------------------------
-#include "container/resource_generational_pool.h"
+#include "resource_pool/resource_generational_pool.h"
 #include "backend-webgpu/include_dawn.h"
 
 namespace mnexus_backend::webgpu {
@@ -16,6 +16,6 @@ struct SamplerCold final {
   mnexus::SamplerDesc desc;
 };
 
-using SamplerResourcePool = container::TResourceGenerationalPool<SamplerHot, SamplerCold, mnexus::kResourceTypeSampler>;
+using SamplerResourcePool = resource_pool::TResourceGenerationalPool<SamplerHot, SamplerCold, mnexus::kResourceTypeSampler>;
 
 } // namespace mnexus_backend::webgpu

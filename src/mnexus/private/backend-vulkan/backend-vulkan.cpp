@@ -12,7 +12,7 @@
 #include "mbase/public/tsa.h"
 
 // project headers --------------------------------------
-#include "container/generational_pool.h"
+#include "resource_pool/generational_pool.h"
 
 #include "impl/impl_macros.h"
 
@@ -77,8 +77,8 @@ public:
 
     uint32_t const queue_compact_index = *vk_device_->queue_index_map().Find(queue_id);
 
-    mbase::ArrayProxy<container::ResourceHandle const> referenced = cmd_list_vk->GetReferencedResources();
-    for (container::ResourceHandle const& handle : referenced) {
+    mbase::ArrayProxy<resource_pool::ResourceHandle const> referenced = cmd_list_vk->GetReferencedResources();
+    for (resource_pool::ResourceHandle const& handle : referenced) {
       resource_storage_->StampResourceUse(handle, queue_compact_index, serial);
     }
 
@@ -93,7 +93,7 @@ public:
     void const* data,
     uint32_t data_size_in_bytes
   ) {
-    auto const pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
     auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
 
     if (hot.mapped_data != nullptr) {
@@ -141,7 +141,7 @@ public:
     void* dst,
     uint32_t size_in_bytes
   ) {
-    auto const pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
     auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
 
     if (hot.mapped_data != nullptr) {
@@ -233,7 +233,7 @@ public:
   IMPL_VAPI(mnexus::BufferHandle, CreateBuffer,
     mnexus::BufferDesc const& desc
   ) {
-    container::ResourceHandle const pool_handle = EmplaceBufferResourcePool(
+    resource_pool::ResourceHandle const pool_handle = EmplaceBufferResourcePool(
       resource_storage_->buffers,
       *vk_device_,
       desc
@@ -250,7 +250,7 @@ public:
     mnexus::BufferHandle buffer_handle
   ) {
     // FIXME: Should defer destruction until the GPU is done using this buffer.
-    auto const pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
     resource_storage_->buffers.Erase(pool_handle);
   }
 
@@ -258,7 +258,7 @@ public:
     mnexus::BufferHandle buffer_handle,
     mnexus::BufferDesc& out_desc
   ) {
-    auto const pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
     auto [cold, lock] = resource_storage_->buffers.GetColdConstRefWithSharedLockGuard(pool_handle);
     out_desc = cold.desc;
   }
@@ -316,7 +316,7 @@ public:
   IMPL_VAPI(mnexus::ShaderModuleHandle, CreateShaderModule,
     mnexus::ShaderModuleDesc const& desc
   ) {
-    container::ResourceHandle pool_handle = EmplaceShaderModuleResourcePool(
+    resource_pool::ResourceHandle pool_handle = EmplaceShaderModuleResourcePool(
       resource_storage_->shader_modules,
       *vk_device_,
       desc
@@ -332,7 +332,7 @@ public:
   IMPL_VAPI(void, DestroyShaderModule,
     mnexus::ShaderModuleHandle shader_module_handle
   ) {
-    auto pool_handle = container::ResourceHandle::FromU64(shader_module_handle.Get());
+    auto pool_handle = resource_pool::ResourceHandle::FromU64(shader_module_handle.Get());
     resource_storage_->shader_modules.Erase(pool_handle);
   }
 
@@ -343,7 +343,7 @@ public:
   IMPL_VAPI(mnexus::ProgramHandle, CreateProgram,
     mnexus::ProgramDesc const& desc
   ) {
-    container::ResourceHandle const pool_handle = EmplaceProgramResourcePool(
+    resource_pool::ResourceHandle const pool_handle = EmplaceProgramResourcePool(
       resource_storage_->programs,
       *vk_device_,
       desc,
@@ -362,7 +362,7 @@ public:
     mnexus::ProgramHandle program_handle
   ) {
     // FIXME: Should defer destruction until the GPU is done using this program.
-    auto pool_handle = container::ResourceHandle::FromU64(program_handle.Get());
+    auto pool_handle = resource_pool::ResourceHandle::FromU64(program_handle.Get());
     resource_storage_->programs.Erase(pool_handle);
   }
 
@@ -373,7 +373,7 @@ public:
   IMPL_VAPI(mnexus::ComputePipelineHandle, CreateComputePipeline,
     mnexus::ComputePipelineDesc const& desc
   ) {
-    container::ResourceHandle const pool_handle = EmplaceComputePipelineResourcePool(
+    resource_pool::ResourceHandle const pool_handle = EmplaceComputePipelineResourcePool(
       resource_storage_->compute_pipelines,
       *vk_device_,
       desc.program,
@@ -392,7 +392,7 @@ public:
     mnexus::ComputePipelineHandle compute_pipeline_handle
   ) {
     // FIXME: Should defer destruction until the GPU is done using this program.
-    auto pool_handle = container::ResourceHandle::FromU64(compute_pipeline_handle.Get());
+    auto pool_handle = resource_pool::ResourceHandle::FromU64(compute_pipeline_handle.Get());
     resource_storage_->compute_pipelines.Erase(pool_handle);
   }
 

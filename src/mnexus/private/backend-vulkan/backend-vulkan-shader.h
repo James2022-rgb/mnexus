@@ -10,7 +10,7 @@
 #include "mnexus/public/types.h"
 
 // project headers --------------------------------------
-#include "container/resource_generational_pool.h"
+#include "resource_pool/resource_generational_pool.h"
 #include "shader/reflection.h"
 
 #include "pipeline/pipeline_layout_cache.h"
@@ -45,9 +45,9 @@ struct ShaderModuleCold final {
   shader::ShaderModuleReflection reflection;
 };
 
-using ShaderModuleResourcePool = container::TResourceGenerationalPool<ShaderModuleHot, ShaderModuleCold, mnexus::kResourceTypeShaderModule>;
+using ShaderModuleResourcePool = resource_pool::TResourceGenerationalPool<ShaderModuleHot, ShaderModuleCold, mnexus::kResourceTypeShaderModule>;
 
-container::ResourceHandle EmplaceShaderModuleResourcePool(
+resource_pool::ResourceHandle EmplaceShaderModuleResourcePool(
   ShaderModuleResourcePool& out_pool,
   VulkanDevice const& device,
   mnexus::ShaderModuleDesc const& shader_module_desc
@@ -114,9 +114,9 @@ struct ProgramCold final {
   mbase::SmallVector<mnexus::ShaderModuleHandle, 2> shader_module_handles;
 };
 
-using ProgramResourcePool = container::TResourceGenerationalPool<ProgramHot, ProgramCold, mnexus::kResourceTypeProgram>;
+using ProgramResourcePool = resource_pool::TResourceGenerationalPool<ProgramHot, ProgramCold, mnexus::kResourceTypeProgram>;
 
-container::ResourceHandle EmplaceProgramResourcePool(
+resource_pool::ResourceHandle EmplaceProgramResourcePool(
   ProgramResourcePool& out_pool,
   VulkanDevice const& device,
   mnexus::ProgramDesc const& program_desc,

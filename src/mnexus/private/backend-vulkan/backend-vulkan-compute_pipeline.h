@@ -4,7 +4,7 @@
 #include "mnexus/public/types.h"
 
 // project headers --------------------------------------
-#include "container/resource_generational_pool.h"
+#include "resource_pool/resource_generational_pool.h"
 
 #include "backend-vulkan/backend-vulkan-shader.h"
 
@@ -34,9 +34,9 @@ struct ComputePipelineCold final {
   mnexus::ShaderModuleHandle shader_module_handle;
 };
 
-using ComputePipelineResourcePool = container::TResourceGenerationalPool<ComputePipelineHot, ComputePipelineCold, mnexus::kResourceTypeComputePipeline>;
+using ComputePipelineResourcePool = resource_pool::TResourceGenerationalPool<ComputePipelineHot, ComputePipelineCold, mnexus::kResourceTypeComputePipeline>;
 
-container::ResourceHandle EmplaceComputePipelineResourcePool(
+resource_pool::ResourceHandle EmplaceComputePipelineResourcePool(
   ComputePipelineResourcePool& out_pool,
   VulkanDevice const& vk_device,
   mnexus::ProgramHandle program_handle,

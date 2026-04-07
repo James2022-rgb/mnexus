@@ -90,14 +90,14 @@ std::optional<CreateVulkanBufferResult> CreateVulkanBuffer(
   };
 }
 
-container::ResourceHandle EmplaceBufferResourcePool(
+resource_pool::ResourceHandle EmplaceBufferResourcePool(
   BufferResourcePool& out_pool,
   VulkanDevice const& vk_device,
   mnexus::BufferDesc const& buffer_desc
 ) {
   std::optional<CreateVulkanBufferResult> opt_result = CreateVulkanBuffer(vk_device, buffer_desc);
   if (!opt_result.has_value()) {
-    return container::ResourceHandle::Null();
+    return resource_pool::ResourceHandle::Null();
   }
 
   CreateVulkanBufferResult& buf = *opt_result;

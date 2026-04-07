@@ -27,7 +27,7 @@ void ShutdownShaderSubsystem() {
   shader::ShutdownWgslConverter();
 }
 
-container::ResourceHandle EmplaceShaderModuleResourcePool(
+resource_pool::ResourceHandle EmplaceShaderModuleResourcePool(
   ShaderModuleResourcePool& out_pool,
   wgpu::Device const& wgpu_device,
   mnexus::ShaderModuleDesc const& shader_module_desc
@@ -45,7 +45,7 @@ container::ResourceHandle EmplaceShaderModuleResourcePool(
 
   if (!wgpu_shader_module) {
     MBASE_LOG_ERROR("Failed to create WebGPU shader module!");
-    return container::ResourceHandle::Null();
+    return resource_pool::ResourceHandle::Null();
   }
 
   std::optional<shader::ShaderModuleReflection> opt_reflection =
@@ -56,7 +56,7 @@ container::ResourceHandle EmplaceShaderModuleResourcePool(
 
   if (!opt_reflection.has_value()) {
     MBASE_LOG_ERROR("Failed to reflect SPIR-V shader module!");
-    return container::ResourceHandle::Null();
+    return resource_pool::ResourceHandle::Null();
   }
 
   ShaderModuleHot hot {
@@ -76,19 +76,19 @@ container::ResourceHandle EmplaceShaderModuleResourcePool(
 // Program
 //
 
-container::ResourceHandle EmplaceProgramResourcePool(
+resource_pool::ResourceHandle EmplaceProgramResourcePool(
   ProgramResourcePool& out_pool,
   wgpu::Device const& wgpu_device,
   mnexus::ProgramDesc const& program_desc,
   ShaderModuleResourcePool const& shader_module_pool,
-  std::function<container::ResourceHandle(mnexus::ShaderModuleHandle)> get_shader_module_pool_handle,
+  std::function<resource_pool::ResourceHandle(mnexus::ShaderModuleHandle)> get_shader_module_pool_handle,
   pipeline::TPipelineLayoutCache<wgpu::PipelineLayout>& pipeline_layout_cache
 ) {
   // Phase 1: Merge bind group layouts from all shader modules.
   shader::MergedPipelineLayout merged_pipeline_layout;
 
   for (uint32_t shader_module_index = 0; shader_module_index < program_desc.shader_modules.size(); ++shader_module_index) {
-    container::ResourceHandle shader_module_pool_handle = get_shader_module_pool_handle(
+    resource_pool::ResourceHandle shader_module_pool_handle = get_shader_module_pool_handle(
       program_desc.shader_modules[shader_module_index]
     );
 
@@ -98,7 +98,7 @@ container::ResourceHandle EmplaceProgramResourcePool(
 
     if (!merged_pipeline_layout.Merge(shader_module_cold.reflection)) {
       MBASE_LOG_ERROR("Failed to merge bind group layouts for shader module index {}", shader_module_index);
-      return container::ResourceHandle::Null();
+      return resource_pool::ResourceHandle::Null();
     }
   }
 

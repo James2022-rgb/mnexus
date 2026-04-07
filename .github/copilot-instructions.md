@@ -171,7 +171,7 @@ SPIR-V to WGSL conversion via Tint (required for WebGPU, which only accepts WGSL
 
 - `wgsl.cpp/.h` - `ConvertSpirvToWgsl()` wrapper around Tint's SPIR-V reader. Enabled by `MNEXUS_INTERNAL_USE_TINT` (set when Dawn or `MNEXUS_ENABLE_TINT_ON_WEB` is active). `InitializeWgslConverter()` / `ShutdownWgslConverter()` manage Tint's global state.
 
-### Resource Management (`src/mnexus/private/container/`)
+### Resource Management (`src/mnexus/private/resource_pool/`)
 
 Resources use a generational pool pattern with hot/cold data separation:
 - `GenerationalPool` - Base generational index allocator with handle validation

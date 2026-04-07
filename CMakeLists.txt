@@ -480,12 +480,12 @@ set(_sources_private_impl
 )
 source_group("Private/Impl" FILES ${_sources_private_impl})
 
-set(_private_container_dir "${_private_root_dir}/container")
-set(_sources_private_container
-  ${_private_container_dir}/generational_pool.h
-  ${_private_container_dir}/resource_generational_pool.h
+set(_private_resource_pool_dir "${_private_root_dir}/resource_pool")
+set(_sources_private_resource_pool
+  ${_private_resource_pool_dir}/generational_pool.h
+  ${_private_resource_pool_dir}/resource_generational_pool.h
 )
-source_group("Private/Container" FILES ${_sources_private_container})
+source_group("Private/ResourcePool" FILES ${_sources_private_resource_pool})
 
 set(_private_binding_dir "${_private_root_dir}/binding")
 set(_sources_private_binding
@@ -541,7 +541,7 @@ target_sources(${TARGET_NAME} PRIVATE
   ${_sources_private_backend_vulkan}
   ${_sources_private_backend_webgpu}
   ${_sources_private_binding}
-  ${_sources_private_container}
+  ${_sources_private_resource_pool}
   ${_sources_private_impl}
   ${_sources_private_pipeline}
   ${_sources_private_shader}

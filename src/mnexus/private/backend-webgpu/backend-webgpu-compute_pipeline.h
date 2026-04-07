@@ -4,7 +4,7 @@
 #include "mnexus/public/types.h"
 
 // project headers --------------------------------------
-#include "container/resource_generational_pool.h"
+#include "resource_pool/resource_generational_pool.h"
 #include "backend-webgpu/include_dawn.h"
 
 namespace mnexus_backend::webgpu {
@@ -16,7 +16,7 @@ struct ComputePipelineCold final {
   
 };
 
-using ComputePipelineResourcePool = container::TResourceGenerationalPool<ComputePipelineHot, ComputePipelineCold, mnexus::kResourceTypeComputePipeline>;
+using ComputePipelineResourcePool = resource_pool::TResourceGenerationalPool<ComputePipelineHot, ComputePipelineCold, mnexus::kResourceTypeComputePipeline>;
 
 wgpu::ComputePipeline CreateWgpuComputePipeline(
   wgpu::Device const& wgpu_device,

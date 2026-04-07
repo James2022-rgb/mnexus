@@ -9,7 +9,7 @@
 #include "mbase/public/log.h"
 
 // project headers --------------------------------------
-#include "container/generational_pool.h"
+#include "resource_pool/generational_pool.h"
 
 #include "backend-webgpu/types_bridge.h"
 
@@ -24,7 +24,7 @@ wgpu::RenderPipeline CreateWgpuRenderPipelineFromCacheKey(
   ShaderModuleResourcePool const& shader_module_pool
 ) {
   // Look up program resources.
-  auto program_pool_handle = container::ResourceHandle::FromU64(key.program.Get());
+  auto program_pool_handle = resource_pool::ResourceHandle::FromU64(key.program.Get());
   auto [program_hot, program_cold, program_lock] = program_pool.GetConstRefWithSharedLockGuard(program_pool_handle);
 
   wgpu::PipelineLayout const& pipeline_layout = program_hot.wgpu_pipeline_layout;
@@ -36,13 +36,13 @@ wgpu::RenderPipeline CreateWgpuRenderPipelineFromCacheKey(
   );
 
   // First shader module = vertex.
-  auto vs_pool_handle = container::ResourceHandle::FromU64(program_cold.shader_module_handles[0].Get());
+  auto vs_pool_handle = resource_pool::ResourceHandle::FromU64(program_cold.shader_module_handles[0].Get());
   auto [vs_hot, vs_lock] = shader_module_pool.GetHotConstRefWithSharedLockGuard(vs_pool_handle);
 
   // Second shader module = fragment (optional).
   wgpu::ShaderModule fs_module;
   if (program_cold.shader_module_handles.size() >= 2) {
-    auto fs_pool_handle = container::ResourceHandle::FromU64(program_cold.shader_module_handles[1].Get());
+    auto fs_pool_handle = resource_pool::ResourceHandle::FromU64(program_cold.shader_module_handles[1].Get());
     auto [fs_hot, fs_lock] = shader_module_pool.GetHotConstRefWithSharedLockGuard(fs_pool_handle);
     fs_module = fs_hot.wgpu_shader_module;
   }

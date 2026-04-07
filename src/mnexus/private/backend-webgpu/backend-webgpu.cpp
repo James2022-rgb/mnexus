@@ -29,7 +29,7 @@
 #include "mbase/public/tsa.h"
 
 // project headers --------------------------------------
-#include "container/generational_pool.h"
+#include "resource_pool/generational_pool.h"
 
 #include "backend-webgpu/backend-webgpu-command_list.h"
 #include "backend-webgpu/backend-webgpu-compute_pipeline.h"
@@ -139,7 +139,7 @@ public:
 
     mbase::LockGuard queue_lock(queue_mutex_);
 
-    auto pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+    auto pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
 
     auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
 
@@ -170,7 +170,7 @@ public:
 
     mbase::LockGuard queue_lock(queue_mutex_);
 
-    auto pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+    auto pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
     auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
 
     // Create a staging buffer for the readback.
@@ -319,7 +319,7 @@ public:
   ) {
     wgpu::Buffer wgpu_buffer = CreateWgpuBuffer(wgpu_device_, desc);
 
-    container::ResourceHandle pool_handle = resource_storage_->buffers.Emplace(
+    resource_pool::ResourceHandle pool_handle = resource_storage_->buffers.Emplace(
       std::forward_as_tuple(BufferHot { std::move(wgpu_buffer) }),
       std::forward_as_tuple(BufferCold { desc })
     );
@@ -329,7 +329,7 @@ public:
   IMPL_VAPI(void, DestroyBuffer,
     mnexus::BufferHandle buffer_handle
   ) {
-    auto pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+    auto pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
     resource_storage_->buffers.Erase(pool_handle);
   }
 
@@ -337,7 +337,7 @@ public:
     mnexus::BufferHandle buffer_handle,
     mnexus::BufferDesc& out_desc
   ) {
-    auto pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+    auto pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
     {
       auto [cold, lock] = resource_storage_->buffers.GetColdConstRefWithSharedLockGuard(pool_handle);
       out_desc = cold.desc;
@@ -374,7 +374,7 @@ public:
 
     wgpu::Texture wgpu_texture = wgpu_device_.CreateTexture(&wgpu_texture_desc);
 
-    container::ResourceHandle pool_handle = resource_storage_->textures.Emplace(
+    resource_pool::ResourceHandle pool_handle = resource_storage_->textures.Emplace(
       std::forward_as_tuple(TextureHot { std::move(wgpu_texture) }),
       std::forward_as_tuple(TextureCold { desc })
     );
@@ -385,7 +385,7 @@ public:
   IMPL_VAPI(void, DestroyTexture,
     mnexus::TextureHandle texture_handle
   ) {
-    auto pool_handle = container::ResourceHandle::FromU64(texture_handle.Get());
+    auto pool_handle = resource_pool::ResourceHandle::FromU64(texture_handle.Get());
 
     MBASE_ASSERT(pool_handle != resource_storage_->swapchain_texture_handle);
 
@@ -396,7 +396,7 @@ public:
     mnexus::TextureHandle texture_handle,
     mnexus::TextureDesc& out_desc
   ) {
-    auto pool_handle = container::ResourceHandle::FromU64(texture_handle.Get());
+    auto pool_handle = resource_pool::ResourceHandle::FromU64(texture_handle.Get());
 
     {
       auto [cold, lock] = resource_storage_->textures.GetColdConstRefWithSharedLockGuard(pool_handle);
@@ -422,7 +422,7 @@ public:
 
     wgpu::Sampler wgpu_sampler = wgpu_device_.CreateSampler(&wgpu_sampler_desc);
 
-    container::ResourceHandle pool_handle = resource_storage_->samplers.Emplace(
+    resource_pool::ResourceHandle pool_handle = resource_storage_->samplers.Emplace(
       std::forward_as_tuple(SamplerHot { std::move(wgpu_sampler) }),
       std::forward_as_tuple(SamplerCold { desc })
     );
@@ -433,7 +433,7 @@ public:
   IMPL_VAPI(void, DestroySampler,
     mnexus::SamplerHandle sampler_handle
   ) {
-    auto pool_handle = container::ResourceHandle::FromU64(sampler_handle.Get());
+    auto pool_handle = resource_pool::ResourceHandle::FromU64(sampler_handle.Get());
     resource_storage_->samplers.Erase(pool_handle);
   }
 
@@ -444,7 +444,7 @@ public:
   IMPL_VAPI(mnexus::ShaderModuleHandle, CreateShaderModule,
     mnexus::ShaderModuleDesc const& desc
   ) {
-    container::ResourceHandle pool_handle = EmplaceShaderModuleResourcePool(
+    resource_pool::ResourceHandle pool_handle = EmplaceShaderModuleResourcePool(
       resource_storage_->shader_modules,
       wgpu_device_,
       desc
@@ -459,7 +459,7 @@ public:
   IMPL_VAPI(void, DestroyShaderModule,
     mnexus::ShaderModuleHandle shader_module_handle
   ) {
-    auto pool_handle = container::ResourceHandle::FromU64(shader_module_handle.Get());
+    auto pool_handle = resource_pool::ResourceHandle::FromU64(shader_module_handle.Get());
     resource_storage_->shader_modules.Erase(pool_handle);
   }
 
@@ -470,13 +470,13 @@ public:
   IMPL_VAPI(mnexus::ProgramHandle, CreateProgram,
     mnexus::ProgramDesc const& desc
   ) {
-    container::ResourceHandle pool_handle = EmplaceProgramResourcePool(
+    resource_pool::ResourceHandle pool_handle = EmplaceProgramResourcePool(
       resource_storage_->programs,
       wgpu_device_,
       desc,
       resource_storage_->shader_modules,
       [](mnexus::ShaderModuleHandle shader_module_handle) {
-        return container::ResourceHandle::FromU64(shader_module_handle.Get());
+        return resource_pool::ResourceHandle::FromU64(shader_module_handle.Get());
       },
       resource_storage_->pipeline_layout_cache
     );
@@ -489,7 +489,7 @@ public:
   IMPL_VAPI(void, DestroyProgram,
     mnexus::ProgramHandle program_handle
   ) {
-    auto pool_handle = container::ResourceHandle::FromU64(program_handle.Get());
+    auto pool_handle = resource_pool::ResourceHandle::FromU64(program_handle.Get());
     resource_storage_->programs.Erase(pool_handle);
   }
 
@@ -500,7 +500,7 @@ public:
   IMPL_VAPI(mnexus::ComputePipelineHandle, CreateComputePipeline,
     mnexus::ComputePipelineDesc const& desc
   ) {
-    auto program_pool_handle = container::ResourceHandle::FromU64(desc.program.Get());
+    auto program_pool_handle = resource_pool::ResourceHandle::FromU64(desc.program.Get());
 
     auto [program_hot, program_hot_lock] = resource_storage_->programs.GetHotConstRefWithSharedLockGuard(
       program_pool_handle
@@ -511,7 +511,7 @@ public:
 
     // Compute pipeline uses the first (and only) shader module from the program.
     MBASE_ASSERT_MSG(!program_cold.shader_module_handles.empty(), "Program has no shader modules");
-    auto shader_module_pool_handle = container::ResourceHandle::FromU64(
+    auto shader_module_pool_handle = resource_pool::ResourceHandle::FromU64(
       program_cold.shader_module_handles[0].Get()
     );
     auto [shader_module_hot, shader_module_lock] = resource_storage_->shader_modules.GetHotConstRefWithSharedLockGuard(
@@ -528,7 +528,7 @@ public:
       return mnexus::ComputePipelineHandle::Invalid();
     }
 
-    container::ResourceHandle pool_handle = resource_storage_->compute_pipelines.Emplace(
+    resource_pool::ResourceHandle pool_handle = resource_storage_->compute_pipelines.Emplace(
       std::forward_as_tuple(ComputePipelineHot { std::move(wgpu_compute_pipeline) }),
       std::forward_as_tuple(ComputePipelineCold { })
     );
@@ -538,7 +538,7 @@ public:
   IMPL_VAPI(void, DestroyComputePipeline,
     mnexus::ComputePipelineHandle compute_pipeline_handle
   ) {
-    auto pool_handle = container::ResourceHandle::FromU64(compute_pipeline_handle.Get());
+    auto pool_handle = resource_pool::ResourceHandle::FromU64(compute_pipeline_handle.Get());
     resource_storage_->compute_pipelines.Erase(pool_handle);
   }
 
@@ -589,7 +589,7 @@ public:
       return mnexus::RenderPipelineHandle::Invalid();
     }
 
-    container::ResourceHandle pool_handle = resource_storage_->render_pipelines.Emplace(
+    resource_pool::ResourceHandle pool_handle = resource_storage_->render_pipelines.Emplace(
       std::forward_as_tuple(RenderPipelineHot { std::move(wgpu_pipeline) }),
       std::forward_as_tuple(RenderPipelineCold { })
     );

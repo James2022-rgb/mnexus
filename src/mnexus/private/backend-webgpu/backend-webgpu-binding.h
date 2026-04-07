@@ -7,7 +7,7 @@
 // project headers --------------------------------------
 #include "binding/state_tracker.h"
 
-#include "container/generational_pool.h"
+#include "resource_pool/generational_pool.h"
 
 #include "backend-webgpu/include_dawn.h"
 #include "backend-webgpu/backend-webgpu-buffer.h"
@@ -55,7 +55,7 @@ void ResolveAndSetBindGroups(
       switch (entry.type) {
       case mnexus::BindGroupLayoutEntryType::kUniformBuffer:
       case mnexus::BindGroupLayoutEntryType::kStorageBuffer: {
-        auto pool_handle = container::ResourceHandle::FromU64(entry.buffer.buffer.Get());
+        auto pool_handle = resource_pool::ResourceHandle::FromU64(entry.buffer.buffer.Get());
         auto [hot, lock] = buffer_pool.GetHotConstRefWithSharedLockGuard(pool_handle);
         wgpu_entry.buffer = hot.wgpu_buffer;
         wgpu_entry.offset = entry.buffer.offset;
@@ -63,7 +63,7 @@ void ResolveAndSetBindGroups(
         break;
       }
       case mnexus::BindGroupLayoutEntryType::kSampledTexture: {
-        auto pool_handle = container::ResourceHandle::FromU64(entry.texture.texture.Get());
+        auto pool_handle = resource_pool::ResourceHandle::FromU64(entry.texture.texture.Get());
         auto [hot, cold, lock] = texture_pool.GetConstRefWithSharedLockGuard(pool_handle);
         wgpu::TextureFormat wgpu_format = ToWgpuTextureFormat(cold.desc.format);
         wgpu::TextureViewDescriptor view_desc = MakeWgpuTextureViewDesc(
@@ -76,7 +76,7 @@ void ResolveAndSetBindGroups(
         break;
       }
       case mnexus::BindGroupLayoutEntryType::kSampler: {
-        auto pool_handle = container::ResourceHandle::FromU64(entry.sampler.sampler.Get());
+        auto pool_handle = resource_pool::ResourceHandle::FromU64(entry.sampler.sampler.Get());
         auto [hot, lock] = sampler_pool.GetHotConstRefWithSharedLockGuard(pool_handle);
         wgpu_entry.sampler = hot.wgpu_sampler;
         break;

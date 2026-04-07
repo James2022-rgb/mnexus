@@ -83,7 +83,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::ClearTexture(
   // TODO: We're assuming only color aspect for now.
   constexpr wgpu::TextureAspect kSupportedAspects = wgpu::TextureAspect::All;
 
-  auto pool_handle = container::ResourceHandle::FromU64(texture_handle.Get());
+  auto pool_handle = resource_pool::ResourceHandle::FromU64(texture_handle.Get());
   auto [hot, cold, lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(pool_handle);
 
   // Swapchain texture hot handle can be null if not acquired this frame.
@@ -136,10 +136,10 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::CopyBufferToTexture(
   this->EndCurrentRenderPass();
   this->EndCurrentComputePass();
 
-  auto src_buffer_pool_handle = container::ResourceHandle::FromU64(src_buffer_handle.Get());
+  auto src_buffer_pool_handle = resource_pool::ResourceHandle::FromU64(src_buffer_handle.Get());
   auto [src_buffer_hot, src_buffer_lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(src_buffer_pool_handle);
 
-  auto dst_texture_pool_handle = container::ResourceHandle::FromU64(dst_texture_handle.Get());
+  auto dst_texture_pool_handle = resource_pool::ResourceHandle::FromU64(dst_texture_handle.Get());
   auto [dst_texture_hot, dst_texture_cold, dst_texture_lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(dst_texture_pool_handle);
 
   // Swapchain texture hot handle can be null if not acquired this frame.
@@ -227,14 +227,14 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::CopyTextureToBuffer(
   this->EndCurrentRenderPass();
   this->EndCurrentComputePass();
 
-  auto src_texture_pool_handle = container::ResourceHandle::FromU64(src_texture_handle.Get());
+  auto src_texture_pool_handle = resource_pool::ResourceHandle::FromU64(src_texture_handle.Get());
   auto [src_texture_hot, src_texture_cold, src_texture_lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(src_texture_pool_handle);
 
   if (!src_texture_hot.wgpu_texture) {
     return;
   }
 
-  auto dst_buffer_pool_handle = container::ResourceHandle::FromU64(dst_buffer_handle.Get());
+  auto dst_buffer_pool_handle = resource_pool::ResourceHandle::FromU64(dst_buffer_handle.Get());
   auto [dst_buffer_hot, dst_buffer_lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(dst_buffer_pool_handle);
 
   uint32_t const format_size = MnGetFormatSizeInBytes(static_cast<MnFormat>(src_texture_cold.desc.format));
@@ -282,10 +282,10 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::BlitTexture(
   this->EndCurrentRenderPass();
   this->EndCurrentComputePass();
 
-  auto src_pool_handle = container::ResourceHandle::FromU64(src_texture_handle.Get());
+  auto src_pool_handle = resource_pool::ResourceHandle::FromU64(src_texture_handle.Get());
   auto [src_hot, src_cold, src_lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(src_pool_handle);
 
-  auto dst_pool_handle = container::ResourceHandle::FromU64(dst_texture_handle.Get());
+  auto dst_pool_handle = resource_pool::ResourceHandle::FromU64(dst_texture_handle.Get());
   auto [dst_hot, dst_cold, dst_lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(dst_pool_handle);
 
   if (!src_hot.wgpu_texture || !dst_hot.wgpu_texture) {
@@ -318,7 +318,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::BindExplicitComputePip
   // End any active render pass (mutual exclusion).
   this->EndCurrentRenderPass();
 
-  auto pool_handle = container::ResourceHandle::FromU64(compute_pipeline_handle.Get());
+  auto pool_handle = resource_pool::ResourceHandle::FromU64(compute_pipeline_handle.Get());
   auto [hot, lock] = resource_storage_->compute_pipelines.GetHotConstRefWithSharedLockGuard(pool_handle);
 
   if (!current_compute_pass_.has_value()) {
@@ -409,7 +409,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::BindSampler(
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::BindExplicitRenderPipeline(
   mnexus::RenderPipelineHandle render_pipeline_handle
 ) {
-  auto pool_handle = container::ResourceHandle::FromU64(render_pipeline_handle.Get());
+  auto pool_handle = resource_pool::ResourceHandle::FromU64(render_pipeline_handle.Get());
   auto [hot, lock] = resource_storage_->render_pipelines.GetHotConstRefWithSharedLockGuard(pool_handle);
   current_render_pipeline_ = hot.wgpu_render_pipeline;
   explicit_render_pipeline_bound_ = true;
@@ -438,7 +438,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::BeginRenderPass(
   for (uint32_t i = 0; i < desc.color_attachments.size(); ++i) {
     mnexus::ColorAttachmentDesc const& att = desc.color_attachments[i];
 
-    auto pool_handle = container::ResourceHandle::FromU64(att.texture.Get());
+    auto pool_handle = resource_pool::ResourceHandle::FromU64(att.texture.Get());
     auto [hot, cold, lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(pool_handle);
 
     if (!hot.wgpu_texture) {
@@ -479,7 +479,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::BeginRenderPass(
   bool has_depth_stencil = false;
   if (desc.depth_stencil_attachment != nullptr) {
     auto const& ds = *desc.depth_stencil_attachment;
-    auto pool_handle = container::ResourceHandle::FromU64(ds.texture.Get());
+    auto pool_handle = resource_pool::ResourceHandle::FromU64(ds.texture.Get());
     auto [hot, cold, lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(pool_handle);
 
     if (hot.wgpu_texture) {
@@ -814,14 +814,14 @@ void MnexusCommandListWebGpu::ResolveRenderPipelineAndBindState() {
     if (!vb.buffer_handle.IsValid()) {
       continue;
     }
-    auto pool_handle = container::ResourceHandle::FromU64(vb.buffer_handle.Get());
+    auto pool_handle = resource_pool::ResourceHandle::FromU64(vb.buffer_handle.Get());
     auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
     current_render_pass_->SetVertexBuffer(static_cast<uint32_t>(i), hot.wgpu_buffer, vb.offset);
   }
 
   // Set index buffer (if bound).
   if (bound_index_buffer_.buffer_handle.IsValid()) {
-    auto pool_handle = container::ResourceHandle::FromU64(bound_index_buffer_.buffer_handle.Get());
+    auto pool_handle = resource_pool::ResourceHandle::FromU64(bound_index_buffer_.buffer_handle.Get());
     auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
     current_render_pass_->SetIndexBuffer(
       hot.wgpu_buffer,

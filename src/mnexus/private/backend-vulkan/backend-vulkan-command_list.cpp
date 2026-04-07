@@ -101,7 +101,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BlitTexture(
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindExplicitComputePipeline(
   mnexus::ComputePipelineHandle compute_pipeline_handle
 ) {
-  auto const pool_handle = container::ResourceHandle::FromU64(compute_pipeline_handle.Get());
+  auto const pool_handle = resource_pool::ResourceHandle::FromU64(compute_pipeline_handle.Get());
   auto [hot, cold, lock] = resource_storage_->compute_pipelines.GetConstRefWithSharedLockGuard(pool_handle);
   encoder_.BindComputePipeline(
     hot.vk_compute_pipeline.handle(),
@@ -112,8 +112,8 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindExplicitComputePip
 
   // Track referenced resources for submit-time stamping.
   referenced_resources_.push_back(pool_handle);
-  referenced_resources_.push_back(container::ResourceHandle::FromU64(cold.program_handle.Get()));
-  referenced_resources_.push_back(container::ResourceHandle::FromU64(cold.shader_module_handle.Get()));
+  referenced_resources_.push_back(resource_pool::ResourceHandle::FromU64(cold.program_handle.Get()));
+  referenced_resources_.push_back(resource_pool::ResourceHandle::FromU64(cold.shader_module_handle.Get()));
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::DispatchCompute(
@@ -134,7 +134,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindUniformBuffer(
   uint64_t offset,
   uint64_t size
 ) {
-  auto const pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+  auto const pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
   auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
   encoder_.BindBuffer(
     id.group, id.binding, id.array_element,
@@ -150,7 +150,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindStorageBuffer(
   uint64_t offset,
   uint64_t size
 ) {
-  auto const pool_handle = container::ResourceHandle::FromU64(buffer_handle.Get());
+  auto const pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
   auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
   encoder_.BindBuffer(
     id.group, id.binding, id.array_element,

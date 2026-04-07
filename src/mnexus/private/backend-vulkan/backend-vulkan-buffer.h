@@ -4,7 +4,7 @@
 #include "mnexus/public/types.h"
 
 // project headers --------------------------------------
-#include "container/resource_generational_pool.h"
+#include "resource_pool/resource_generational_pool.h"
 
 #include "backend-vulkan/vk-device.h"
 #include "backend-vulkan/vk-object.h"
@@ -35,9 +35,9 @@ struct BufferCold final {
   mnexus::BufferDesc desc;
 };
 
-using BufferResourcePool = container::TResourceGenerationalPool<BufferHot, BufferCold, mnexus::kResourceTypeBuffer>;
+using BufferResourcePool = resource_pool::TResourceGenerationalPool<BufferHot, BufferCold, mnexus::kResourceTypeBuffer>;
 
-container::ResourceHandle EmplaceBufferResourcePool(
+resource_pool::ResourceHandle EmplaceBufferResourcePool(
   BufferResourcePool& out_pool,
   VulkanDevice const& vk_device,
   mnexus::BufferDesc const& buffer_desc

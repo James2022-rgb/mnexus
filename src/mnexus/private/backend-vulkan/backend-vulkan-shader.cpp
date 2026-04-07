@@ -11,7 +11,7 @@
 
 namespace mnexus_backend::vulkan {
 
-container::ResourceHandle EmplaceShaderModuleResourcePool(
+resource_pool::ResourceHandle EmplaceShaderModuleResourcePool(
   ShaderModuleResourcePool& out_pool,
   VulkanDevice const& device,
   mnexus::ShaderModuleDesc const& shader_module_desc
@@ -31,7 +31,7 @@ container::ResourceHandle EmplaceShaderModuleResourcePool(
 
   if (vk_shader_module_handle == VK_NULL_HANDLE) {
     MBASE_LOG_ERROR("Failed to create Vulkan shader module!");
-    return container::ResourceHandle::Null();
+    return resource_pool::ResourceHandle::Null();
   }
 
   std::optional<shader::ShaderModuleReflection> opt_reflection =
@@ -42,7 +42,7 @@ container::ResourceHandle EmplaceShaderModuleResourcePool(
 
   if (!opt_reflection.has_value()) {
     MBASE_LOG_ERROR("Failed to reflect SPIR-V shader module!");
-    return container::ResourceHandle::Null();
+    return resource_pool::ResourceHandle::Null();
   }
 
   VkDevice vk_device = device.handle();
@@ -63,7 +63,7 @@ container::ResourceHandle EmplaceShaderModuleResourcePool(
   );
 }
 
-container::ResourceHandle EmplaceProgramResourcePool(
+resource_pool::ResourceHandle EmplaceProgramResourcePool(
   ProgramResourcePool& out_pool,
   VulkanDevice const& device,
   mnexus::ProgramDesc const& program_desc,
@@ -74,7 +74,7 @@ container::ResourceHandle EmplaceProgramResourcePool(
   shader::MergedPipelineLayout merged_pipeline_layout;
 
   for (uint32_t shader_module_index = 0; shader_module_index < program_desc.shader_modules.size(); ++shader_module_index) {
-    auto const shader_module_pool_handle = container::ResourceHandle::FromU64(
+    auto const shader_module_pool_handle = resource_pool::ResourceHandle::FromU64(
       program_desc.shader_modules[shader_module_index].Get()
     );
 
@@ -84,7 +84,7 @@ container::ResourceHandle EmplaceProgramResourcePool(
 
     if (!merged_pipeline_layout.Merge(shader_module_cold.reflection)) {
       MBASE_LOG_ERROR("Failed to merge bind group layouts for shader module index {}", shader_module_index);
-      return container::ResourceHandle::Null();
+      return resource_pool::ResourceHandle::Null();
     }
   }
 
@@ -196,7 +196,7 @@ container::ResourceHandle EmplaceProgramResourcePool(
   );
 
   if (!pipeline_layout_ptr || !pipeline_layout_ptr->IsValid()) {
-    return container::ResourceHandle::Null();
+    return resource_pool::ResourceHandle::Null();
   }
 
   // Phase 3: Emplace into pool and return handle.

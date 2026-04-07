@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
-  <!-- container::GenerationalHandle -->
+  <!-- resource_pool::GenerationalHandle -->
   <!-- Bit layout: [type:5][generation:27][index:32] -->
-  <Type Name="container::GenerationalHandle">
+  <Type Name="resource_pool::GenerationalHandle">
     <DisplayString Condition="(value_ &amp; 0xFFFFFFFF) == 0xFFFFFFFF">null</DisplayString>
     <DisplayString Condition="((value_ &gt;&gt; 59) &amp; 0x1F) == 1">Buffer #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
     <DisplayString Condition="((value_ &gt;&gt; 59) &amp; 0x1F) == 2">Texture #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
