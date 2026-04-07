@@ -28,7 +28,7 @@ struct CreateVulkanBufferResult {
 };
 
 std::optional<CreateVulkanBufferResult> CreateVulkanBuffer(
-  VulkanDevice const& vk_device,
+  IVulkanDevice const& vk_device,
   mnexus::BufferDesc const& buffer_desc
 ) {
   bool const mappable = buffer_desc.usage.HasAnyOf(mnexus::BufferUsageFlagBits::kMappable);
@@ -80,7 +80,7 @@ std::optional<CreateVulkanBufferResult> CreateVulkanBuffer(
     [vk_device_handle, vk_buffer_handle, allocation, vma_allocator] {
       vmaDestroyBuffer(vma_allocator, vk_buffer_handle, allocation);
     },
-    vk_device.deferred_destroyer()
+    vk_device.GetDeferredDestroyer()
   );
 
   return CreateVulkanBufferResult {
@@ -92,7 +92,7 @@ std::optional<CreateVulkanBufferResult> CreateVulkanBuffer(
 
 resource_pool::ResourceHandle EmplaceBufferResourcePool(
   BufferResourcePool& out_pool,
-  VulkanDevice const& vk_device,
+  IVulkanDevice const& vk_device,
   mnexus::BufferDesc const& buffer_desc
 ) {
   std::optional<CreateVulkanBufferResult> opt_result = CreateVulkanBuffer(vk_device, buffer_desc);

@@ -8,7 +8,7 @@ namespace mnexus_backend::vulkan {
 
 bool CreateVulkanComputePipeline(
   VulkanComputePipeline& out_vk_compute_pipeline,
-  VulkanDevice const& vk_device,
+  IVulkanDevice const& vk_device,
   VulkanShaderModule const& vk_shader_module,
   VulkanPipelineLayout const& vk_pipeline_layout
 ) {
@@ -48,14 +48,14 @@ bool CreateVulkanComputePipeline(
   out_vk_compute_pipeline = VulkanComputePipeline(
     vk_pipeline_handle,
     [vk_device_handle, vk_pipeline_handle] { vkDestroyPipeline(vk_device_handle, vk_pipeline_handle, nullptr); },
-    vk_device.deferred_destroyer()
+    vk_device.GetDeferredDestroyer()
   );
   return true;
 }
 
 resource_pool::ResourceHandle EmplaceComputePipelineResourcePool(
   ComputePipelineResourcePool& out_pool,
-  VulkanDevice const& vk_device,
+  IVulkanDevice const& vk_device,
   mnexus::ProgramHandle program_handle,
   ProgramResourcePool const& program_pool,
   ShaderModuleResourcePool const& shader_module_pool

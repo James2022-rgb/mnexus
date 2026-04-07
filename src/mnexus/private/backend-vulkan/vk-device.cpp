@@ -3,15 +3,124 @@
 
 // c++ headers ------------------------------------------
 #include <algorithm>
+#include <atomic>
+#include <functional>
 #include <map>
+#include <mutex>
 #include <vector>
 
 // public project headers -------------------------------
+#include "mbase/public/accessor.h"
 #include "mbase/public/log.h"
 
 // project headers --------------------------------------
+#include "sync/resource_sync.h"
+
+#include "backend-vulkan/depend/vulkan_vma.h"
+#include "backend-vulkan/vk-deferred_destroyer.h"
+#include "backend-vulkan/vk-physical_device.h"
+#include "backend-vulkan/vk-staging.h"
+#include "backend-vulkan/thread_command_pool.h"
 
 namespace mnexus_backend::vulkan {
+
+// ====================================================================================================
+// VulkanDevice
+//
+
+struct VulkanQueueState final {
+  VkQueue vk_queue = VK_NULL_HANDLE;
+  VkSemaphore timeline_semaphore = VK_NULL_HANDLE;
+  std::atomic<uint64_t> next_submit_serial {1}; // Valid serials start at 1.
+};
+
+class VulkanDevice final : public IVulkanDevice {
+public:
+  ~VulkanDevice() override = default;
+  MBASE_DISALLOW_COPY_MOVE(VulkanDevice);
+
+  void Shutdown() override;
+
+  VkDevice handle() const override { return handle_; }
+  mnexus::QueueSelection const& queue_selection() const override { return queue_selection_; }
+  VmaAllocator vma_allocator() const override { return vma_allocator_; }
+
+  IVulkanDeferredDestroyer* GetDeferredDestroyer() const override { return &deferred_destroyer_; }
+
+  uint64_t QueueGetCompletedValue(mnexus::QueueId const& queue_id) override;
+  void QueueWaitSubmitSerial(mnexus::QueueId const& queue_id, uint64_t value) override;
+  uint64_t QueueWaitIdle(mnexus::QueueId const& queue_id) override;
+  uint64_t QueueAdvanceTimeline(mnexus::QueueId const& queue_id) override;
+  uint64_t QueueSubmitSingle(mnexus::QueueId const& queue_id, VkCommandBuffer command_buffer) override;
+
+  StagingBufferPool& staging_buffer_pool() override { return staging_buffer_pool_; }
+  TransientCommandPool& transient_command_pool() override { return transient_command_pool_; }
+  ThreadCommandPoolRegistry& thread_command_pool_registry() override { return thread_command_pool_registry_; }
+  QueueIndexMap const& queue_index_map() const override { return queue_index_map_; }
+
+private:
+  friend class IVulkanDevice; // For Create() to construct.
+
+  explicit VulkanDevice(
+    VulkanInstance const* instance,
+    PhysicalDeviceDesc const& physical_device_desc,
+    VkDevice handle,
+    mnexus::QueueSelection queue_selection,
+    QueueIndexMap queue_index_map,
+    VulkanQueueState const* queue_states,
+    uint32_t queue_count,
+    VmaAllocator vma_allocator
+  ) :
+    instance_(instance),
+    physical_device_desc_(std::make_unique<PhysicalDeviceDesc>(physical_device_desc)),
+    queue_selection_(queue_selection),
+    handle_(handle),
+    queue_index_map_(queue_index_map),
+    vma_allocator_(vma_allocator)
+  {
+    for (uint32_t i = 0; i < queue_count; ++i) {
+      queue_states_[i].vk_queue = queue_states[i].vk_queue;
+      queue_states_[i].timeline_semaphore = queue_states[i].timeline_semaphore;
+    }
+  }
+
+  VulkanInstance const* instance_ = nullptr;
+  std::unique_ptr<PhysicalDeviceDesc> physical_device_desc_;
+  VkDevice handle_ = VK_NULL_HANDLE;
+  mnexus::QueueSelection queue_selection_;
+  QueueIndexMap queue_index_map_;
+  VulkanQueueState queue_states_[kMaxQueues] {};
+  VmaAllocator vma_allocator_ = VK_NULL_HANDLE;
+
+  StagingBufferPool staging_buffer_pool_;
+  TransientCommandPool transient_command_pool_;
+  ThreadCommandPoolRegistry thread_command_pool_registry_;
+
+  // --- Deferred destruction (composition, not inheritance) ---
+
+  class DeferredDestroyer final : public IVulkanDeferredDestroyer {
+  public:
+    explicit DeferredDestroyer(VulkanDevice& owner) : owner_(owner) {}
+    void EnqueueDestroy(
+      std::function<void()> destroy_func,
+      ResourceSyncStamp::Snapshot snapshot
+    ) override;
+  private:
+    VulkanDevice& owner_;
+  };
+  mutable DeferredDestroyer deferred_destroyer_{*this};
+
+  struct PendingDestroy {
+    std::function<void()> destroy_func;
+    ResourceSyncStamp::Snapshot snapshot;
+  };
+
+  void EnqueuePendingDestroy(std::function<void()> destroy_func, ResourceSyncStamp::Snapshot snapshot);
+  void ProcessPendingDestroys();
+
+  mbase::Lockable<std::mutex> pending_destroys_mutex_;
+  std::vector<PendingDestroy> pending_destroys_ MBASE_GUARDED_BY(pending_destroys_mutex_);
+};
 
 #define RESOLVE_QUEUE_INDEX(var_name, queue_id) \
   std::optional<uint32_t> opt_##var_name = queue_index_map_.Find(queue_id); \
@@ -286,7 +395,7 @@ std::vector<QueueFamilyRequest> BuildQueueCreateInfos(
 // VulkanDevice::Create
 //
 
-std::unique_ptr<VulkanDevice> VulkanDevice::Create(
+std::unique_ptr<IVulkanDevice> IVulkanDevice::Create(
   VulkanInstance const& instance,
   VulkanDeviceDesc const& desc
 ) {
@@ -467,27 +576,27 @@ std::unique_ptr<VulkanDevice> VulkanDevice::Create(
 }
 
 // ----------------------------------------------------------------------------------------------------
-// VulkanDevice::EnqueueDestroy
+// VulkanDevice::DeferredDestroyer::EnqueueDestroy
 //
 
-void VulkanDevice::EnqueueDestroy(
+void VulkanDevice::DeferredDestroyer::EnqueueDestroy(
   std::function<void()> destroy_func,
   ResourceSyncStamp::Snapshot snapshot
 ) {
+  auto& device = owner_;
+
   if (snapshot.used_mask == 0) {
-    // No queues were involved in using this resource, so we can destroy immediately.
     destroy_func();
     return;
   }
 
-  // Check if all queues that used this resource have passed the recorded last used serial.
   bool completed = true;
   for (uint32_t index = 0; index < kMaxQueues; ++index) {
     if ((snapshot.used_mask & (1u << index)) != 0) {
       uint64_t const last_used = snapshot.last_used[index];
 
       uint64_t completed_value = 0;
-      vkGetSemaphoreCounterValueKHR(handle_, queue_states_[index].timeline_semaphore, &completed_value);
+      vkGetSemaphoreCounterValueKHR(device.handle_, device.queue_states_[index].timeline_semaphore, &completed_value);
 
       if (completed_value < last_used) {
         completed = false;
@@ -499,9 +608,13 @@ void VulkanDevice::EnqueueDestroy(
   if (completed) {
     destroy_func();
   } else {
-    this->EnqueuePendingDestroy(std::move(destroy_func), snapshot);
+    device.EnqueuePendingDestroy(std::move(destroy_func), snapshot);
   }
 }
+
+// ----------------------------------------------------------------------------------------------------
+// VulkanDevice::EnqueuePendingDestroy (private)
+//
 
 void VulkanDevice::EnqueuePendingDestroy(
   std::function<void()> destroy_func,

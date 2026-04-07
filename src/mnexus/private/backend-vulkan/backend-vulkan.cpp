@@ -22,6 +22,11 @@
 #include "backend-vulkan/descriptor_set_allocator.h"
 
 #include "backend-vulkan/vk-device.h"
+#include "backend-vulkan/vk-instance.h"
+#include "backend-vulkan/vk-physical_device.h"
+#include "backend-vulkan/vk-staging.h"
+#include "backend-vulkan/thread_command_pool.h"
+#include "backend-vulkan/depend/vulkan_vma.h"
 #include "backend-vulkan/resource_storage.h"
 
 namespace mnexus_backend::vulkan {
@@ -35,7 +40,7 @@ namespace mnexus_backend::vulkan {
 
 class MnexusDeviceVulkan final : public mnexus::IDevice {
 public:
-  explicit MnexusDeviceVulkan(VulkanDevice* vk_device, ResourceStorage* resource_storage) :
+  explicit MnexusDeviceVulkan(IVulkanDevice* vk_device, ResourceStorage* resource_storage) :
     vk_device_(vk_device),
     resource_storage_(resource_storage)
   {
@@ -467,7 +472,7 @@ private:
     }
   }
 
-  VulkanDevice* vk_device_ = nullptr;
+  IVulkanDevice* vk_device_ = nullptr;
   ResourceStorage* resource_storage_ = nullptr;
   IDescriptorSetAllocator* descriptor_set_allocator_ = nullptr;
   std::vector<PendingReadback> pending_readbacks_;
@@ -480,7 +485,7 @@ private:
 
 class BackendVulkan final : public IBackendVulkan {
 public:
-  explicit BackendVulkan(VulkanInstance instance, std::unique_ptr<VulkanDevice> vk_device) :
+  explicit BackendVulkan(VulkanInstance instance, std::unique_ptr<IVulkanDevice> vk_device) :
     vk_instance_(std::move(instance)),
     vk_device_(std::move(vk_device)),
     device_(vk_device_.get(), &resource_storage_)
@@ -535,7 +540,7 @@ public:
 
 private:
   VulkanInstance vk_instance_;
-  std::unique_ptr<VulkanDevice> vk_device_;
+  std::unique_ptr<IVulkanDevice> vk_device_;
 
   ResourceStorage resource_storage_;
   MnexusDeviceVulkan device_;
@@ -641,7 +646,7 @@ std::unique_ptr<IBackendVulkan> IBackendVulkan::Create(BackendVulkanCreateDesc c
     .headless = desc.headless,
   };
 
-  std::unique_ptr<VulkanDevice> vk_device = VulkanDevice::Create(
+  std::unique_ptr<IVulkanDevice> vk_device = IVulkanDevice::Create(
     instance,
     device_desc
   );

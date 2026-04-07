@@ -1,138 +1,97 @@
 #pragma once
 
 // c++ headers ------------------------------------------
-#include <atomic>
+#include <cstdint>
 
-#include <functional>
 #include <memory>
-#include <mutex>
-#include <vector>
 
 // public project headers -------------------------------
-#include "mbase/public/accessor.h"
-
 #include "mnexus/public/types.h"
 
 // project headers --------------------------------------
-#include "sync/resource_sync.h"
+#include "backend-vulkan/depend/vulkan_fwd.h"
 
-#include "backend-vulkan/depend/vulkan_vma.h"
-#include "backend-vulkan/vk-deferred_destroyer.h"
-#include "backend-vulkan/vk-physical_device.h"
-#include "backend-vulkan/vk-staging.h"
-#include "backend-vulkan/thread_command_pool.h"
+// Forward declarations ---------------------------------
+struct VmaAllocator_T;
+typedef VmaAllocator_T* VmaAllocator;
+
+namespace mnexus_backend {
+class QueueIndexMap;
+}
 
 namespace mnexus_backend::vulkan {
+
+class IVulkanDeferredDestroyer;
+class StagingBufferPool;
+class TransientCommandPool;
+class ThreadCommandPoolRegistry;
+class VulkanInstance;
+class PhysicalDeviceDesc;
 
 struct VulkanDeviceDesc final {
   PhysicalDeviceDesc const* physical_device_desc = nullptr;
   bool headless = false;
 };
 
-struct VulkanQueueState final {
-  VkQueue vk_queue = VK_NULL_HANDLE;
-  VkSemaphore timeline_semaphore = VK_NULL_HANDLE;
-  std::atomic<uint64_t> next_submit_serial {1}; // Valid serials start at 1.
-};
+// ----------------------------------------------------------------------------------------------------
+// IVulkanDevice
+//
+// Abstract interface for the Vulkan logical device.
+//
 
-class VulkanDevice final : public IVulkanDeferredDestroyer {
+class IVulkanDevice {
 public:
-  ~VulkanDevice() = default;
-  MBASE_DISALLOW_COPY_MOVE(VulkanDevice);
+  virtual ~IVulkanDevice() = default;
 
-  static std::unique_ptr<VulkanDevice> Create(
+  static std::unique_ptr<IVulkanDevice> Create(
     VulkanInstance const& instance,
     VulkanDeviceDesc const& desc
   );
 
-  void Shutdown();
+  virtual void Shutdown() = 0;
 
-  MBASE_ACCESSOR_GETV(VkDevice, handle);
-  MBASE_ACCESSOR_GETCR(mnexus::QueueSelection, queue_selection);
-  MBASE_ACCESSOR_GETV(VmaAllocator, vma_allocator);
+  // ----------------------------------------------------------------------------------------------
+  // Accessors.
+
+  [[nodiscard]] virtual VkDevice handle() const = 0;
+  [[nodiscard]] virtual mnexus::QueueSelection const& queue_selection() const = 0;
+  [[nodiscard]] virtual VmaAllocator vma_allocator() const = 0;
+
+  /// Returns the deferred destroyer for enqueuing GPU resource cleanup.
+  [[nodiscard]] virtual IVulkanDeferredDestroyer* GetDeferredDestroyer() const = 0;
+
+  // ----------------------------------------------------------------------------------------------
+  // Queue operations.
 
   /// Returns the highest completed serial on the given queue.
-  uint64_t QueueGetCompletedValue(mnexus::QueueId const& queue_id);
+  [[nodiscard]] virtual uint64_t QueueGetCompletedValue(mnexus::QueueId const& queue_id) = 0;
 
   /// Blocks until the given serial has completed on the given queue.
-  void QueueWaitSubmitSerial(mnexus::QueueId const& queue_id, uint64_t value);
+  virtual void QueueWaitSubmitSerial(mnexus::QueueId const& queue_id, uint64_t value) = 0;
 
   /// Blocks until all submitted work on the given queue has completed.
   /// Returns the last submitted serial (0 if nothing has been submitted).
-  uint64_t QueueWaitIdle(mnexus::QueueId const& queue_id);
+  [[nodiscard]] virtual uint64_t QueueWaitIdle(mnexus::QueueId const& queue_id) = 0;
 
   /// Advances the queue timeline without an actual GPU submit.
   /// Returns the new serial. Used for mappable buffer writes where
   /// the data is visible immediately after a host flush.
-  uint64_t QueueAdvanceTimeline(mnexus::QueueId const& queue_id);
+  [[nodiscard]] virtual uint64_t QueueAdvanceTimeline(mnexus::QueueId const& queue_id) = 0;
 
   /// Submits a command buffer to the given queue, signaling the timeline semaphore.
   /// Returns the new serial.
-  uint64_t QueueSubmitSingle(mnexus::QueueId const& queue_id, VkCommandBuffer command_buffer);
+  [[nodiscard]] virtual uint64_t QueueSubmitSingle(mnexus::QueueId const& queue_id, VkCommandBuffer command_buffer) = 0;
 
-  StagingBufferPool& staging_buffer_pool() { return staging_buffer_pool_; }
-  TransientCommandPool& transient_command_pool() { return transient_command_pool_; }
-  ThreadCommandPoolRegistry& thread_command_pool_registry() { return thread_command_pool_registry_; }
+  // ----------------------------------------------------------------------------------------------
+  // Sub-system accessors.
 
-  QueueIndexMap const& queue_index_map() const { return queue_index_map_; }
+  [[nodiscard]] virtual StagingBufferPool& staging_buffer_pool() = 0;
+  [[nodiscard]] virtual TransientCommandPool& transient_command_pool() = 0;
+  [[nodiscard]] virtual ThreadCommandPoolRegistry& thread_command_pool_registry() = 0;
+  [[nodiscard]] virtual QueueIndexMap const& queue_index_map() const = 0;
 
-  // IVulkanDeferredDestroyer
-  void EnqueueDestroy(
-    std::function<void()> destroy_func,
-    ResourceSyncStamp::Snapshot snapshot
-  ) override;
-
-  // The returned pointer is non-const; the destroyer mutates internal state.
-  // Safe to call on a const VulkanDevice because the interface is logically separate.
-  IVulkanDeferredDestroyer* deferred_destroyer() const { return const_cast<VulkanDevice*>(this); }
-
-private:
-  explicit VulkanDevice(
-    VulkanInstance const* instance,
-    PhysicalDeviceDesc const& physical_device_desc,
-    VkDevice handle,
-    mnexus::QueueSelection queue_selection,
-    QueueIndexMap queue_index_map,
-    VulkanQueueState const* queue_states,
-    uint32_t queue_count,
-    VmaAllocator vma_allocator
-  ) :
-    instance_(instance),
-    physical_device_desc_(std::make_unique<PhysicalDeviceDesc>(physical_device_desc)),
-    queue_selection_(queue_selection),
-    handle_(handle),
-    queue_index_map_(queue_index_map),
-    vma_allocator_(vma_allocator)
-  {
-    for (uint32_t i = 0; i < queue_count; ++i) {
-      queue_states_[i].vk_queue = queue_states[i].vk_queue;
-      queue_states_[i].timeline_semaphore = queue_states[i].timeline_semaphore;
-    }
-  }
-
-  VulkanInstance const* instance_ = nullptr;
-  std::unique_ptr<PhysicalDeviceDesc> physical_device_desc_; // Holding a copy would make this class too large and pollute the cache, so we store it on the heap and keep a unique_ptr to it.
-  VkDevice handle_ = VK_NULL_HANDLE;
-  mnexus::QueueSelection queue_selection_;
-  QueueIndexMap queue_index_map_;
-  VulkanQueueState queue_states_[kMaxQueues] {};
-  VmaAllocator vma_allocator_ = VK_NULL_HANDLE;
-
-  StagingBufferPool staging_buffer_pool_;
-  TransientCommandPool transient_command_pool_;
-  ThreadCommandPoolRegistry thread_command_pool_registry_;
-
-  // Deferred destruction queue.
-  struct PendingDestroy {
-    std::function<void()> destroy_func;
-    ResourceSyncStamp::Snapshot snapshot;
-  };
-
-  void EnqueuePendingDestroy(std::function<void()> destroy_func, ResourceSyncStamp::Snapshot snapshot);
-  void ProcessPendingDestroys();
-
-  mbase::Lockable<std::mutex> pending_destroys_mutex_;
-  std::vector<PendingDestroy> pending_destroys_ MBASE_GUARDED_BY(pending_destroys_mutex_);
+protected:
+  IVulkanDevice() = default;
 };
 
 } // namespace mnexus_backend::vulkan

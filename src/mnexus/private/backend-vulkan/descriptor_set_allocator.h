@@ -11,7 +11,7 @@
 namespace mnexus_backend::vulkan {
 
 class VulkanDescriptorSetLayout;
-class VulkanDevice;
+class IVulkanDevice;
 
 // ----------------------------------------------------------------------------------------------------
 // VulkanDescriptorSet
@@ -39,7 +39,7 @@ class IDescriptorSetAllocator {
 public:
   virtual ~IDescriptorSetAllocator() = default;
 
-  static IDescriptorSetAllocator* Create(VulkanDevice* device);
+  static IDescriptorSetAllocator* Create(IVulkanDevice* device);
 
   /// Clean up all Vulkan resources and delete this object.
   virtual void Shutdown() = 0;

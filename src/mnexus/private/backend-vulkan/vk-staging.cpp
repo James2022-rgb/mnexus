@@ -18,7 +18,7 @@ StagingBufferPool::~StagingBufferPool() {
   this->Shutdown();
 }
 
-void StagingBufferPool::Initialize(VulkanDevice* device) {
+void StagingBufferPool::Initialize(IVulkanDevice* device) {
   device_ = device;
 }
 
@@ -122,7 +122,7 @@ TransientCommandPool::~TransientCommandPool() {
   this->Shutdown();
 }
 
-void TransientCommandPool::Initialize(VulkanDevice* device, uint32_t queue_family_index) {
+void TransientCommandPool::Initialize(IVulkanDevice* device, uint32_t queue_family_index) {
   device_ = device;
 
   VkCommandPoolCreateInfo pool_info {

@@ -13,7 +13,7 @@ namespace mnexus_backend::vulkan {
 
 resource_pool::ResourceHandle EmplaceShaderModuleResourcePool(
   ShaderModuleResourcePool& out_pool,
-  VulkanDevice const& device,
+  IVulkanDevice const& device,
   mnexus::ShaderModuleDesc const& shader_module_desc
 ) {
   // Assert that the shader code is SPIR-V; this backend only supports SPIR-V shaders, and we rely on being able to reflect the shader code, which is only really possible with SPIR-V.
@@ -50,7 +50,7 @@ resource_pool::ResourceHandle EmplaceShaderModuleResourcePool(
     .vk_shader_module = VulkanShaderModule(
       vk_shader_module_handle,
       [vk_device, vk_shader_module_handle] { vkDestroyShaderModule(vk_device, vk_shader_module_handle, nullptr); },
-      device.deferred_destroyer()
+      device.GetDeferredDestroyer()
     ),
   };
   ShaderModuleCold cold {
@@ -65,7 +65,7 @@ resource_pool::ResourceHandle EmplaceShaderModuleResourcePool(
 
 resource_pool::ResourceHandle EmplaceProgramResourcePool(
   ProgramResourcePool& out_pool,
-  VulkanDevice const& device,
+  IVulkanDevice const& device,
   mnexus::ProgramDesc const& program_desc,
   ShaderModuleResourcePool const& shader_module_pool,
   pipeline::TPipelineLayoutCache<VulkanPipelineLayoutPtr>& pipeline_layout_cache
@@ -161,7 +161,7 @@ resource_pool::ResourceHandle EmplaceProgramResourcePool(
           VulkanDescriptorSetLayout(
             vk_dsl,
             [dev, vk_dsl] { vkDestroyDescriptorSetLayout(dev, vk_dsl, nullptr); },
-            device.deferred_destroyer(),
+            device.GetDeferredDestroyer(),
             vk_bindings
           )
         );
@@ -188,7 +188,7 @@ resource_pool::ResourceHandle EmplaceProgramResourcePool(
       auto layout = std::make_shared<VulkanPipelineLayout>(
         vk_pl,
         [dev, vk_pl] { vkDestroyPipelineLayout(dev, vk_pl, nullptr); },
-        device.deferred_destroyer()
+        device.GetDeferredDestroyer()
       );
       layout->descriptor_set_layouts = std::move(dsls);
       return layout;

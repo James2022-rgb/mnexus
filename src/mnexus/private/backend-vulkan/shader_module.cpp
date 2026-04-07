@@ -11,7 +11,7 @@
 namespace mnexus_backend::vulkan {
 
 VkShaderModule CreateVkShaderModule(
-  VulkanDevice const& device,
+  IVulkanDevice const& device,
   mnexus::ShaderModuleDesc const& shader_module_desc
 ) {
   MBASE_ASSERT_MSG(

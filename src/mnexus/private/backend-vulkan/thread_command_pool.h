@@ -16,7 +16,7 @@
 
 namespace mnexus_backend::vulkan {
 
-class VulkanDevice;
+class IVulkanDevice;
 
 // ----------------------------------------------------------------------------------------------------
 // ThreadCommandPoolRegistry
@@ -32,7 +32,7 @@ public:
   ~ThreadCommandPoolRegistry();
   MBASE_DISALLOW_COPY_MOVE(ThreadCommandPoolRegistry);
 
-  void Initialize(VulkanDevice* device, uint32_t queue_family_index);
+  void Initialize(IVulkanDevice* device, uint32_t queue_family_index);
   void Shutdown();
 
   /// Allocate and begin a VkCommandBuffer for the calling thread.
@@ -56,7 +56,7 @@ private:
 
   PerThreadPool& GetOrCreatePool();
 
-  VulkanDevice* device_ = nullptr;
+  IVulkanDevice* device_ = nullptr;
   uint32_t queue_family_index_ = 0;
   mbase::Lockable<std::mutex> mutex_;
   std::unordered_map<std::thread::id, PerThreadPool> pools_ MBASE_GUARDED_BY(mutex_);

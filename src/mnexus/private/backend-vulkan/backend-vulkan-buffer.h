@@ -6,6 +6,7 @@
 // project headers --------------------------------------
 #include "resource_pool/resource_generational_pool.h"
 
+#include "backend-vulkan/depend/vulkan_vma.h"
 #include "backend-vulkan/vk-device.h"
 #include "backend-vulkan/vk-object.h"
 
@@ -39,7 +40,7 @@ using BufferResourcePool = resource_pool::TResourceGenerationalPool<BufferHot, B
 
 resource_pool::ResourceHandle EmplaceBufferResourcePool(
   BufferResourcePool& out_pool,
-  VulkanDevice const& vk_device,
+  IVulkanDevice const& vk_device,
   mnexus::BufferDesc const& buffer_desc
 );
 

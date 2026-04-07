@@ -14,7 +14,7 @@
 
 namespace mnexus_backend::vulkan {
 
-class VulkanDevice;
+class IVulkanDevice;
 
 // ----------------------------------------------------------------------------------------------------
 // StagingBuffer
@@ -43,7 +43,7 @@ public:
   ~StagingBufferPool();
   MBASE_DISALLOW_COPY_MOVE(StagingBufferPool);
 
-  void Initialize(VulkanDevice* device);
+  void Initialize(IVulkanDevice* device);
   void Shutdown();
 
   /// Acquire a staging buffer of at least `size` bytes.
@@ -61,7 +61,7 @@ private:
 
   StagingBuffer* CreateStagingBuffer(VkDeviceSize size);
 
-  VulkanDevice* device_ = nullptr;
+  IVulkanDevice* device_ = nullptr;
   mbase::Lockable<std::mutex> mutex_;
   std::vector<PendingEntry> pending_buffers_ MBASE_GUARDED_BY(mutex_);
   std::vector<StagingBuffer*> all_buffers_ MBASE_GUARDED_BY(mutex_);
@@ -80,7 +80,7 @@ public:
   ~TransientCommandPool();
   MBASE_DISALLOW_COPY_MOVE(TransientCommandPool);
 
-  void Initialize(VulkanDevice* device, uint32_t queue_family_index);
+  void Initialize(IVulkanDevice* device, uint32_t queue_family_index);
   void Shutdown();
 
   /// Allocate and begin a one-shot command buffer.
@@ -96,7 +96,7 @@ private:
     uint64_t serial = 0;
   };
 
-  VulkanDevice* device_ = nullptr;
+  IVulkanDevice* device_ = nullptr;
   mbase::Lockable<std::mutex> mutex_;
   VkCommandPool vk_command_pool_ MBASE_GUARDED_BY(mutex_) = VK_NULL_HANDLE;
   std::vector<PendingEntry> pending_command_buffers_ MBASE_GUARDED_BY(mutex_);

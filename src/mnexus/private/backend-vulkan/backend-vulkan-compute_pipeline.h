@@ -38,7 +38,7 @@ using ComputePipelineResourcePool = resource_pool::TResourceGenerationalPool<Com
 
 resource_pool::ResourceHandle EmplaceComputePipelineResourcePool(
   ComputePipelineResourcePool& out_pool,
-  VulkanDevice const& vk_device,
+  IVulkanDevice const& vk_device,
   mnexus::ProgramHandle program_handle,
   ProgramResourcePool const& program_pool,
   ShaderModuleResourcePool const& shader_module_pool

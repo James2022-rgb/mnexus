@@ -49,7 +49,7 @@ using ShaderModuleResourcePool = resource_pool::TResourceGenerationalPool<Shader
 
 resource_pool::ResourceHandle EmplaceShaderModuleResourcePool(
   ShaderModuleResourcePool& out_pool,
-  VulkanDevice const& device,
+  IVulkanDevice const& device,
   mnexus::ShaderModuleDesc const& shader_module_desc
 );
 
@@ -118,7 +118,7 @@ using ProgramResourcePool = resource_pool::TResourceGenerationalPool<ProgramHot,
 
 resource_pool::ResourceHandle EmplaceProgramResourcePool(
   ProgramResourcePool& out_pool,
-  VulkanDevice const& device,
+  IVulkanDevice const& device,
   mnexus::ProgramDesc const& program_desc,
   ShaderModuleResourcePool const& shader_module_pool,
   pipeline::TPipelineLayoutCache<VulkanPipelineLayoutPtr>& pipeline_layout_cache

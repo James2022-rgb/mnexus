@@ -14,7 +14,7 @@ ThreadCommandPoolRegistry::~ThreadCommandPoolRegistry() {
   this->Shutdown();
 }
 
-void ThreadCommandPoolRegistry::Initialize(VulkanDevice* device, uint32_t queue_family_index) {
+void ThreadCommandPoolRegistry::Initialize(IVulkanDevice* device, uint32_t queue_family_index) {
   device_ = device;
   queue_family_index_ = queue_family_index;
 }

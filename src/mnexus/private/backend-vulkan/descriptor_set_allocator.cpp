@@ -28,7 +28,7 @@ public:
   DescriptorSetAllocator() = default;
   ~DescriptorSetAllocator() override = default;
 
-  void Initialize(VulkanDevice* device) {
+  void Initialize(IVulkanDevice* device) {
     device_ = device;
   }
 
@@ -119,7 +119,7 @@ public:
     auto result = std::make_shared<VulkanDescriptorSet>(
       vk_set,
       [this, vk_layout, vk_set] { this->FreeImpl(vk_layout, vk_set); },
-      device_->deferred_destroyer()
+      device_->GetDeferredDestroyer()
     );
 
     // Cache the set.
@@ -242,7 +242,7 @@ private:
 
   static constexpr uint32_t kSetsPerPool = 16;
 
-  VulkanDevice* device_ = nullptr;
+  IVulkanDevice* device_ = nullptr;
   mbase::Lockable<std::mutex> mutex_;
   std::unordered_map<VkDescriptorSetLayout, PerLayoutState> per_layout_states_ MBASE_GUARDED_BY(mutex_);
 };
@@ -251,7 +251,7 @@ private:
 // IDescriptorSetAllocator::Create
 //
 
-IDescriptorSetAllocator* IDescriptorSetAllocator::Create(VulkanDevice* device) {
+IDescriptorSetAllocator* IDescriptorSetAllocator::Create(IVulkanDevice* device) {
   auto* allocator = new DescriptorSetAllocator();
   allocator->Initialize(device);
   return allocator;

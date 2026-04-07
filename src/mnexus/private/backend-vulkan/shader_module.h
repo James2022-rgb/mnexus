@@ -8,12 +8,12 @@
 
 namespace mnexus_backend::vulkan {
 
-class VulkanDevice;
+class IVulkanDevice;
 
 /// Create a VkShaderModule from a ShaderModuleDesc.
 /// Only SPIR-V is supported.
 VkShaderModule CreateVkShaderModule(
-  VulkanDevice const& device,
+  IVulkanDevice const& device,
   mnexus::ShaderModuleDesc const& shader_module_desc
 );
 
