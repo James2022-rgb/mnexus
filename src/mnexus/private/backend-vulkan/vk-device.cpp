@@ -41,6 +41,8 @@ public:
 
   void Shutdown() override;
 
+  VulkanInstance const* instance() const override { return &instance_; }
+  PhysicalDeviceDesc const& physical_device_desc() const override { return *physical_device_desc_; }
   VkDevice handle() const override { return handle_; }
   mnexus::QueueSelection const& queue_selection() const override { return queue_selection_; }
   VmaAllocator vma_allocator() const override { return vma_allocator_; }
@@ -62,7 +64,7 @@ private:
   friend class IVulkanDevice; // For Create() to construct.
 
   explicit VulkanDevice(
-    VulkanInstance const* instance,
+    VulkanInstance instance,
     PhysicalDeviceDesc const& physical_device_desc,
     VkDevice handle,
     mnexus::QueueSelection queue_selection,
@@ -71,7 +73,7 @@ private:
     uint32_t queue_count,
     VmaAllocator vma_allocator
   ) :
-    instance_(instance),
+    instance_(std::move(instance)),
     physical_device_desc_(std::make_unique<PhysicalDeviceDesc>(physical_device_desc)),
     queue_selection_(queue_selection),
     handle_(handle),
@@ -84,7 +86,7 @@ private:
     }
   }
 
-  VulkanInstance const* instance_ = nullptr;
+  VulkanInstance instance_;
   std::unique_ptr<PhysicalDeviceDesc> physical_device_desc_;
   VkDevice handle_ = VK_NULL_HANDLE;
   mnexus::QueueSelection queue_selection_;
@@ -396,7 +398,7 @@ std::vector<QueueFamilyRequest> BuildQueueCreateInfos(
 //
 
 std::unique_ptr<IVulkanDevice> IVulkanDevice::Create(
-  VulkanInstance const& instance,
+  VulkanInstance instance,
   VulkanDeviceDesc const& desc
 ) {
   // Select queue families.
@@ -557,7 +559,7 @@ std::unique_ptr<IVulkanDevice> IVulkanDevice::Create(
   }
 
   auto device = std::unique_ptr<VulkanDevice>(new VulkanDevice(
-    &instance,
+    std::move(instance),
     *desc.physical_device_desc,
     vk_device,
     selection,
@@ -800,6 +802,9 @@ void VulkanDevice::Shutdown() {
     vkDestroyDevice(handle_, nullptr);
     handle_ = VK_NULL_HANDLE;
   }
+
+  instance_.Shutdown();
+  VulkanInstance::ShutdownVolk();
 }
 
 } // namespace mnexus_backend::vulkan

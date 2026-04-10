@@ -44,7 +44,7 @@ public:
   virtual ~IVulkanDevice() = default;
 
   static std::unique_ptr<IVulkanDevice> Create(
-    VulkanInstance const& instance,
+    VulkanInstance instance,
     VulkanDeviceDesc const& desc
   );
 
@@ -53,6 +53,8 @@ public:
   // ----------------------------------------------------------------------------------------------
   // Accessors.
 
+  [[nodiscard]] virtual VulkanInstance const* instance() const = 0;
+  [[nodiscard]] virtual PhysicalDeviceDesc const& physical_device_desc() const = 0;
   [[nodiscard]] virtual VkDevice handle() const = 0;
   [[nodiscard]] virtual mnexus::QueueSelection const& queue_selection() const = 0;
   [[nodiscard]] virtual VmaAllocator vma_allocator() const = 0;

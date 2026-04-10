@@ -25,6 +25,7 @@
 #include "backend-vulkan/vk-instance.h"
 #include "backend-vulkan/vk-physical_device.h"
 #include "backend-vulkan/vk-staging.h"
+#include "backend-vulkan/vk-wsi_surface.h"
 #include "backend-vulkan/thread_command_pool.h"
 #include "backend-vulkan/depend/vulkan_vma.h"
 #include "backend-vulkan/resource_storage.h"
@@ -42,6 +43,7 @@ class MnexusDeviceVulkan final : public mnexus::IDevice {
 public:
   explicit MnexusDeviceVulkan(IVulkanDevice* vk_device, ResourceStorage* resource_storage) :
     vk_device_(vk_device),
+    wsi_swapchain_(WsiSwapchain::Create(vk_device->instance(), vk_device)),
     resource_storage_(resource_storage)
   {
     descriptor_set_allocator_ = IDescriptorSetAllocator::Create(vk_device);
@@ -446,6 +448,17 @@ public:
     return {};
   }
 
+  // ----------------------------------------------------------------------------------------------
+  // Local
+
+  void OnSurfaceDestroyed() {
+    wsi_swapchain_.OnSourceDestroyed();
+  }
+
+  void OnSurfaceRecreated(mnexus::SurfaceSourceDesc const& surface_source_desc) {
+    wsi_swapchain_.OnSourceCreated(surface_source_desc);
+  }
+
 private:
   struct PendingReadback {
     void* dst;
@@ -473,6 +486,7 @@ private:
   }
 
   IVulkanDevice* vk_device_ = nullptr;
+  WsiSwapchain wsi_swapchain_;
   ResourceStorage* resource_storage_ = nullptr;
   IDescriptorSetAllocator* descriptor_set_allocator_ = nullptr;
   std::vector<PendingReadback> pending_readbacks_;
@@ -485,8 +499,7 @@ private:
 
 class BackendVulkan final : public IBackendVulkan {
 public:
-  explicit BackendVulkan(VulkanInstance instance, std::unique_ptr<IVulkanDevice> vk_device) :
-    vk_instance_(std::move(instance)),
+  explicit BackendVulkan(std::unique_ptr<IVulkanDevice> vk_device) :
     vk_device_(std::move(vk_device)),
     device_(vk_device_.get(), &resource_storage_)
   {}
@@ -501,11 +514,11 @@ public:
   }
 
   void OnSurfaceDestroyed() override {
-    STUB_NOT_IMPLEMENTED();
+    device_.OnSurfaceDestroyed();
   }
 
-  void OnSurfaceRecreated(mnexus::SurfaceSourceDesc const& /*surface_source_desc*/) override {
-    STUB_NOT_IMPLEMENTED();
+  void OnSurfaceRecreated(mnexus::SurfaceSourceDesc const& surface_source_desc) override {
+    device_.OnSurfaceRecreated(surface_source_desc);
   }
 
   // ----------------------------------------------------------------------------------------------
@@ -530,16 +543,10 @@ public:
   // Local.
 
   void Shutdown() {
-    STUB_NOT_IMPLEMENTED();
-
     vk_device_->Shutdown();
-
-    vk_instance_.Shutdown();
-    VulkanInstance::ShutdownVolk();
   }
 
 private:
-  VulkanInstance vk_instance_;
   std::unique_ptr<IVulkanDevice> vk_device_;
 
   ResourceStorage resource_storage_;
@@ -647,7 +654,7 @@ std::unique_ptr<IBackendVulkan> IBackendVulkan::Create(BackendVulkanCreateDesc c
   };
 
   std::unique_ptr<IVulkanDevice> vk_device = IVulkanDevice::Create(
-    instance,
+    std::move(instance),
     device_desc
   );
   if (!vk_device) {
@@ -655,7 +662,7 @@ std::unique_ptr<IBackendVulkan> IBackendVulkan::Create(BackendVulkanCreateDesc c
     return nullptr;
   }
 
-  return std::make_unique<BackendVulkan>(std::move(instance), std::move(vk_device));
+  return std::make_unique<BackendVulkan>(std::move(vk_device));
 }
 
 } // namespace mnexus_backend::vulkan
