@@ -317,16 +317,26 @@ public:
   //
 
   IMPL_VAPI(mnexus::SamplerHandle, CreateSampler,
-    mnexus::SamplerDesc const& /*desc*/
+    mnexus::SamplerDesc const& desc
   ) {
-    STUB_NOT_IMPLEMENTED();
-    return mnexus::SamplerHandle::Invalid();
+    resource_pool::ResourceHandle const pool_handle = EmplaceSamplerResourcePool(
+      resource_storage_->samplers,
+      *vk_device_,
+      desc
+    );
+
+    if (pool_handle.IsNull()) {
+      return mnexus::SamplerHandle::Invalid();
+    }
+
+    return mnexus::SamplerHandle { pool_handle.AsU64() };
   }
 
   IMPL_VAPI(void, DestroySampler,
-    mnexus::SamplerHandle /*sampler_handle*/
+    mnexus::SamplerHandle sampler_handle
   ) {
-    STUB_NOT_IMPLEMENTED();
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(sampler_handle.Get());
+    resource_storage_->samplers.Erase(pool_handle);
   }
 
   // ----------------------------------------------------------------------------------------------

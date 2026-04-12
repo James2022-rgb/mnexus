@@ -21,6 +21,7 @@ struct ResourceStorage final {
   ShaderModuleResourcePool shader_modules;
   ProgramResourcePool programs;
   ComputePipelineResourcePool compute_pipelines;
+  SamplerResourcePool samplers;
 
   pipeline::TPipelineLayoutCache<VulkanPipelineLayoutPtr> pipeline_layout_cache;
 
@@ -55,6 +56,12 @@ struct ResourceStorage final {
       auto& hot = compute_pipelines.LockSharedAndGetRefHot(handle);
       hot.Stamp(queue_compact_index, serial);
       compute_pipelines.UnlockShared();
+      break;
+    }
+    case mnexus::kResourceTypeSampler: {
+      auto& hot = samplers.LockSharedAndGetRefHot(handle);
+      hot.Stamp(queue_compact_index, serial);
+      samplers.UnlockShared();
       break;
     }
     default:

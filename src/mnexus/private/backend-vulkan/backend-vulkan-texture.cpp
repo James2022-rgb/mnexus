@@ -175,4 +175,59 @@ resource_pool::ResourceHandle EmplaceTextureResourcePool(
   );
 }
 
+// ====================================================================================================
+// Sampler
+//
+
+resource_pool::ResourceHandle EmplaceSamplerResourcePool(
+  SamplerResourcePool& out_pool,
+  IVulkanDevice const& vk_device,
+  mnexus::SamplerDesc const& sampler_desc
+) {
+  VkSamplerCreateInfo create_info {
+    .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+    .pNext = nullptr,
+    .flags = 0,
+    .magFilter = ToVkFilter(sampler_desc.mag_filter),
+    .minFilter = ToVkFilter(sampler_desc.min_filter),
+    .mipmapMode = ToVkSamplerMipmapMode(sampler_desc.mipmap_filter),
+    .addressModeU = ToVkSamplerAddressMode(sampler_desc.address_mode_u),
+    .addressModeV = ToVkSamplerAddressMode(sampler_desc.address_mode_v),
+    .addressModeW = ToVkSamplerAddressMode(sampler_desc.address_mode_w),
+    .mipLodBias = 0.0f,
+    .anisotropyEnable = VK_FALSE,
+    .maxAnisotropy = 1.0f,
+    .compareEnable = VK_FALSE,
+    .compareOp = VK_COMPARE_OP_ALWAYS,
+    .minLod = 0.0f,
+    .maxLod = VK_LOD_CLAMP_NONE,
+    .borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+    .unnormalizedCoordinates = VK_FALSE,
+  };
+
+  VkSampler vk_sampler_handle = VK_NULL_HANDLE;
+  VkResult const result = vkCreateSampler(vk_device.handle(), &create_info, nullptr, &vk_sampler_handle);
+  if (result != VK_SUCCESS) {
+    MBASE_LOG_ERROR("vkCreateSampler failed: {}", string_VkResult(result));
+    return resource_pool::ResourceHandle::Null();
+  }
+
+  VkDevice vk_device_handle = vk_device.handle();
+  VulkanSampler vk_sampler(
+    vk_sampler_handle,
+    [vk_device_handle, vk_sampler_handle] {
+      vkDestroySampler(vk_device_handle, vk_sampler_handle, nullptr);
+    },
+    vk_device.GetDeferredDestroyer()
+  );
+
+  SamplerHot hot { .vk_sampler = std::move(vk_sampler) };
+  SamplerCold cold { .desc = sampler_desc };
+
+  return out_pool.Emplace(
+    std::forward_as_tuple(std::move(hot)),
+    std::forward_as_tuple(std::move(cold))
+  );
+}
+
 } // namespace mnexus_backend::vulkan

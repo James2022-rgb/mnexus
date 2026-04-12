@@ -47,4 +47,37 @@ resource_pool::ResourceHandle EmplaceTextureResourcePool(
   mnexus::TextureDesc const& texture_desc
 );
 
+// ----------------------------------------------------------------------------------------------------
+// Sampler
+//
+
+class VulkanSampler final : public TVulkanObjectBase<VkSampler> {
+public:
+  VulkanSampler() = default;
+  VulkanSampler(VkSampler handle, std::function<void()> destroy_func, IVulkanDeferredDestroyer* deferred_destroyer) :
+    TVulkanObjectBase(handle, std::move(destroy_func), deferred_destroyer)
+  {
+  }
+};
+
+struct SamplerHot final {
+  VulkanSampler vk_sampler;
+
+  void Stamp(uint32_t queue_compact_index, uint64_t serial) {
+    this->vk_sampler.sync_stamp().Stamp(queue_compact_index, serial);
+  }
+};
+
+struct SamplerCold final {
+  mnexus::SamplerDesc desc;
+};
+
+using SamplerResourcePool = resource_pool::TResourceGenerationalPool<SamplerHot, SamplerCold, mnexus::kResourceTypeSampler>;
+
+resource_pool::ResourceHandle EmplaceSamplerResourcePool(
+  SamplerResourcePool& out_pool,
+  IVulkanDevice const& vk_device,
+  mnexus::SamplerDesc const& sampler_desc
+);
+
 } // namespace mnexus_backend::vulkan
