@@ -9,6 +9,7 @@
 #include "resource_pool/resource_generational_pool.h"
 
 #include "backend-vulkan/backend-vulkan-buffer.h"
+#include "backend-vulkan/backend-vulkan-texture.h"
 #include "backend-vulkan/backend-vulkan-shader.h"
 #include "backend-vulkan/backend-vulkan-compute_pipeline.h"
 
@@ -16,6 +17,7 @@ namespace mnexus_backend::vulkan {
 
 struct ResourceStorage final {
   BufferResourcePool buffers;
+  TextureResourcePool textures;
   ShaderModuleResourcePool shader_modules;
   ProgramResourcePool programs;
   ComputePipelineResourcePool compute_pipelines;
@@ -29,6 +31,12 @@ struct ResourceStorage final {
       auto& hot = buffers.LockSharedAndGetRefHot(handle);
       hot.Stamp(queue_compact_index, serial);
       buffers.UnlockShared();
+      break;
+    }
+    case mnexus::kResourceTypeTexture: {
+      auto& hot = textures.LockSharedAndGetRefHot(handle);
+      hot.Stamp(queue_compact_index, serial);
+      textures.UnlockShared();
       break;
     }
     case mnexus::kResourceTypeShaderModule: {

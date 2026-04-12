@@ -13,6 +13,7 @@
 #include "resource_pool/resource_generational_pool.h"
 
 #include "backend-vulkan/command_encoder.h"
+#include "backend-vulkan/image_layout_tracker.h"
 
 namespace mnexus_backend::vulkan {
 
@@ -231,6 +232,8 @@ private:
   CommandEncoder encoder_;
   ResourceStorage* resource_storage_ = nullptr;
   std::vector<resource_pool::ResourceHandle> referenced_resources_;
+  ImageLayoutTracker image_layout_tracker_;
+  PendingPipelineBarrier pending_pipeline_barrier_;
   mnexus::RenderStateEventLog render_state_event_log_;
 };
 

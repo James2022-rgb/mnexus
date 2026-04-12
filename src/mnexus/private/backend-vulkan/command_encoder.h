@@ -22,7 +22,12 @@ struct ResourceStorage;
 class CommandEncoder final {
 public:
   CommandEncoder() = default;
-  CommandEncoder(VkCommandBuffer command_buffer, VkDevice device, IDescriptorSetAllocator* ds_allocator, ResourceStorage* resource_storage);
+  explicit CommandEncoder(
+    VkCommandBuffer command_buffer,
+    VkDevice device,
+    IDescriptorSetAllocator* ds_allocator,
+    ResourceStorage* resource_storage
+  );
 
   [[nodiscard]] VkCommandBuffer command_buffer() const { return command_buffer_; }
 

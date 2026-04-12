@@ -7,19 +7,10 @@
 // public project headers -------------------------------
 #include "mbase/public/log.h"
 
-namespace mnexus_backend::vulkan {
+// project headers --------------------------------------
+#include "backend-vulkan/types_bridge.h"
 
-static VkBufferUsageFlags ConvertBufferUsageFlags(mnexus::BufferUsageFlags usage) {
-  VkBufferUsageFlags vk_flags = 0;
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kVertex))      { vk_flags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; }
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kIndex))       { vk_flags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT; }
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kUniform))     { vk_flags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT; }
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kStorage))     { vk_flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT; }
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kTransferSrc)) { vk_flags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT; }
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kTransferDst)) { vk_flags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT; }
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kIndirect))    { vk_flags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT; }
-  return vk_flags;
-}
+namespace mnexus_backend::vulkan {
 
 struct CreateVulkanBufferResult {
   VulkanBuffer vk_buffer;
@@ -33,9 +24,9 @@ std::optional<CreateVulkanBufferResult> CreateVulkanBuffer(
 ) {
   bool const mappable = buffer_desc.usage.HasAnyOf(mnexus::BufferUsageFlagBits::kMappable);
 
-  VkBufferUsageFlags const vk_usage_flags = ConvertBufferUsageFlags(buffer_desc.usage) | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  VkBufferUsageFlags const vk_usage_flags = ToVkBufferUsageFlags(buffer_desc.usage) | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
-  VkBufferCreateInfo info {
+  VkBufferCreateInfo create_info {
     .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
     .pNext = nullptr,
     .flags = 0,
@@ -66,7 +57,7 @@ std::optional<CreateVulkanBufferResult> CreateVulkanBuffer(
   VmaAllocationInfo allocation_info {};
 
   VkResult const result = vmaCreateBuffer(
-    vma_allocator, &info, &alloc_info,
+    vma_allocator, &create_info, &alloc_info,
     &vk_buffer_handle, &allocation, &allocation_info
   );
   if (result != VK_SUCCESS) {
@@ -100,12 +91,12 @@ resource_pool::ResourceHandle EmplaceBufferResourcePool(
     return resource_pool::ResourceHandle::Null();
   }
 
-  CreateVulkanBufferResult& buf = *opt_result;
+  CreateVulkanBufferResult& result = *opt_result;
 
   BufferHot hot {
-    .vk_buffer = std::move(buf.vk_buffer),
-    .mapped_data = buf.mapped_data,
-    .vma_allocation = buf.vma_allocation,
+    .vk_buffer = std::move(result.vk_buffer),
+    .mapped_data = result.mapped_data,
+    .vma_allocation = result.vma_allocation,
     .vma_allocator = vk_device.vma_allocator(),
   };
   BufferCold cold {

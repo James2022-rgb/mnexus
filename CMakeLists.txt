@@ -421,7 +421,7 @@ if(${_enable_backend_webgpu})
     ${_private_backend_webgpu_dir}/webgpu_format.h
   )
 endif()
-source_group("Private/Backend-WebGPU" FILES ${_sources_private_backend_webgpu})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/${_private_backend_webgpu_dir}" PREFIX "Private/Backend-WebGPU" FILES ${_sources_private_backend_webgpu})
 
 
 set(_private_backend_vulkan_dir "${_private_root_dir}/backend-vulkan")
@@ -469,9 +469,15 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/vk-physical_device.h
     ${_private_backend_vulkan_dir}/vk-wsi_surface.cpp
     ${_private_backend_vulkan_dir}/vk-wsi_surface.h
+    ${_private_backend_vulkan_dir}/types_bridge.cpp
+    ${_private_backend_vulkan_dir}/types_bridge.h
+    ${_private_backend_vulkan_dir}/image_layout_tracker.cpp
+    ${_private_backend_vulkan_dir}/image_layout_tracker.h
+    ${_private_backend_vulkan_dir}/pending_pipeline_barrier.cpp
+    ${_private_backend_vulkan_dir}/pending_pipeline_barrier.h
   )
 endif()
-source_group("Private/Backend-Vulkan" FILES ${_sources_private_backend_vulkan})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/${_private_backend_vulkan_dir}" PREFIX "Private/Backend-Vulkan" FILES ${_sources_private_backend_vulkan})
 
 
 set(_private_impl_dir "${_private_root_dir}/impl")

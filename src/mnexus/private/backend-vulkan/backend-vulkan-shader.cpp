@@ -6,6 +6,7 @@
 
 // project headers --------------------------------------
 #include "backend-vulkan/shader_module.h"
+#include "backend-vulkan/types_bridge.h"
 
 #include "pipeline/pipeline_layout_cache_key.h"
 
@@ -116,30 +117,7 @@ resource_pool::ResourceHandle EmplaceProgramResourcePool(
           vk_binding.stageFlags = VK_SHADER_STAGE_ALL;
           vk_binding.pImmutableSamplers = nullptr;
 
-          switch (entry.type) {
-            case mnexus::BindGroupLayoutEntryType::kUniformBuffer:
-              vk_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-              break;
-            case mnexus::BindGroupLayoutEntryType::kStorageBuffer:
-              vk_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-              break;
-            case mnexus::BindGroupLayoutEntryType::kSampledTexture:
-              vk_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-              break;
-            case mnexus::BindGroupLayoutEntryType::kSampler:
-              vk_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-              break;
-            case mnexus::BindGroupLayoutEntryType::kStorageTexture:
-              vk_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-              break;
-            case mnexus::BindGroupLayoutEntryType::kCombinedTextureSampler:
-              vk_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-              break;
-            default:
-              MBASE_LOG_ERROR("Unsupported BindGroupLayoutEntryType: {}", static_cast<uint32_t>(entry.type));
-              mbase::Trap();
-              break;
-          }
+          vk_binding.descriptorType = ToVkDescriptorType(entry.type);
 
           vk_bindings.emplace_back(vk_binding);
         }

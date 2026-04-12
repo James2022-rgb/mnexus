@@ -28,7 +28,7 @@ struct BufferHot final {
   VmaAllocator vma_allocator = VK_NULL_HANDLE;     // For flush.
 
   void Stamp(uint32_t queue_compact_index, uint64_t serial) {
-    vk_buffer.sync_stamp().Stamp(queue_compact_index, serial);
+    this->vk_buffer.sync_stamp().Stamp(queue_compact_index, serial);
   }
 };
 

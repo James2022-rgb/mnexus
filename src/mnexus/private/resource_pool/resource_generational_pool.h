@@ -50,6 +50,13 @@ public:
     THot const& hot_ref = inner_.HotRef(handle);
     return { hot_ref, std::move(lock) };
   }
+  std::pair<THot&, SharedLockGuardType> GetHotRefWithSharedLockGuard(
+    GenerationalHandle handle
+  ) MBASE_EXCLUDES(mutex_) MBASE_NO_THREAD_SAFETY_ANALYSIS {
+    mbase::SharedLockGuard lock(mutex_);
+    THot& hot_ref = inner_.HotRef(handle);
+    return { hot_ref, std::move(lock) };
+  }
 
   std::tuple<THot const&, TCold const&, SharedLockGuardType> GetConstRefWithSharedLockGuard(
     GenerationalHandle handle

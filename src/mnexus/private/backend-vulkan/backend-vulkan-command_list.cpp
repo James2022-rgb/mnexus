@@ -1,11 +1,11 @@
 // TU header --------------------------------------------
 #include "backend-vulkan/backend-vulkan-command_list.h"
 
-// public project headers -------------------------------
-#include "mbase/public/log.h"
-
 // project headers --------------------------------------
+#include "impl/impl_macros.h"
+
 #include "backend-vulkan/resource_storage.h"
+#include "backend-vulkan/types_bridge.h"
 
 namespace mnexus_backend::vulkan {
 
@@ -23,6 +23,11 @@ MnexusCommandListVulkan::MnexusCommandListVulkan(
 //
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::End() {
+  // Transition all tracked images back to their default layouts before finalizing.
+  image_layout_tracker_.TransitionAllToDefaults();
+  image_layout_tracker_.FlushPendingTransitions(pending_pipeline_barrier_);
+  pending_pipeline_barrier_.FlushAndClear(encoder_.command_buffer());
+
   encoder_.End();
 }
 
@@ -41,11 +46,11 @@ MNEXUS_NO_THROW mnexus::RenderStateEventLog& MNEXUS_CALL MnexusCommandListVulkan
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::PushDebugGroup(
   mnexus::container::ArrayProxy<char const> /*name*/, float const* /*color*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: PushDebugGroup() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::PopDebugGroup() {
-  MBASE_LOG_WARN("Vulkan backend: PopDebugGroup() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 //
@@ -57,17 +62,72 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::ClearTexture(
   mnexus::TextureSubresourceRange const& /*subresource_range*/,
   mnexus::ClearValue const& /*clear_value*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: ClearTexture() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::CopyBufferToTexture(
-  mnexus::BufferHandle /*src_buffer_handle*/,
-  uint32_t /*src_buffer_offset*/,
-  mnexus::TextureHandle /*dst_texture_handle*/,
-  mnexus::TextureSubresourceRange const& /*dst_subresource_range*/,
-  mnexus::Extent3d const& /*copy_extent*/
+  mnexus::BufferHandle src_buffer_handle,
+  uint32_t src_buffer_offset,
+  mnexus::TextureHandle dst_texture_handle,
+  mnexus::TextureSubresourceRange const& dst_subresource_range,
+  mnexus::Extent3d const& copy_extent
 ) {
-  MBASE_LOG_WARN("Vulkan backend: CopyBufferToTexture() not implemented");
+  // Resolve source buffer.
+  auto const src_pool_handle = resource_pool::ResourceHandle::FromU64(src_buffer_handle.Get());
+  auto [src_hot, src_lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(src_pool_handle);
+
+  // Resolve destination texture.
+  auto const dst_pool_handle = resource_pool::ResourceHandle::FromU64(dst_texture_handle.Get());
+  auto [dst_hot, dst_cold, dst_lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(dst_pool_handle);
+
+  VkImage const vk_image = dst_hot.vk_image.handle();
+  VkFormat const vk_format = ToVkFormat(dst_cold.desc.format);
+
+  // Register the image and transition the target subresource to TRANSFER_DST_OPTIMAL.
+  image_layout_tracker_.RegisterImage(
+    vk_image,
+    ToVkImageUsageFlags(dst_cold.desc.usage, vk_format),
+    vk_format,
+    dst_cold.desc.mip_level_count,
+    dst_cold.desc.array_layer_count
+  );
+
+  // Transition each target subresource (mip level × array layer) to transfer dst.
+  for (uint32_t layer = dst_subresource_range.base_array_layer;
+       layer < dst_subresource_range.base_array_layer + dst_subresource_range.array_layer_count;
+       ++layer) {
+    image_layout_tracker_.TransitionToTransferDst(
+      vk_image,
+      { .mip_level = dst_subresource_range.base_mip_level, .array_layer = layer }
+    );
+  }
+
+  // Flush the layout transition barrier before the copy.
+  image_layout_tracker_.FlushPendingTransitions(pending_pipeline_barrier_);
+  pending_pipeline_barrier_.FlushAndClear(encoder_.command_buffer());
+
+  // Build copy region. Vulkan supports tightly packed source data natively (bufferRowLength = 0).
+  VkBufferImageCopy const region {
+    .bufferOffset = src_buffer_offset,
+    .bufferRowLength = 0,
+    .bufferImageHeight = 0,
+    .imageSubresource = ToVkImageSubresourceLayers(dst_subresource_range),
+    .imageOffset = { 0, 0, 0 },
+    .imageExtent = VkExtent3D { copy_extent.width, copy_extent.height, copy_extent.depth },
+  };
+
+  vkCmdCopyBufferToImage(
+    encoder_.command_buffer(),
+    src_hot.vk_buffer.handle(),
+    vk_image,
+    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    1,
+    &region
+  );
+
+  // Track referenced resources for submit-time stamping.
+  referenced_resources_.push_back(src_pool_handle);
+  referenced_resources_.push_back(dst_pool_handle);
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::CopyTextureToBuffer(
@@ -77,7 +137,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::CopyTextureToBuffer(
   uint32_t /*dst_buffer_offset*/,
   mnexus::Extent3d const& /*copy_extent*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: CopyTextureToBuffer() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BlitTexture(
@@ -91,7 +151,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BlitTexture(
   mnexus::Extent3d const& /*dst_extent*/,
   mnexus::Filter /*filter*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: BlitTexture() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 //
@@ -165,14 +225,14 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindSampledTexture(
   mnexus::TextureHandle /*texture_handle*/,
   mnexus::TextureSubresourceRange const& /*subresource_range*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: BindSampledTexture() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindSampler(
   mnexus::BindingId const& /*id*/,
   mnexus::SamplerHandle /*sampler_handle*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: BindSampler() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 //
@@ -182,7 +242,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindSampler(
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindExplicitRenderPipeline(
   mnexus::RenderPipelineHandle /*render_pipeline_handle*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: BindExplicitRenderPipeline() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 //
@@ -192,11 +252,11 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindExplicitRenderPipe
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BeginRenderPass(
   mnexus::RenderPassDesc const& /*desc*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: BeginRenderPass() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::EndRenderPass() {
-  MBASE_LOG_WARN("Vulkan backend: EndRenderPass() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 //
@@ -206,14 +266,14 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::EndRenderPass() {
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindRenderProgram(
   mnexus::ProgramHandle /*program_handle*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: BindRenderProgram() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetVertexInputLayout(
   mnexus::container::ArrayProxy<mnexus::VertexInputBindingDesc const> /*bindings*/,
   mnexus::container::ArrayProxy<mnexus::VertexInputAttributeDesc const> /*attributes*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: SetVertexInputLayout() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindVertexBuffer(
@@ -221,7 +281,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindVertexBuffer(
   mnexus::BufferHandle /*buffer_handle*/,
   uint64_t /*offset*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: BindVertexBuffer() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindIndexBuffer(
@@ -229,67 +289,67 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindIndexBuffer(
   uint64_t /*offset*/,
   mnexus::IndexType /*index_type*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: BindIndexBuffer() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetPrimitiveTopology(
   mnexus::PrimitiveTopology /*topology*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: SetPrimitiveTopology() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetPolygonMode(
   mnexus::PolygonMode /*mode*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: SetPolygonMode() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetCullMode(
   mnexus::CullMode /*cull_mode*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: SetCullMode() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetFrontFace(
   mnexus::FrontFace /*front_face*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: SetFrontFace() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 // Depth
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetDepthTestEnabled(bool /*enabled*/) {
-  MBASE_LOG_WARN("Vulkan backend: SetDepthTestEnabled() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetDepthWriteEnabled(bool /*enabled*/) {
-  MBASE_LOG_WARN("Vulkan backend: SetDepthWriteEnabled() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetDepthCompareOp(
   mnexus::CompareOp /*op*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: SetDepthCompareOp() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 // Stencil
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetStencilTestEnabled(bool /*enabled*/) {
-  MBASE_LOG_WARN("Vulkan backend: SetStencilTestEnabled() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetStencilFrontOps(
   mnexus::StencilOp /*fail*/, mnexus::StencilOp /*pass*/,
   mnexus::StencilOp /*depth_fail*/, mnexus::CompareOp /*compare*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: SetStencilFrontOps() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetStencilBackOps(
   mnexus::StencilOp /*fail*/, mnexus::StencilOp /*pass*/,
   mnexus::StencilOp /*depth_fail*/, mnexus::CompareOp /*compare*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: SetStencilBackOps() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 // Per-attachment blend
@@ -297,7 +357,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetStencilBackOps(
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetBlendEnabled(
   uint32_t /*attachment*/, bool /*enabled*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: SetBlendEnabled() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetBlendFactors(
@@ -305,13 +365,13 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetBlendFactors(
   mnexus::BlendFactor /*src_color*/, mnexus::BlendFactor /*dst_color*/, mnexus::BlendOp /*color_op*/,
   mnexus::BlendFactor /*src_alpha*/, mnexus::BlendFactor /*dst_alpha*/, mnexus::BlendOp /*alpha_op*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: SetBlendFactors() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetColorWriteMask(
   uint32_t /*attachment*/, mnexus::ColorWriteMask /*mask*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: SetColorWriteMask() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 //
@@ -322,14 +382,14 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::Draw(
   uint32_t /*vertex_count*/, uint32_t /*instance_count*/,
   uint32_t /*first_vertex*/, uint32_t /*first_instance*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: Draw() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::DrawIndexed(
   uint32_t /*index_count*/, uint32_t /*instance_count*/,
   uint32_t /*first_index*/, int32_t /*vertex_offset*/, uint32_t /*first_instance*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: DrawIndexed() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 //
@@ -340,13 +400,13 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetViewport(
   float /*x*/, float /*y*/, float /*width*/, float /*height*/,
   float /*min_depth*/, float /*max_depth*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: SetViewport() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::SetScissor(
   int32_t /*x*/, int32_t /*y*/, uint32_t /*width*/, uint32_t /*height*/
 ) {
-  MBASE_LOG_WARN("Vulkan backend: SetScissor() not implemented");
+  STUB_NOT_IMPLEMENTED();
 }
 
 } // namespace mnexus_backend::vulkan

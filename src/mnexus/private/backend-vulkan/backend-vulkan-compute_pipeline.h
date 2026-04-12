@@ -25,7 +25,7 @@ struct ComputePipelineHot final {
   VulkanPipelineLayoutPtr pipeline_layout_ref;           // Shared ownership — keeps DSLs alive.
 
   void Stamp(uint32_t queue_compact_index, uint64_t serial) {
-    vk_compute_pipeline.sync_stamp().Stamp(queue_compact_index, serial);
+    this->vk_compute_pipeline.sync_stamp().Stamp(queue_compact_index, serial);
   }
 };
 

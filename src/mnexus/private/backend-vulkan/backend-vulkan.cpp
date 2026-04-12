@@ -18,6 +18,7 @@
 
 #include "backend-vulkan/backend-vulkan-command_list.h"
 #include "backend-vulkan/backend-vulkan-shader.h"
+#include "backend-vulkan/backend-vulkan-texture.h"
 #include "backend-vulkan/backend-vulkan-compute_pipeline.h"
 #include "backend-vulkan/descriptor_set_allocator.h"
 
@@ -32,8 +33,6 @@
 
 namespace mnexus_backend::vulkan {
 
-#define STUB_NOT_IMPLEMENTED() \
-  do { MBASE_LOG_ERROR("Vulkan backend: {}() not implemented", __func__); mbase::Trap(); } while (0)
 
 // ==================================================================================================
 // MnexusDeviceVulkan
@@ -101,7 +100,7 @@ public:
     uint32_t data_size_in_bytes
   ) {
     auto const pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
-    auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
+    auto [hot, lock] = resource_storage_->buffers.GetHotRefWithSharedLockGuard(pool_handle);
 
     if (hot.mapped_data != nullptr) {
       // Mappable buffer: direct memcpy + flush.
@@ -134,6 +133,9 @@ public:
     vkEndCommandBuffer(vk_cb_handle);
 
     uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, vk_cb_handle);
+
+    uint32_t const queue_compact_index = *vk_device_->queue_index_map().Find(queue_id);
+    hot.vk_buffer.sync_stamp().Stamp(queue_compact_index, serial);
 
     vk_device_->transient_command_pool().Release(vk_cb_handle, queue_id, serial);
     vk_device_->staging_buffer_pool().Release(staging, queue_id, serial);
@@ -245,7 +247,6 @@ public:
       *vk_device_,
       desc
     );
-
     if (pool_handle.IsNull()) {
       return mnexus::BufferHandle::Invalid();
     }
@@ -280,23 +281,35 @@ public:
   }
 
   IMPL_VAPI(mnexus::TextureHandle, CreateTexture,
-    mnexus::TextureDesc const& /*desc*/
+    mnexus::TextureDesc const& desc
   ) {
-    STUB_NOT_IMPLEMENTED();
-    return mnexus::TextureHandle::Invalid();
+    resource_pool::ResourceHandle const pool_handle = EmplaceTextureResourcePool(
+      resource_storage_->textures,
+      *vk_device_,
+      desc
+    );
+    if (pool_handle.IsNull()) {
+      return mnexus::TextureHandle::Invalid();
+    }
+
+    return mnexus::TextureHandle { pool_handle.AsU64() };
   }
 
   IMPL_VAPI(void, DestroyTexture,
-    mnexus::TextureHandle /*texture_handle*/
+    mnexus::TextureHandle texture_handle
   ) {
-    STUB_NOT_IMPLEMENTED();
+    // FIXME: Should defer destruction until the GPU is done using this texture.
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(texture_handle.Get());
+    resource_storage_->textures.Erase(pool_handle);
   }
 
   IMPL_VAPI(void, GetTextureDesc,
-    mnexus::TextureHandle /*texture_handle*/,
-    mnexus::TextureDesc& /*out_desc*/
+    mnexus::TextureHandle texture_handle,
+    mnexus::TextureDesc& out_desc
   ) {
-    STUB_NOT_IMPLEMENTED();
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(texture_handle.Get());
+    auto [cold, lock] = resource_storage_->textures.GetColdConstRefWithSharedLockGuard(pool_handle);
+    out_desc = cold.desc;
   }
 
   // ----------------------------------------------------------------------------------------------
