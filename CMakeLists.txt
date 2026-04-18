@@ -461,6 +461,7 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/vk-deferred_destroyer.h
     ${_private_backend_vulkan_dir}/vk-device.h
     ${_private_backend_vulkan_dir}/vk-object.h
+    ${_private_backend_vulkan_dir}/vk-object-image.h
     ${_private_backend_vulkan_dir}/vk-staging.cpp
     ${_private_backend_vulkan_dir}/vk-staging.h
     ${_private_backend_vulkan_dir}/vk-instance.cpp

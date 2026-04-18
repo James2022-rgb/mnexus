@@ -80,16 +80,17 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::CopyBufferToTexture(
   auto const dst_pool_handle = resource_pool::ResourceHandle::FromU64(dst_texture_handle.Get());
   auto [dst_hot, dst_cold, dst_lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(dst_pool_handle);
 
-  VkImage const vk_image = dst_hot.vk_image.handle();
-  VkFormat const vk_format = ToVkFormat(dst_cold.desc.format);
+  VkImage const vk_image = dst_hot.GetVkImage().handle();
+  mnexus::TextureDesc const& dst_desc = dst_cold.GetTextureDesc();
+  VkFormat const vk_format = ToVkFormat(dst_desc.format);
 
   // Register the image and transition the target subresource to TRANSFER_DST_OPTIMAL.
   image_layout_tracker_.RegisterImage(
     vk_image,
-    ToVkImageUsageFlags(dst_cold.desc.usage, vk_format),
+    ToVkImageUsageFlags(dst_desc.usage, vk_format),
     vk_format,
-    dst_cold.desc.mip_level_count,
-    dst_cold.desc.array_layer_count
+    dst_desc.mip_level_count,
+    dst_desc.array_layer_count
   );
 
   // Transition each target subresource (mip level × array layer) to transfer dst.

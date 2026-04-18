@@ -6,7 +6,9 @@
 #include "mbase/public/log.h"
 
 // project headers --------------------------------------
+#include "backend-vulkan/types_bridge.h"
 #include "backend-vulkan/vk-physical_device.h"
+#include "backend-vulkan/image_layout_tracker.h"
 
 namespace mnexus_backend::vulkan {
 
@@ -223,6 +225,16 @@ WsiSwapchain WsiSwapchain::Create(VulkanInstance const* vk_instance, IVulkanDevi
   return WsiSwapchain(vk_instance, vk_device);
 }
 
+bool WsiSwapchain::IsValid() const {
+  MBASE_ASSERT_MSG(surface_.has_value() == (vk_swapchain_handle_ != VK_NULL_HANDLE), "Surface and swapchain handle state mismatch");
+  return surface_.has_value();
+}
+
+mnexus::TextureDesc const& WsiSwapchain::GetTextureDesc() const {
+  MBASE_ASSERT_MSG(this->IsValid(), "Swapchain is not valid");
+  return texture_desc_;
+}
+
 bool WsiSwapchain::OnSourceCreated(mnexus::SurfaceSourceDesc const& source_desc) {
   MBASE_ASSERT_MSG(!surface_.has_value(), "Surface already created");
 
@@ -266,12 +278,57 @@ bool WsiSwapchain::OnSourceCreated(mnexus::SurfaceSourceDesc const& source_desc)
     .oldSwapchain = VK_NULL_HANDLE,
   };
 
-  VkResult const result = vkCreateSwapchainKHR(vk_device_->handle(), &create_info, nullptr, &vk_swapchain_handle_);
+  VkResult result = vkCreateSwapchainKHR(vk_device_->handle(), &create_info, nullptr, &vk_swapchain_handle_);
   if (result != VK_SUCCESS) {
     MBASE_LOG_ERROR("vkCreateSwapchainKHR failed: {}", string_VkResult(result));
     vk_swapchain_handle_ = VK_NULL_HANDLE;
     return false;
   }
+
+  std::vector<VkImage> vk_image_handles(configuration.min_image_count);
+  result = vkGetSwapchainImagesKHR(vk_device_->handle(), vk_swapchain_handle_, &configuration.min_image_count, vk_image_handles.data());
+  if (result != VK_SUCCESS) {
+    MBASE_LOG_ERROR("vkGetSwapchainImagesKHR failed: {}", string_VkResult(result));
+    vkDestroySwapchainKHR(vk_device_->handle(), vk_swapchain_handle_, nullptr);
+    vk_swapchain_handle_ = VK_NULL_HANDLE;
+    vk_images_.clear();
+    return false;
+  }
+
+  vk_images_.reserve(configuration.min_image_count);
+  for (VkImage vk_image_handle : vk_image_handles) {
+    vk_images_.emplace_back(
+      vk_image_handle,
+      []() { /* Swapchain images are implicitly destroyed with the swapchain, so no explicit destruction needed. */ },
+      nullptr,
+      configuration.image_usage,
+      configuration.image_format
+    );
+  }
+
+  mnexus::TextureUsageFlags usage_flags;
+  if (configuration.image_usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) {
+    usage_flags |= mnexus::TextureUsageFlagBits::kAttachment;
+  }
+  if (configuration.image_usage & VK_IMAGE_USAGE_SAMPLED_BIT) {
+    usage_flags |= mnexus::TextureUsageFlagBits::kSampled;
+  }
+  if (configuration.image_usage & VK_IMAGE_USAGE_STORAGE_BIT) {
+    usage_flags |= mnexus::TextureUsageFlagBits::kUnorderedAccess;
+  }
+
+  texture_desc_ = mnexus::TextureDesc {
+    .usage = usage_flags,
+    .format = FromVkFormat(configuration.image_format),
+    .dimension = mnexus::TextureDimension::k2D,
+    .width = configuration.extent.width,
+    .height = configuration.extent.height,
+    .depth = 1,
+    .mip_level_count = 1,
+    .array_layer_count = 1,
+  };
+
+  default_vk_image_layout_ = ImageLayoutTracker::GetDefaultLayout(configuration.image_usage, configuration.image_format);
 
   return true;
 }
@@ -281,9 +338,62 @@ void WsiSwapchain::OnSourceDestroyed() {
 
   vkDestroySwapchainKHR(vk_device_->handle(), vk_swapchain_handle_, nullptr);
   vk_swapchain_handle_ = VK_NULL_HANDLE;
+  vk_images_.clear();
 
   surface_->Destroy();
   surface_ = std::nullopt;
+}
+
+std::optional<std::pair<uint32_t, VulkanImage const*>> WsiSwapchain::AcquireNextImage(
+  uint64_t timeout_ns,
+  VkSemaphore nullable_signal_semaphore,
+  VkFence nullable_signal_fence
+) {
+  MBASE_ASSERT_MSG(this->IsValid(), "Swapchain is not valid");
+
+  mbase::LockGuard lock(mutex_);
+
+  VkAcquireNextImageInfoKHR const acquire_info {
+    .sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
+    .pNext = nullptr,
+    .swapchain = vk_swapchain_handle_,
+    .timeout = timeout_ns,
+    .semaphore = nullable_signal_semaphore,
+    .fence = nullable_signal_fence,
+    .deviceMask = 1,
+  };
+
+  uint32_t image_index = 0;
+  VkResult const result = vkAcquireNextImage2KHR(vk_device_->handle(), &acquire_info, &image_index);
+  if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+    MBASE_LOG_ERROR("vkAcquireNextImage2KHR failed: {}", string_VkResult(result));
+    return std::nullopt;
+  }
+
+  if (result == VK_SUBOPTIMAL_KHR) {
+    MBASE_LOG_WARN("vkAcquireNextImage2KHR returned VK_SUBOPTIMAL_KHR");
+  }
+
+  last_acquired_image_index_ = image_index;
+
+  return std::make_pair(image_index, &vk_images_[image_index]);
+}
+
+void WsiSwapchain::ReturnImage(uint32_t image_index) {
+  mbase::LockGuard lock(mutex_);
+
+  MBASE_ASSERT(last_acquired_image_index_.has_value() && last_acquired_image_index_.value() == image_index);
+
+  last_acquired_image_index_ = std::nullopt;
+}
+
+std::optional<std::pair<uint32_t, VulkanImage const*>> WsiSwapchain::GetLastAcquiredImage() const {
+  mbase::LockGuard lock(mutex_);
+  if (!last_acquired_image_index_.has_value()) {
+    return std::nullopt;
+  }
+  uint32_t image_index = last_acquired_image_index_.value();
+  return std::make_pair(image_index, &vk_images_[image_index]);
 }
 
 } // namespace mnexus_backend::vulkan

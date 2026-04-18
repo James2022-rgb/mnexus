@@ -21,6 +21,8 @@ namespace mnexus_backend::vulkan {
 // Works something like an RAII wrapper, but the destructor delegates to the deferred destruction system instead of immediately destroying the Vulkan handle.
 //
 
+// FIXME: `TVulkanObjectBase` should be a lot smaller so as not to pollute the cache lines of the hot path.
+// The `std::function<void()>` and the `ResourceSyncStamp` are the main culprit here, the former of which is 64 bytes on MSVC x64 and the latter of which is 48 bytes in our current implementation.
 template<class T>
 class TVulkanObjectBase {
 public:

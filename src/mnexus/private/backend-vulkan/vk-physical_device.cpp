@@ -48,43 +48,43 @@ PhysicalDeviceDesc PhysicalDeviceDesc::Query(VulkanInstance const& instance, VkP
         *next = &features;            \
         next = &features.pNext;
 
-      if (result.CheckExtensionSupport(VK_KHR_MULTIVIEW_EXTENSION_NAME)) {
+      if (result.QueryExtensionSupport(VK_KHR_MULTIVIEW_EXTENSION_NAME)) {
         // pNextChain: VkPhysicalDeviceMultiviewFeaturesKHR
         ADD_FEATURE_QUERY_PNEXT_CHAIN(result.multiview_desc_, multiview_features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES_KHR);
       }
 
-      if (result.CheckExtensionSupport(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME)) {
+      if (result.QueryExtensionSupport(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME)) {
         result.depth_stencil_resolve_desc_.emplace();
       }
 
-      if (result.CheckExtensionSupport(VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME)) {
-        if (result.CheckExtensionSupport(VK_KHR_16BIT_STORAGE_EXTENSION_NAME)) {
+      if (result.QueryExtensionSupport(VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME)) {
+        if (result.QueryExtensionSupport(VK_KHR_16BIT_STORAGE_EXTENSION_NAME)) {
           // pNextChain: VkPhysicalDevice16BitStorageFeaturesKHR
           ADD_FEATURE_QUERY_PNEXT_CHAIN(result.sixteen_bit_storage_desc_, sixteen_bit_storage_features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES_KHR);
         }
       }
 
-      if (result.CheckExtensionSupport(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)) {
+      if (result.QueryExtensionSupport(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)) {
         // pNext chain: VkPhysicalDeviceDescriptorIndexingFeaturesEXT
         ADD_FEATURE_QUERY_PNEXT_CHAIN(result.descriptor_indexing_desc_, descriptor_indexing_features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT);
       }
 
-      if (result.CheckExtensionSupport(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)) {
+      if (result.QueryExtensionSupport(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)) {
         // pNext chain: VkPhysicalDeviceBufferDeviceAddressFeaturesKHR
         ADD_FEATURE_QUERY_PNEXT_CHAIN(result.buffer_device_address_desc_, buffer_device_address_features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR);
       }
 
-      if (result.CheckExtensionSupport(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)) {
+      if (result.QueryExtensionSupport(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)) {
         // pNext chain: VkPhysicalDeviceAccelerationStructureFeaturesKHR
         ADD_FEATURE_QUERY_PNEXT_CHAIN(result.acceleration_structure_desc_, acceleration_structure_features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR);
       }
 
-      if (result.CheckExtensionSupport(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) {
+      if (result.QueryExtensionSupport(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) {
         // pNext chain: VkPhysicalDeviceRayTracingPipelineFeaturesKHR
         ADD_FEATURE_QUERY_PNEXT_CHAIN(result.ray_tracing_pipeline_desc_, ray_tracing_pipeline_features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR);
       }
 
-      if (result.CheckExtensionSupport(VK_KHR_RAY_QUERY_EXTENSION_NAME)) {
+      if (result.QueryExtensionSupport(VK_KHR_RAY_QUERY_EXTENSION_NAME)) {
         // pNext chain: VkPhysicalDeviceRayQueryFeaturesKHR
         ADD_FEATURE_QUERY_PNEXT_CHAIN(result.ray_query_desc_, ray_query_features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR);
       }
@@ -125,32 +125,32 @@ PhysicalDeviceDesc PhysicalDeviceDesc::Query(VulkanInstance const& instance, VkP
         *next = &properties; \
         next  = &properties.pNext;
 
-      if (result.CheckExtensionSupport(VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME)) {
+      if (result.QueryExtensionSupport(VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME)) {
         // pNext chain: VkPhysicalDeviceDriverProperties
         result.driver_properties_desc_.emplace();
         ADD_PROPERTIES_QUERY_PNEXT_CHAIN(result.driver_properties_desc_, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES_KHR);
       }
-      if (result.CheckExtensionSupport(VK_KHR_MULTIVIEW_EXTENSION_NAME)) {
+      if (result.QueryExtensionSupport(VK_KHR_MULTIVIEW_EXTENSION_NAME)) {
         // pNext chain: VkPhysicalDeviceMultiviewPropertiesKHR
         ADD_PROPERTIES_QUERY_PNEXT_CHAIN(result.multiview_desc_, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES_KHR);
       }
 
-      if (result.CheckExtensionSupport(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME)) {
+      if (result.QueryExtensionSupport(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME)) {
         // pNext chain: VkPhysicalDeviceDepthStencilResolvePropertiesKHR
         ADD_PROPERTIES_QUERY_PNEXT_CHAIN(result.depth_stencil_resolve_desc_, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES_KHR);
       }
 
-      if (result.CheckExtensionSupport(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)) {
+      if (result.QueryExtensionSupport(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)) {
         // pNext chain: VkPhysicalDeviceDescriptorIndexingPropertiesEXT
         ADD_PROPERTIES_QUERY_PNEXT_CHAIN(result.descriptor_indexing_desc_, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES_EXT);
       }
 
-      if (result.CheckExtensionSupport(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)) {
+      if (result.QueryExtensionSupport(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)) {
         // pNext chain: VkPhysicalDeviceAccelerationStructurePropertiesKHR
         ADD_PROPERTIES_QUERY_PNEXT_CHAIN(result.acceleration_structure_desc_, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR);
       }
 
-      if (result.CheckExtensionSupport(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) {
+      if (result.QueryExtensionSupport(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) {
         // pNext chain: VkPhysicalDeviceRayTracingPipelinePropertiesKHR
         ADD_PROPERTIES_QUERY_PNEXT_CHAIN(result.ray_tracing_pipeline_desc_, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR);
       }
@@ -183,7 +183,7 @@ PhysicalDeviceDesc PhysicalDeviceDesc::Query(VulkanInstance const& instance, VkP
   vkGetPhysicalDeviceMemoryProperties(vk_physical_device, &result.memory_properties_);
 
   {
-    bool const has_video_queue = result.CheckExtensionSupport(VK_KHR_VIDEO_QUEUE_EXTENSION_NAME) != nullptr;
+    bool const has_video_queue = result.QueryExtensionSupport(VK_KHR_VIDEO_QUEUE_EXTENSION_NAME) != nullptr;
 
     uint32_t count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties2(vk_physical_device, &count, nullptr);
@@ -219,7 +219,7 @@ bool PhysicalDeviceDesc::QuerySurfaceSupport(uint32_t queue_family_index, VkSurf
   return result == VK_TRUE;
 }
 
-VkExtensionProperties const* PhysicalDeviceDesc::CheckExtensionSupport(std::string_view extension_name) const {
+VkExtensionProperties const* PhysicalDeviceDesc::QueryExtensionSupport(std::string_view extension_name) const {
   auto it = std::find_if(
     std::begin(extensions_), std::end(extensions_),
     [&](VkExtensionProperties const& v) {

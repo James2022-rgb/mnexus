@@ -12,4 +12,4 @@
 
 /// Log an error and trap for functions that are declared but not yet implemented.
 #define STUB_NOT_IMPLEMENTED() \
-  do { MBASE_LOG_ERROR("Vulkan backend: {}() not implemented", __func__); mbase::Trap(); } while (0)
+  do { MBASE_LOG_ERROR("Stub: {}() not implemented", __func__); mbase::Trap(); } while (0)

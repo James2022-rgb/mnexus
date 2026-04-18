@@ -6,6 +6,8 @@
 #include <memory>
 
 // public project headers -------------------------------
+#include "mbase/public/array_proxy.h"
+
 #include "mnexus/public/types.h"
 
 // project headers --------------------------------------
@@ -59,6 +61,8 @@ public:
   [[nodiscard]] virtual mnexus::QueueSelection const& queue_selection() const = 0;
   [[nodiscard]] virtual VmaAllocator vma_allocator() const = 0;
 
+  [[nodiscard]] virtual bool IsExtensionEnabled(char const* extension_name) const = 0;
+
   /// Returns the deferred destroyer for enqueuing GPU resource cleanup.
   [[nodiscard]] virtual IVulkanDeferredDestroyer* GetDeferredDestroyer() const = 0;
 
@@ -83,6 +87,22 @@ public:
   /// Submits a command buffer to the given queue, signaling the timeline semaphore.
   /// Returns the new serial.
   [[nodiscard]] virtual uint64_t QueueSubmitSingle(mnexus::QueueId const& queue_id, VkCommandBuffer command_buffer) = 0;
+
+  [[nodiscard]] virtual uint64_t QueuePresentSwapchainImage(
+    mnexus::QueueId const& queue_id,
+    uint32_t wait_semaphore_count,
+    VkSemaphore const* wait_semaphores,
+    uint64_t const* wait_values,
+    VkSwapchainKHR swapchain,
+    uint32_t image_index
+  ) = 0;
+
+  [[nodiscard]] virtual uint64_t QueuePresentSwapchainImage(
+    mnexus::QueueId const& queue_id,
+    uint64_t wait_serial,
+    VkSwapchainKHR swapchain,
+    uint32_t image_index
+  ) = 0;
 
   // ----------------------------------------------------------------------------------------------
   // Sub-system accessors.

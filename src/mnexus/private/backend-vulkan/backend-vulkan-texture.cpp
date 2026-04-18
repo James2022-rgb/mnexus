@@ -11,8 +11,89 @@
 #include "backend-vulkan/image_layout_tracker.h"
 #include "backend-vulkan/types_bridge.h"
 #include "backend-vulkan/vk-staging.h"
+#include "backend-vulkan/vk-wsi_surface.h"
 
 namespace mnexus_backend::vulkan {
+
+// ====================================================================================================
+// Texture
+//
+
+VulkanImage const& TextureHot::GetVkImage() const {
+  struct Visitor {
+    VulkanImage const& operator()(TextureHotRegular const& regular) const {
+      return regular.vk_image;
+    }
+    VulkanImage const& operator()(TextureHotSwapchain const& swapchain) const {
+      auto opt_last_acquired = swapchain.swapchain->GetLastAcquiredImage();
+      if (!opt_last_acquired.has_value()) {
+        MBASE_LOG_ERROR("Attempted to get VkImage from swapchain texture, but no image is currently acquired");
+        static VulkanImage dummy_image;
+        return dummy_image;
+      }
+
+      return *(opt_last_acquired->second);
+    }
+  };
+  return std::visit(
+    Visitor{},
+    content_
+  );
+}
+
+void TextureHot::Stamp(uint32_t queue_compact_index, uint64_t serial) {
+  struct Visitor {
+    uint32_t queue_compact_index;
+    uint64_t serial;
+
+    void operator()(TextureHotRegular& regular) const {
+      regular.vk_image.sync_stamp().Stamp(queue_compact_index, serial);
+    }
+    void operator()(TextureHotSwapchain& swapchain) const {
+      // Swapchain image stamping is no-op since we don't track swapchain image usage with sync stamps.
+    }
+  };
+
+  std::visit(
+    Visitor{queue_compact_index, serial},
+    content_
+  );
+}
+
+mnexus::TextureDesc const& TextureCold::GetTextureDesc() const {
+  struct Visitor {
+    mnexus::TextureDesc const& operator()(TextureColdRegular const& regular) const {
+      return regular.desc;
+    }
+    mnexus::TextureDesc const& operator()(TextureColdSwapchain const& swapchain) const {
+      MBASE_ASSERT(swapchain.swapchain->IsValid());
+      return swapchain.swapchain->GetTextureDesc();
+    }
+  };
+  return std::visit(
+    Visitor{},
+    content_
+  );
+}
+
+void TextureCold::GetDefaultState(VkImageLayout& out_layout) const {
+  struct Visitor {
+    VkImageLayout* out_layout;
+    void operator()(TextureColdRegular const& regular) const {
+      // No-op.
+      mbase::Trap();
+    }
+    void operator()(TextureColdSwapchain const& swapchain) const {
+      *out_layout = swapchain.swapchain->GetDefaultVkImageLayout();
+    }
+  };
+  return std::visit(
+    Visitor{&out_layout},
+    content_
+  );
+}
+
+namespace {
 
 struct CreateVulkanImageResult {
   VulkanImage vk_image;
@@ -86,7 +167,9 @@ std::optional<CreateVulkanImageResult> CreateVulkanImage(
     [vk_device_handle, vk_image_handle, allocation, vma_allocator] {
       vmaDestroyImage(vma_allocator, vk_image_handle, allocation);
     },
-    vk_device.GetDeferredDestroyer()
+    vk_device.GetDeferredDestroyer(),
+    create_info.usage,
+    create_info.format
   );
 
   // Transition from UNDEFINED to the default layout for this image's usage.
@@ -150,6 +233,8 @@ std::optional<CreateVulkanImageResult> CreateVulkanImage(
   };
 }
 
+} // namespace
+
 resource_pool::ResourceHandle EmplaceTextureResourcePool(
   TextureResourcePool& out_pool,
   IVulkanDevice& vk_device,
@@ -162,12 +247,28 @@ resource_pool::ResourceHandle EmplaceTextureResourcePool(
 
   CreateVulkanImageResult result = std::move(opt_result.value());
 
-  TextureHot hot {
-    .vk_image = std::move(result.vk_image),
-  };
-  TextureCold cold {
-    .desc = texture_desc,
-  };
+  VkImageUsageFlags const vk_usage_flags = result.vk_image.vk_usage_flags();
+  VkFormat const vk_format = result.vk_image.vk_format();
+
+  VkImageLayout const default_layout = ImageLayoutTracker::GetDefaultLayout(vk_usage_flags, vk_format);
+  SyncScope const default_scope = ImageLayoutTracker::GetDefaultSyncScope(vk_usage_flags, vk_format);
+  VkImageAspectFlags const aspect_mask = ImageLayoutTracker::GetAspectMaskFromFormat(vk_format);
+
+  TextureHot hot(TextureHotRegular{ .vk_image = std::move(result.vk_image) });
+  TextureCold cold(TextureColdRegular{ .desc = texture_desc });
+
+  return out_pool.Emplace(
+    std::forward_as_tuple(std::move(hot)),
+    std::forward_as_tuple(std::move(cold))
+  );
+}
+
+resource_pool::ResourceHandle EmplaceTextureResourcePoolSwapchain(
+  TextureResourcePool& out_pool,
+  WsiSwapchain const* swapchain
+) {
+  TextureHot hot(TextureHotSwapchain{ .swapchain = swapchain });
+  TextureCold cold(TextureColdSwapchain{ .swapchain = swapchain });
 
   return out_pool.Emplace(
     std::forward_as_tuple(std::move(hot)),

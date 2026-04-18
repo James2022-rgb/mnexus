@@ -5,6 +5,7 @@
 #include <cstring>
 
 #include <vector>
+#include <optional>
 
 // public project headers -------------------------------
 #include "mbase/public/log.h"
@@ -45,6 +46,8 @@ public:
     wsi_swapchain_(WsiSwapchain::Create(vk_device->instance(), vk_device)),
     resource_storage_(resource_storage)
   {
+    resource_storage_->swapchain_texture_handle = EmplaceTextureResourcePoolSwapchain(resource_storage_->textures, &wsi_swapchain_);
+
     descriptor_set_allocator_ = IDescriptorSetAllocator::Create(vk_device);
   }
   ~MnexusDeviceVulkan() override {
@@ -276,8 +279,7 @@ public:
   //
 
   IMPL_VAPI(mnexus::TextureHandle, GetSwapchainTexture) {
-    STUB_NOT_IMPLEMENTED();
-    return mnexus::TextureHandle::Invalid();
+    return mnexus::TextureHandle{ resource_storage_->swapchain_texture_handle.AsU64() };
   }
 
   IMPL_VAPI(mnexus::TextureHandle, CreateTexture,
@@ -309,7 +311,7 @@ public:
   ) {
     auto const pool_handle = resource_pool::ResourceHandle::FromU64(texture_handle.Get());
     auto [cold, lock] = resource_storage_->textures.GetColdConstRefWithSharedLockGuard(pool_handle);
-    out_desc = cold.desc;
+    out_desc = cold.GetTextureDesc();
   }
 
   // ----------------------------------------------------------------------------------------------
@@ -482,6 +484,36 @@ public:
     wsi_swapchain_.OnSourceCreated(surface_source_desc);
   }
 
+  std::optional<uint32_t> AcquireNextSwapchainTexture(
+    VkFence nullable_signal_fence
+  ) {
+    auto opt_acquired = wsi_swapchain_.AcquireNextImage(
+      std::numeric_limits<uint64_t>::max(),
+      VK_NULL_HANDLE, // signal semaphore
+      nullable_signal_fence
+    );
+    if (!opt_acquired.has_value()) {
+      return std::nullopt;
+    }
+
+    auto [image_index, vk_image] = opt_acquired.value();
+    return image_index;
+  }
+
+  bool QueueSwapchainTexturePresent(mnexus::QueueId const& queue_id, uint64_t wait_serial) {
+    auto opt_last_acquired = wsi_swapchain_.GetLastAcquiredImage();
+    if (!opt_last_acquired.has_value()) {
+      MBASE_LOG_ERROR("No swapchain image has been acquired for presentation.");
+      return false;
+    }
+    auto [image_index, vk_image] = opt_last_acquired.value();
+    
+    uint64_t const serial = vk_device_->QueuePresentSwapchainImage(queue_id, wait_serial, wsi_swapchain_.GetVkSwapchainHandle(), image_index);
+    wsi_swapchain_.ReturnImage(image_index);
+
+    return true;
+  }
+
 private:
   struct PendingReadback {
     void* dst;
@@ -525,7 +557,9 @@ public:
   explicit BackendVulkan(std::unique_ptr<IVulkanDevice> vk_device) :
     vk_device_(std::move(vk_device)),
     device_(vk_device_.get(), &resource_storage_)
-  {}
+  {
+    
+  }
   ~BackendVulkan() override = default;
   MBASE_DISALLOW_COPY_MOVE(BackendVulkan);
 
@@ -548,11 +582,140 @@ public:
   // Presentation.
 
   void OnPresentPrologue() override {
-    STUB_NOT_IMPLEMENTED();
+    VkFence signal_fence = VK_NULL_HANDLE;
+    {
+      VkFenceCreateInfo fence_info {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+      };
+      vkCreateFence(vk_device_->handle(), &fence_info, nullptr, &signal_fence);
+    }
+
+    std::optional<uint32_t> opt_acquired_index = device_.AcquireNextSwapchainTexture(signal_fence);
+    if (!opt_acquired_index.has_value()) {
+      MBASE_LOG_ERROR("Failed to acquire next swapchain image for presentation.");
+      vkDestroyFence(vk_device_->handle(), signal_fence, nullptr);
+      return;
+    }
+
+    mnexus::QueueId const queue_id = vk_device_->queue_selection().present_capable;
+
+    //
+    // Every `ICommandList` MUST see the swapchain texture as being in the "default" state as its `ImageLayoutTracker` expects.
+    // (They also have to return it into the default state at the end)
+    // We submit a commmand buffer that transitions the image to the default layout.
+    //
+    {
+      auto [hot, cold, lock] = resource_storage_.textures.GetConstRefWithSharedLockGuard(resource_storage_.swapchain_texture_handle);
+
+      VkImageLayout default_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+      cold.GetDefaultState(default_layout);
+      VkImageAspectFlags const aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+      VkImageMemoryBarrier2KHR barrier {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR,
+        .pNext = nullptr,
+        .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR,
+        .srcAccessMask = VK_ACCESS_2_MEMORY_READ_BIT_KHR | VK_ACCESS_2_MEMORY_WRITE_BIT_KHR,
+        .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR,
+        .dstAccessMask = 0, // We'll use a release barrier in the command list to make the image available, so no dst access flags needed here.
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = default_layout,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = hot.GetVkImage().handle(),
+        .subresourceRange = VkImageSubresourceRange {
+          .aspectMask = aspect_mask,
+          .baseMipLevel = 0,
+          .levelCount = VK_REMAINING_MIP_LEVELS,
+          .baseArrayLayer = 0,
+          .layerCount = VK_REMAINING_ARRAY_LAYERS,
+        },
+      };
+
+      VkDependencyInfoKHR dependency_info {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR,
+        .pNext = nullptr,
+        .dependencyFlags = 0,
+        .memoryBarrierCount = 0,
+        .pMemoryBarriers = nullptr,
+        .bufferMemoryBarrierCount = 0,
+        .pBufferMemoryBarriers = nullptr,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &barrier,
+      };
+
+      VkCommandBuffer vk_cb_handle = vk_device_->transient_command_pool().Acquire();
+      vkCmdPipelineBarrier2KHR(vk_cb_handle, &dependency_info);
+      vkEndCommandBuffer(vk_cb_handle);
+
+      uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, vk_cb_handle);
+      vk_device_->transient_command_pool().Release(vk_cb_handle, queue_id, serial);
+    }
+
+    // Wait for the swapchain image acquire to complete.
+    vkWaitForFences(vk_device_->handle(), 1, &signal_fence, VK_TRUE, UINT64_MAX);
+    vkDestroyFence(vk_device_->handle(), signal_fence, nullptr);
   }
 
   void OnPresentEpilogue() override {
-    STUB_NOT_IMPLEMENTED();
+    mnexus::QueueId const queue_id = vk_device_->queue_selection().present_capable;
+    uint32_t const queue_compact_index = *vk_device_->queue_index_map().Find(queue_id);
+
+    //
+    // Every` ICommandList` that have touched the swapchain texture MUST have transitioned it back to the default layout at the end, so we can assume it's in the default layout here.
+    //
+    uint64_t serial = 0;
+    {
+      auto [hot, cold, lock] = resource_storage_.textures.GetConstRefWithSharedLockGuard(resource_storage_.swapchain_texture_handle);
+
+      VkImageLayout default_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+      cold.GetDefaultState(default_layout);
+      VkImageAspectFlags const aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+      VkImageMemoryBarrier2KHR barrier {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR,
+        .pNext = nullptr,
+        .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR,
+        .srcAccessMask = VK_ACCESS_2_MEMORY_READ_BIT_KHR | VK_ACCESS_2_MEMORY_WRITE_BIT_KHR,
+        .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR,
+        .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT_KHR | VK_ACCESS_2_MEMORY_WRITE_BIT_KHR,
+        .oldLayout = default_layout,
+        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = hot.GetVkImage().handle(),
+        .subresourceRange = VkImageSubresourceRange {
+          .aspectMask = aspect_mask,
+          .baseMipLevel = 0,
+          .levelCount = VK_REMAINING_MIP_LEVELS,
+          .baseArrayLayer = 0,
+          .layerCount = VK_REMAINING_ARRAY_LAYERS,
+        },
+      };
+
+      VkDependencyInfoKHR dependency_info{
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR,
+        .pNext = nullptr,
+        .dependencyFlags = 0,
+        .memoryBarrierCount = 0,
+        .pMemoryBarriers = nullptr,
+        .bufferMemoryBarrierCount = 0,
+        .pBufferMemoryBarriers = nullptr,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &barrier,
+      };
+
+      VkCommandBuffer vk_cb_handle = vk_device_->transient_command_pool().Acquire();
+      vkCmdPipelineBarrier2KHR(vk_cb_handle, &dependency_info);
+      vkEndCommandBuffer(vk_cb_handle);
+
+      serial = vk_device_->QueueSubmitSingle(queue_id, vk_cb_handle);
+      vk_device_->transient_command_pool().Release(vk_cb_handle, queue_id, serial);
+    }
+
+    device_.QueueSwapchainTexturePresent(queue_id, serial);
   }
 
   // ----------------------------------------------------------------------------------------------
@@ -636,13 +799,25 @@ std::unique_ptr<IBackendVulkan> IBackendVulkan::Create(BackendVulkanCreateDesc c
     mandatory_device_extensions.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
   }
 
+  std::optional<PhysicalDeviceDesc> opt_physical_device_desc = SelectPhysicalDevice(
+    instance,
+    mandatory_device_extensions,
+    mbase::ArrayProxy<char const* const>{}
+  );
+  if (!opt_physical_device_desc.has_value()) {
+    MBASE_LOG_ERROR("Failed to select a physical device for Vulkan backend.");
+    return nullptr;
+  }
+  PhysicalDeviceDesc physical_device_desc = std::move(opt_physical_device_desc.value());
+
 #if 0
+  std::vector<std::string> device_extensions;
   {
     auto AddExtensionIfAvailable = [&](std::string_view extension_name) {
-      if (instance.QueryExtensionSupport(extension_name) != nullptr) {
+      if (physical_device_desc.QueryExtensionSupport(extension_name) != nullptr) {
         device_extensions.emplace_back(std::string(extension_name));
       } else {
-        MBASE_LOG_WARN("Vulkan instance extension '{}' is not available", extension_name);
+        MBASE_LOG_WARN("Vulkan device extension '{}' is not available", extension_name);
       }
     };
     AddExtensionIfAvailable(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
@@ -659,17 +834,6 @@ std::unique_ptr<IBackendVulkan> IBackendVulkan::Create(BackendVulkanCreateDesc c
     AddExtensionIfAvailable(VK_KHR_RAY_QUERY_EXTENSION_NAME);
   }
 #endif
-
-  std::optional<PhysicalDeviceDesc> opt_physical_device_desc = SelectPhysicalDevice(
-    instance,
-    mandatory_device_extensions,
-    mbase::ArrayProxy<char const* const>{}
-  );
-  if (!opt_physical_device_desc.has_value()) {
-    MBASE_LOG_ERROR("Failed to select a physical device for Vulkan backend.");
-    return nullptr;
-  }
-  PhysicalDeviceDesc physical_device_desc = std::move(opt_physical_device_desc.value());
 
   VulkanDeviceDesc device_desc {
     .physical_device_desc = &physical_device_desc,

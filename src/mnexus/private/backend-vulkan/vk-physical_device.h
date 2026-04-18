@@ -91,7 +91,7 @@ public:
   MBASE_ACCESSOR_ARRAY_PROXY(QueueFamilyProperties, queue_families);
 
   [[nodiscard]] bool QuerySurfaceSupport(uint32_t queue_family_index, VkSurfaceKHR surface) const;
-  [[nodiscard]] VkExtensionProperties const* CheckExtensionSupport(std::string_view extension_name) const;
+  [[nodiscard]] VkExtensionProperties const* QueryExtensionSupport(std::string_view extension_name) const;
 private:
   VkInstance instance_ = VK_NULL_HANDLE;
 

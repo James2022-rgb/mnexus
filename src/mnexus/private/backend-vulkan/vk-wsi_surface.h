@@ -3,9 +3,11 @@
 // c++ headers ------------------------------------------
 #include <optional>
 #include <vector>
+#include <mutex>
 
 // public project headers -------------------------------
 #include "mbase/public/access.h"
+#include "mbase/public/tsa.h"
 
 #include "mnexus/public/types.h"
 
@@ -13,6 +15,7 @@
 #include "backend-vulkan/depend/vulkan.h"
 #include "backend-vulkan/vk-instance.h"
 #include "backend-vulkan/vk-device.h"
+#include "backend-vulkan/vk-object-image.h"
 
 namespace mnexus_backend::vulkan {
 
@@ -74,12 +77,22 @@ public:
 
   static WsiSwapchain Create(VulkanInstance const* vk_instance, IVulkanDevice const* vk_device);
 
-  bool IsValid() const {
-    return surface_.has_value();
-  }
+  bool IsValid() const;
+  VkSwapchainKHR GetVkSwapchainHandle() const { return vk_swapchain_handle_; }
+  mnexus::TextureDesc const& GetTextureDesc() const;
+  VkImageLayout GetDefaultVkImageLayout() const { return default_vk_image_layout_; }
 
   bool OnSourceCreated(mnexus::SurfaceSourceDesc const& source_desc);
   void OnSourceDestroyed();
+
+  std::optional<std::pair<uint32_t, VulkanImage const*>> AcquireNextImage(
+    uint64_t timeout_ns,
+    VkSemaphore nullable_signal_semaphore,
+    VkFence nullable_signal_fence
+  );
+
+  std::optional<std::pair<uint32_t, VulkanImage const*>> GetLastAcquiredImage() const;
+  void ReturnImage(uint32_t image_index);
 
 private:
   explicit WsiSwapchain(VulkanInstance const* vk_instance, IVulkanDevice const* vk_device)
@@ -91,6 +104,12 @@ private:
 
   std::optional<WsiSurface> surface_;
   VkSwapchainKHR vk_swapchain_handle_ = VK_NULL_HANDLE;
+  std::vector<VulkanImage> vk_images_;
+  mnexus::TextureDesc texture_desc_;
+  VkImageLayout default_vk_image_layout_ = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  mbase::Lockable<std::mutex> mutable mutex_;
+  std::optional<uint32_t> last_acquired_image_index_ MBASE_GUARDED_BY(mutex_);
 };
 
 } // namespace mnexus_backend::vulkan

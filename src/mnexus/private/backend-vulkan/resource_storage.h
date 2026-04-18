@@ -25,6 +25,8 @@ struct ResourceStorage final {
 
   pipeline::TPipelineLayoutCache<VulkanPipelineLayoutPtr> pipeline_layout_cache;
 
+  resource_pool::ResourceHandle swapchain_texture_handle = resource_pool::ResourceHandle::Null(); // Not protected; set only during initialization.
+
   /// Stamp a resource's sync stamp to record that it was used in a GPU submission.
   void StampResourceUse(resource_pool::ResourceHandle handle, uint32_t queue_compact_index, uint64_t serial) {
     switch (handle.resource_type()) {
