@@ -224,17 +224,20 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindExplicitComputePip
 ) {
   auto const pool_handle = resource_pool::ResourceHandle::FromU64(compute_pipeline_handle.Get());
   auto [hot, cold, lock] = resource_storage_->compute_pipelines.GetConstRefWithSharedLockGuard(pool_handle);
+
+  VulkanPipelineLayoutPtr const& pipeline_layout_ref = hot.pipeline_layout_ref();
+
   encoder_.BindComputePipeline(
-    hot.vk_compute_pipeline.handle(),
-    hot.vk_pipeline_layout,
-    hot.pipeline_layout_ref->descriptor_set_layouts.data(),
-    static_cast<uint32_t>(hot.pipeline_layout_ref->descriptor_set_layouts.size())
+    hot.vk_compute_pipeline().handle(),
+    pipeline_layout_ref->handle(),
+    pipeline_layout_ref->descriptor_set_layouts.data(),
+    static_cast<uint32_t>(pipeline_layout_ref->descriptor_set_layouts.size())
   );
 
   // Track referenced resources for submit-time stamping.
   referenced_resources_.push_back(pool_handle);
-  referenced_resources_.push_back(resource_pool::ResourceHandle::FromU64(cold.program_handle.Get()));
-  referenced_resources_.push_back(resource_pool::ResourceHandle::FromU64(cold.shader_module_handle.Get()));
+  referenced_resources_.push_back(resource_pool::ResourceHandle::FromU64(cold.program_handle().Get()));
+  referenced_resources_.push_back(resource_pool::ResourceHandle::FromU64(cold.shader_module_handle().Get()));
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::DispatchCompute(

@@ -6,6 +6,13 @@
 
 namespace mnexus_backend::vulkan {
 
+void ComputePipelineHot::Stamp(uint32_t queue_compact_index, uint64_t serial) {
+  vk_compute_pipeline_.sync_stamp().Stamp(queue_compact_index, serial);
+  pipeline_layout_ref_->sync_stamp().Stamp(queue_compact_index, serial);
+}
+
+namespace {
+
 bool CreateVulkanComputePipeline(
   VulkanComputePipeline& out_vk_compute_pipeline,
   IVulkanDevice const& vk_device,
@@ -53,6 +60,8 @@ bool CreateVulkanComputePipeline(
   return true;
 }
 
+} // namespace
+
 resource_pool::ResourceHandle EmplaceComputePipelineResourcePool(
   ComputePipelineResourcePool& out_pool,
   IVulkanDevice const& vk_device,
@@ -83,15 +92,8 @@ resource_pool::ResourceHandle EmplaceComputePipelineResourcePool(
     return resource_pool::ResourceHandle::Null();
   }
 
-  ComputePipelineHot hot {
-    .vk_compute_pipeline = std::move(vk_compute_pipeline),
-    .vk_pipeline_layout = program_hot.pipeline_layout_ref->handle(),
-    .pipeline_layout_ref = program_hot.pipeline_layout_ref,
-  };
-  ComputePipelineCold cold {
-    .program_handle = program_handle,
-    .shader_module_handle = shader_module_handle,
-  };
+  ComputePipelineHot hot(std::move(vk_compute_pipeline), program_hot.pipeline_layout_ref);
+  ComputePipelineCold cold(program_handle, shader_module_handle);
 
   return out_pool.Emplace(
     std::forward_as_tuple(std::move(hot)),
