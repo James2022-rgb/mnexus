@@ -3,6 +3,7 @@
 // c++ headers ------------------------------------------
 #include <functional>
 #include <utility>
+#include <memory>
 
 // public project headers -------------------------------
 #include "mbase/public/access.h"
@@ -26,6 +27,8 @@ namespace mnexus_backend::vulkan {
 template<class T>
 class TVulkanObjectBase {
 public:
+  using DestroyFunc = std::function<void()>;
+
   [[nodiscard]] T handle() const { return handle_; }
   [[nodiscard]] bool IsValid() const { return handle_ != VK_NULL_HANDLE; }
   [[nodiscard]] explicit operator bool() const { return this->IsValid(); }
@@ -36,16 +39,16 @@ public:
 protected:
   TVulkanObjectBase() = default;
 
-  TVulkanObjectBase(T handle, std::function<void()> destroy_func, IVulkanDeferredDestroyer* deferred_destroyer) :
+  TVulkanObjectBase(T handle, DestroyFunc destroy_func, IVulkanDeferredDestroyer* deferred_destroyer) :
     handle_(handle),
-    destroy_func_(std::move(destroy_func)),
+    destroy_func_(std::make_unique<DestroyFunc>(std::move(destroy_func))),
     deferred_destroyer_(deferred_destroyer)
   {
   }
 
   ~TVulkanObjectBase() {
     if (deferred_destroyer_ != nullptr) {
-      deferred_destroyer_->EnqueueDestroy(destroy_func_, sync_stamp_.TakeSnapshot());
+      deferred_destroyer_->EnqueueDestroy(*destroy_func_, sync_stamp_.TakeSnapshot());
     }
   }
 
@@ -75,7 +78,7 @@ protected:
 
 private:
   T handle_ = VK_NULL_HANDLE;
-  std::function<void()> destroy_func_;
+  std::unique_ptr<DestroyFunc> destroy_func_;
   IVulkanDeferredDestroyer* deferred_destroyer_ = nullptr;
   ResourceSyncStamp sync_stamp_;
 };
