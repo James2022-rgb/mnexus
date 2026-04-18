@@ -58,11 +58,71 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::PopDebugGroup() {
 //
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::ClearTexture(
-  mnexus::TextureHandle /*texture_handle*/,
-  mnexus::TextureSubresourceRange const& /*subresource_range*/,
-  mnexus::ClearValue const& /*clear_value*/
+  mnexus::TextureHandle texture_handle,
+  mnexus::TextureSubresourceRange const& subresource_range,
+  mnexus::ClearValue const& clear_value
 ) {
-  STUB_NOT_IMPLEMENTED();
+  auto const pool_handle = resource_pool::ResourceHandle::FromU64(texture_handle.Get());
+  auto [hot, cold, lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(pool_handle);
+
+  VkImage const vk_image = hot.GetVkImage().handle();
+  mnexus::TextureDesc const& desc = cold.GetTextureDesc();
+  VkFormat const vk_format = ToVkFormat(desc.format);
+
+  // Register and transition target subresources to TRANSFER_DST.
+  image_layout_tracker_.RegisterImage(
+    vk_image,
+    ToVkImageUsageFlags(desc.usage, vk_format),
+    vk_format,
+    desc.mip_level_count,
+    desc.array_layer_count
+  );
+
+  for (uint32_t mip = subresource_range.base_mip_level;
+       mip < subresource_range.base_mip_level + subresource_range.mip_level_count;
+       ++mip) {
+    for (uint32_t layer = subresource_range.base_array_layer;
+         layer < subresource_range.base_array_layer + subresource_range.array_layer_count;
+         ++layer) {
+      image_layout_tracker_.TransitionToTransferDst(
+        vk_image, { .mip_level = mip, .array_layer = layer }
+      );
+    }
+  }
+
+  image_layout_tracker_.FlushPendingTransitions(pending_pipeline_barrier_);
+  pending_pipeline_barrier_.FlushAndClear(encoder_.command_buffer());
+
+  VkImageSubresourceRange const vk_range = ToVkImageSubresourceRange(subresource_range);
+
+  VkImageAspectFlags const aspect = ImageLayoutTracker::GetAspectMaskFromFormat(vk_format);
+  if (aspect & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
+    VkClearDepthStencilValue const ds {
+      .depth = clear_value.depth_stencil.depth,
+      .stencil = clear_value.depth_stencil.stencil,
+    };
+    vkCmdClearDepthStencilImage(
+      encoder_.command_buffer(), vk_image,
+      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      &ds, 1, &vk_range
+    );
+  } else {
+    VkClearColorValue const color {
+      .float32 = {
+        clear_value.color.r,
+        clear_value.color.g,
+        clear_value.color.b,
+        clear_value.color.a,
+      },
+    };
+    vkCmdClearColorImage(
+      encoder_.command_buffer(), vk_image,
+      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      &color, 1, &vk_range
+    );
+  }
+
+  referenced_resources_.push_back(pool_handle);
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::CopyBufferToTexture(
