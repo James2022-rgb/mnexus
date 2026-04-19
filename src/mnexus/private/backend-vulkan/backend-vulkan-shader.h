@@ -1,12 +1,6 @@
 #pragma once
 
-// c++ headers ------------------------------------------
-#include <functional>
-#include <memory>
-
 // public project headers -------------------------------
-#include "mbase/public/container.h"
-
 #include "mnexus/public/types.h"
 
 // project headers --------------------------------------
@@ -16,22 +10,14 @@
 #include "pipeline/pipeline_layout_cache.h"
 
 #include "backend-vulkan/device/vk-device.h"
-#include "backend-vulkan/object/vk-object.h"
+#include "backend-vulkan/object/vk-object-shader_module.h"
+#include "backend-vulkan/object/vk-object-pipeline_layout.h"
 
 namespace mnexus_backend::vulkan {
 
 //
 // ShaderModule
 //
-
-class VulkanShaderModule final : public TVulkanObjectBase<VkShaderModule> {
-public:
-  VulkanShaderModule() = default;
-  VulkanShaderModule(VkShaderModule handle, std::function<void()> destroy_func, IVulkanDeferredDestroyer* deferred_destroyer) :
-    TVulkanObjectBase(handle, std::move(destroy_func), deferred_destroyer)
-  {
-  }
-};
 
 struct ShaderModuleHot final {
   VulkanShaderModule vk_shader_module;
@@ -52,50 +38,6 @@ resource_pool::ResourceHandle EmplaceShaderModuleResourcePool(
   IVulkanDevice const& device,
   mnexus::ShaderModuleDesc const& shader_module_desc
 );
-
-//
-// VulkanDescriptorSetLayout
-//
-// Wraps VkDescriptorSetLayout + stores its binding composition.
-// Needed by DescriptorSetAllocator to compute VkDescriptorPoolSize for pool creation.
-//
-
-class VulkanDescriptorSetLayout final : public TVulkanObjectBase<VkDescriptorSetLayout> {
-public:
-  VulkanDescriptorSetLayout() = default;
-  VulkanDescriptorSetLayout(
-    VkDescriptorSetLayout handle,
-    std::function<void()> destroy_func,
-    IVulkanDeferredDestroyer* deferred_destroyer,
-    mbase::SmallVector<VkDescriptorSetLayoutBinding, 4> bindings
-  ) :
-    TVulkanObjectBase(handle, std::move(destroy_func), deferred_destroyer),
-    bindings(std::move(bindings))
-  {
-  }
-
-  mbase::SmallVector<VkDescriptorSetLayoutBinding, 4> bindings;
-};
-
-//
-// VulkanPipelineLayout
-//
-// Bundles a VkPipelineLayout and its VkDescriptorSetLayouts.
-// Not RAII -- deferred destruction handles cleanup via destroy_func.
-//
-
-class VulkanPipelineLayout final : public TVulkanObjectBase<VkPipelineLayout> {
-public:
-  VulkanPipelineLayout() = default;
-  VulkanPipelineLayout(VkPipelineLayout handle, std::function<void()> destroy_func, IVulkanDeferredDestroyer* deferred_destroyer) :
-    TVulkanObjectBase(handle, std::move(destroy_func), deferred_destroyer)
-  {
-  }
-
-  mbase::SmallVector<VulkanDescriptorSetLayout, 4> descriptor_set_layouts;
-};
-
-using VulkanPipelineLayoutPtr = std::shared_ptr<VulkanPipelineLayout>;
 
 //
 // Program

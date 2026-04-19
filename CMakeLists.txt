@@ -435,7 +435,14 @@ if(${_enable_backend_vulkan})
     # object/
     ${_private_backend_vulkan_dir}/object/vk-deferred_destroyer.h
     ${_private_backend_vulkan_dir}/object/vk-object.h
+    ${_private_backend_vulkan_dir}/object/vk-object-buffer.h
+    ${_private_backend_vulkan_dir}/object/vk-object-compute_pipeline.h
+    ${_private_backend_vulkan_dir}/object/vk-object-descriptor_set.h
+    ${_private_backend_vulkan_dir}/object/vk-object-descriptor_set_layout.h
     ${_private_backend_vulkan_dir}/object/vk-object-image.h
+    ${_private_backend_vulkan_dir}/object/vk-object-pipeline_layout.h
+    ${_private_backend_vulkan_dir}/object/vk-object-sampler.h
+    ${_private_backend_vulkan_dir}/object/vk-object-shader_module.h
     # device/
     ${_private_backend_vulkan_dir}/device/vk-instance.cpp
     ${_private_backend_vulkan_dir}/device/vk-instance.h

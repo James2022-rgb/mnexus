@@ -8,18 +8,9 @@
 
 #include "backend-vulkan/depend/vulkan_vma.h"
 #include "backend-vulkan/device/vk-device.h"
-#include "backend-vulkan/object/vk-object.h"
+#include "backend-vulkan/object/vk-object-buffer.h"
 
 namespace mnexus_backend::vulkan {
-
-class VulkanBuffer final : public TVulkanObjectBase<VkBuffer> {
-public:
-  VulkanBuffer() = default;
-  VulkanBuffer(VkBuffer handle, std::function<void()> destroy_func, IVulkanDeferredDestroyer* deferred_destroyer) :
-    TVulkanObjectBase(handle, std::move(destroy_func), deferred_destroyer)
-  {
-  }
-};
 
 struct BufferHot final {
   VulkanBuffer vk_buffer;

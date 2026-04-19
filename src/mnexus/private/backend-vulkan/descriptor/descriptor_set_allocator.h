@@ -6,27 +6,12 @@
 // project headers --------------------------------------
 #include "backend-vulkan/depend/vulkan.h"
 #include "backend-vulkan/descriptor/descriptor_set_write.h"
-#include "backend-vulkan/object/vk-object.h"
+#include "backend-vulkan/object/vk-object-descriptor_set.h"
 
 namespace mnexus_backend::vulkan {
 
 class VulkanDescriptorSetLayout;
 class IVulkanDevice;
-
-// ----------------------------------------------------------------------------------------------------
-// VulkanDescriptorSet
-//
-
-class VulkanDescriptorSet final : public TVulkanObjectBase<VkDescriptorSet> {
-public:
-  VulkanDescriptorSet() = default;
-  VulkanDescriptorSet(VkDescriptorSet handle, std::function<void()> destroy_func, IVulkanDeferredDestroyer* deferred_destroyer) :
-    TVulkanObjectBase(handle, std::move(destroy_func), deferred_destroyer)
-  {
-  }
-};
-
-using VulkanDescriptorSetPtr = std::shared_ptr<VulkanDescriptorSet>;
 
 // ----------------------------------------------------------------------------------------------------
 // IDescriptorSetAllocator
