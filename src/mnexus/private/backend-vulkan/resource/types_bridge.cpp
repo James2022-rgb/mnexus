@@ -1,5 +1,5 @@
 // TU header --------------------------------------------
-#include "backend-vulkan/types_bridge.h"
+#include "backend-vulkan/resource/types_bridge.h"
 
 // public project headers -------------------------------
 #include "mbase/public/log.h"

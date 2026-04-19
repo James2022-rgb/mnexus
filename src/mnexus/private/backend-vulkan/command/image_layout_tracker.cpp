@@ -1,5 +1,5 @@
 // TU header --------------------------------------------
-#include "backend-vulkan/image_layout_tracker.h"
+#include "backend-vulkan/command/image_layout_tracker.h"
 
 // public project headers -------------------------------
 #include "mbase/public/assert.h"

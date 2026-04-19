@@ -1,14 +1,14 @@
 // TU header --------------------------------------------
-#include "backend-vulkan/vk-wsi_surface.h"
+#include "backend-vulkan/wsi/vk-wsi_surface.h"
 
 // public project headers -------------------------------
 #include "mbase/public/platform.h"
 #include "mbase/public/log.h"
 
 // project headers --------------------------------------
-#include "backend-vulkan/types_bridge.h"
-#include "backend-vulkan/vk-physical_device.h"
-#include "backend-vulkan/image_layout_tracker.h"
+#include "backend-vulkan/resource/types_bridge.h"
+#include "backend-vulkan/device/vk-physical_device.h"
+#include "backend-vulkan/command/image_layout_tracker.h"
 
 namespace mnexus_backend::vulkan {
 

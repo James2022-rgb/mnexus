@@ -7,8 +7,8 @@
 #include "resource_pool/resource_generational_pool.h"
 
 #include "backend-vulkan/depend/vulkan_vma.h"
-#include "backend-vulkan/vk-device.h"
-#include "backend-vulkan/vk-object.h"
+#include "backend-vulkan/device/vk-device.h"
+#include "backend-vulkan/object/vk-object.h"
 
 namespace mnexus_backend::vulkan {
 

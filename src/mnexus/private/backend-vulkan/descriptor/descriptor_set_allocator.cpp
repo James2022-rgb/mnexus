@@ -1,5 +1,5 @@
 // TU header --------------------------------------------
-#include "backend-vulkan/descriptor_set_allocator.h"
+#include "backend-vulkan/descriptor/descriptor_set_allocator.h"
 
 // c++ headers ------------------------------------------
 #include <cstring>
@@ -15,7 +15,7 @@
 
 // project headers --------------------------------------
 #include "backend-vulkan/backend-vulkan-shader.h"
-#include "backend-vulkan/vk-device.h"
+#include "backend-vulkan/device/vk-device.h"
 
 namespace mnexus_backend::vulkan {
 

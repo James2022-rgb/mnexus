@@ -4,8 +4,8 @@
 // project headers --------------------------------------
 #include "impl/impl_macros.h"
 
-#include "backend-vulkan/resource_storage.h"
-#include "backend-vulkan/types_bridge.h"
+#include "backend-vulkan/resource/resource_storage.h"
+#include "backend-vulkan/resource/types_bridge.h"
 
 namespace mnexus_backend::vulkan {
 

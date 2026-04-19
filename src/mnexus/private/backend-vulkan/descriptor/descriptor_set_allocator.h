@@ -5,8 +5,8 @@
 
 // project headers --------------------------------------
 #include "backend-vulkan/depend/vulkan.h"
-#include "backend-vulkan/descriptor_set_write.h"
-#include "backend-vulkan/vk-object.h"
+#include "backend-vulkan/descriptor/descriptor_set_write.h"
+#include "backend-vulkan/object/vk-object.h"
 
 namespace mnexus_backend::vulkan {
 

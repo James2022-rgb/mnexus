@@ -1,12 +1,12 @@
 // TU header --------------------------------------------
-#include "backend-vulkan/vk-staging.h"
+#include "backend-vulkan/device/vk-staging.h"
 
 // public project headers -------------------------------
 #include "mbase/public/assert.h"
 #include "mbase/public/log.h"
 
 // project headers --------------------------------------
-#include "backend-vulkan/vk-device.h"
+#include "backend-vulkan/device/vk-device.h"
 
 namespace mnexus_backend::vulkan {
 

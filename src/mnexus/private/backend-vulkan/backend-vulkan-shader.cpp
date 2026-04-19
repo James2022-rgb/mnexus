@@ -5,8 +5,8 @@
 #include <vector>
 
 // project headers --------------------------------------
-#include "backend-vulkan/shader_module.h"
-#include "backend-vulkan/types_bridge.h"
+#include "backend-vulkan/resource/shader_module.h"
+#include "backend-vulkan/resource/types_bridge.h"
 
 #include "pipeline/pipeline_layout_cache_key.h"
 

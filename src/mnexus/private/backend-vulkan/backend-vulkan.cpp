@@ -21,16 +21,16 @@
 #include "backend-vulkan/backend-vulkan-shader.h"
 #include "backend-vulkan/backend-vulkan-texture.h"
 #include "backend-vulkan/backend-vulkan-compute_pipeline.h"
-#include "backend-vulkan/descriptor_set_allocator.h"
+#include "backend-vulkan/descriptor/descriptor_set_allocator.h"
 
-#include "backend-vulkan/vk-device.h"
-#include "backend-vulkan/vk-instance.h"
-#include "backend-vulkan/vk-physical_device.h"
-#include "backend-vulkan/vk-staging.h"
-#include "backend-vulkan/vk-wsi_surface.h"
-#include "backend-vulkan/thread_command_pool.h"
+#include "backend-vulkan/device/vk-device.h"
+#include "backend-vulkan/device/vk-instance.h"
+#include "backend-vulkan/device/vk-physical_device.h"
+#include "backend-vulkan/device/vk-staging.h"
+#include "backend-vulkan/wsi/vk-wsi_surface.h"
+#include "backend-vulkan/device/thread_command_pool.h"
 #include "backend-vulkan/depend/vulkan_vma.h"
-#include "backend-vulkan/resource_storage.h"
+#include "backend-vulkan/resource/resource_storage.h"
 
 namespace mnexus_backend::vulkan {
 
@@ -509,6 +509,7 @@ public:
     auto [image_index, vk_image] = opt_last_acquired.value();
     
     uint64_t const serial = vk_device_->QueuePresentSwapchainImage(queue_id, wait_serial, wsi_swapchain_.GetVkSwapchainHandle(), image_index);
+    (void)serial;
     wsi_swapchain_.ReturnImage(image_index);
 
     return true;
@@ -661,7 +662,6 @@ public:
 
   void OnPresentEpilogue() override {
     mnexus::QueueId const queue_id = vk_device_->queue_selection().present_capable;
-    uint32_t const queue_compact_index = *vk_device_->queue_index_map().Find(queue_id);
 
     //
     // Every` ICommandList` that have touched the swapchain texture MUST have transitioned it back to the default layout at the end, so we can assume it's in the default layout here.

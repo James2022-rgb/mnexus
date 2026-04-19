@@ -11,7 +11,7 @@
 
 // project headers --------------------------------------
 #include "backend-vulkan/depend/vulkan.h"
-#include "backend-vulkan/vk-instance.h"
+#include "backend-vulkan/device/vk-instance.h"
 
 namespace mnexus_backend::vulkan {
 

@@ -12,8 +12,8 @@
 #include "impl/impl_macros.h"
 
 #include "backend-vulkan/depend/vulkan_vma.h"
-#include "backend-vulkan/vk-device.h"
-#include "backend-vulkan/vk-object-image.h"
+#include "backend-vulkan/device/vk-device.h"
+#include "backend-vulkan/object/vk-object-image.h"
 
 namespace mnexus_backend::vulkan {
 

@@ -8,7 +8,7 @@
 #include "mbase/public/log.h"
 
 // project headers --------------------------------------
-#include "backend-vulkan/types_bridge.h"
+#include "backend-vulkan/resource/types_bridge.h"
 
 namespace mnexus_backend::vulkan {
 

@@ -1,5 +1,5 @@
 // TU header --------------------------------------------
-#include "backend-vulkan/vk-device.h"
+#include "backend-vulkan/device/vk-device.h"
 
 // c++ headers ------------------------------------------
 #include <algorithm>
@@ -17,10 +17,10 @@
 #include "sync/resource_sync.h"
 
 #include "backend-vulkan/depend/vulkan_vma.h"
-#include "backend-vulkan/vk-deferred_destroyer.h"
-#include "backend-vulkan/vk-physical_device.h"
-#include "backend-vulkan/vk-staging.h"
-#include "backend-vulkan/thread_command_pool.h"
+#include "backend-vulkan/object/vk-deferred_destroyer.h"
+#include "backend-vulkan/device/vk-physical_device.h"
+#include "backend-vulkan/device/vk-staging.h"
+#include "backend-vulkan/device/thread_command_pool.h"
 
 namespace mnexus_backend::vulkan {
 

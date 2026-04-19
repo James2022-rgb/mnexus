@@ -427,55 +427,63 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/${_private_backend_webgpu_dir}" P
 set(_private_backend_vulkan_dir "${_private_root_dir}/backend-vulkan")
 if(${_enable_backend_vulkan})
   set(_sources_private_backend_vulkan
+    # depend/
     ${_private_backend_vulkan_dir}/depend/vulkan.h
     ${_private_backend_vulkan_dir}/depend/vulkan_fwd.h
     ${_private_backend_vulkan_dir}/depend/vulkan_vma.cpp
     ${_private_backend_vulkan_dir}/depend/vulkan_vma.h
+    # object/
+    ${_private_backend_vulkan_dir}/object/vk-deferred_destroyer.h
+    ${_private_backend_vulkan_dir}/object/vk-object.h
+    ${_private_backend_vulkan_dir}/object/vk-object-image.h
+    # device/
+    ${_private_backend_vulkan_dir}/device/vk-instance.cpp
+    ${_private_backend_vulkan_dir}/device/vk-instance.h
+    ${_private_backend_vulkan_dir}/device/vk-physical_device.cpp
+    ${_private_backend_vulkan_dir}/device/vk-physical_device.h
+    ${_private_backend_vulkan_dir}/device/vk-device.cpp
+    ${_private_backend_vulkan_dir}/device/vk-device.h
+    ${_private_backend_vulkan_dir}/device/vk-staging.cpp
+    ${_private_backend_vulkan_dir}/device/vk-staging.h
+    ${_private_backend_vulkan_dir}/device/thread_command_pool.cpp
+    ${_private_backend_vulkan_dir}/device/thread_command_pool.h
+    # resource/
+    ${_private_backend_vulkan_dir}/resource/resource_storage.cpp
+    ${_private_backend_vulkan_dir}/resource/resource_storage.h
+    ${_private_backend_vulkan_dir}/resource/shader_module.cpp
+    ${_private_backend_vulkan_dir}/resource/shader_module.h
+    ${_private_backend_vulkan_dir}/resource/types_bridge.cpp
+    ${_private_backend_vulkan_dir}/resource/types_bridge.h
+    # descriptor/
+    ${_private_backend_vulkan_dir}/descriptor/descriptor_set_allocator.cpp
+    ${_private_backend_vulkan_dir}/descriptor/descriptor_set_allocator.h
+    ${_private_backend_vulkan_dir}/descriptor/descriptor_set_binder.cpp
+    ${_private_backend_vulkan_dir}/descriptor/descriptor_set_binder.h
+    ${_private_backend_vulkan_dir}/descriptor/descriptor_set_write.cpp
+    ${_private_backend_vulkan_dir}/descriptor/descriptor_set_write.h
+    # command/
+    ${_private_backend_vulkan_dir}/command/command_encoder.cpp
+    ${_private_backend_vulkan_dir}/command/command_encoder.h
+    ${_private_backend_vulkan_dir}/command/image_layout_tracker.cpp
+    ${_private_backend_vulkan_dir}/command/image_layout_tracker.h
+    ${_private_backend_vulkan_dir}/command/pending_pipeline_barrier.cpp
+    ${_private_backend_vulkan_dir}/command/pending_pipeline_barrier.h
+    # wsi/
+    ${_private_backend_vulkan_dir}/wsi/vk-wsi_surface.cpp
+    ${_private_backend_vulkan_dir}/wsi/vk-wsi_surface.h
+    # root
     ${_private_backend_vulkan_dir}/backend-vulkan.cpp
     ${_private_backend_vulkan_dir}/backend-vulkan.h
-    ${_private_backend_vulkan_dir}/backend-vulkan-buffer.cpp
-    ${_private_backend_vulkan_dir}/backend-vulkan-buffer.h
     ${_private_backend_vulkan_dir}/backend-vulkan-command_list.cpp
     ${_private_backend_vulkan_dir}/backend-vulkan-command_list.h
+    ${_private_backend_vulkan_dir}/backend-vulkan-buffer.cpp
+    ${_private_backend_vulkan_dir}/backend-vulkan-buffer.h
     ${_private_backend_vulkan_dir}/backend-vulkan-compute_pipeline.cpp
     ${_private_backend_vulkan_dir}/backend-vulkan-compute_pipeline.h
     ${_private_backend_vulkan_dir}/backend-vulkan-shader.cpp
     ${_private_backend_vulkan_dir}/backend-vulkan-shader.h
     ${_private_backend_vulkan_dir}/backend-vulkan-texture.cpp
     ${_private_backend_vulkan_dir}/backend-vulkan-texture.h
-    ${_private_backend_vulkan_dir}/command_encoder.cpp
-    ${_private_backend_vulkan_dir}/command_encoder.h
-    ${_private_backend_vulkan_dir}/descriptor_set_allocator.cpp
-    ${_private_backend_vulkan_dir}/descriptor_set_allocator.h
-    ${_private_backend_vulkan_dir}/descriptor_set_binder.cpp
-    ${_private_backend_vulkan_dir}/descriptor_set_binder.h
-    ${_private_backend_vulkan_dir}/descriptor_set_write.cpp
-    ${_private_backend_vulkan_dir}/descriptor_set_write.h
-    ${_private_backend_vulkan_dir}/resource_storage.cpp
-    ${_private_backend_vulkan_dir}/resource_storage.h
-    ${_private_backend_vulkan_dir}/shader_module.cpp
-    ${_private_backend_vulkan_dir}/shader_module.h
-    ${_private_backend_vulkan_dir}/thread_command_pool.cpp
-    ${_private_backend_vulkan_dir}/thread_command_pool.h
-    ${_private_backend_vulkan_dir}/vk-device.cpp
-    ${_private_backend_vulkan_dir}/vk-deferred_destroyer.h
-    ${_private_backend_vulkan_dir}/vk-device.h
-    ${_private_backend_vulkan_dir}/vk-object.h
-    ${_private_backend_vulkan_dir}/vk-object-image.h
-    ${_private_backend_vulkan_dir}/vk-staging.cpp
-    ${_private_backend_vulkan_dir}/vk-staging.h
-    ${_private_backend_vulkan_dir}/vk-instance.cpp
-    ${_private_backend_vulkan_dir}/vk-instance.h
-    ${_private_backend_vulkan_dir}/vk-physical_device.cpp
-    ${_private_backend_vulkan_dir}/vk-physical_device.h
-    ${_private_backend_vulkan_dir}/vk-wsi_surface.cpp
-    ${_private_backend_vulkan_dir}/vk-wsi_surface.h
-    ${_private_backend_vulkan_dir}/types_bridge.cpp
-    ${_private_backend_vulkan_dir}/types_bridge.h
-    ${_private_backend_vulkan_dir}/image_layout_tracker.cpp
-    ${_private_backend_vulkan_dir}/image_layout_tracker.h
-    ${_private_backend_vulkan_dir}/pending_pipeline_barrier.cpp
-    ${_private_backend_vulkan_dir}/pending_pipeline_barrier.h
   )
 endif()
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/${_private_backend_vulkan_dir}" PREFIX "Private/Backend-Vulkan" FILES ${_sources_private_backend_vulkan})

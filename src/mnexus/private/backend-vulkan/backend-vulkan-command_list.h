@@ -12,8 +12,8 @@
 // project headers --------------------------------------
 #include "resource_pool/resource_generational_pool.h"
 
-#include "backend-vulkan/command_encoder.h"
-#include "backend-vulkan/image_layout_tracker.h"
+#include "backend-vulkan/command/command_encoder.h"
+#include "backend-vulkan/command/image_layout_tracker.h"
 
 namespace mnexus_backend::vulkan {
 

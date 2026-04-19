@@ -10,7 +10,7 @@
 
 // project headers --------------------------------------
 #include "backend-vulkan/depend/vulkan.h"
-#include "backend-vulkan/vk-deferred_destroyer.h"
+#include "backend-vulkan/object/vk-deferred_destroyer.h"
 #include "sync/resource_sync.h"
 
 namespace mnexus_backend::vulkan {

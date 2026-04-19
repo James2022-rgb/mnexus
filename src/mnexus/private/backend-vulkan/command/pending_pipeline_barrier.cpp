@@ -1,5 +1,5 @@
 // TU header --------------------------------------------
-#include "backend-vulkan/pending_pipeline_barrier.h"
+#include "backend-vulkan/command/pending_pipeline_barrier.h"
 
 namespace mnexus_backend::vulkan {
 

@@ -15,8 +15,8 @@
 
 #include "pipeline/pipeline_layout_cache.h"
 
-#include "backend-vulkan/vk-device.h"
-#include "backend-vulkan/vk-object.h"
+#include "backend-vulkan/device/vk-device.h"
+#include "backend-vulkan/object/vk-object.h"
 
 namespace mnexus_backend::vulkan {
 

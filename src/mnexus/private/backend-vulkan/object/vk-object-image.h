@@ -4,7 +4,7 @@
 #include "mbase/public/accessor.h"
 
 // project headers --------------------------------------
-#include "backend-vulkan/vk-object.h"
+#include "backend-vulkan/object/vk-object.h"
 
 namespace mnexus_backend::vulkan {
 

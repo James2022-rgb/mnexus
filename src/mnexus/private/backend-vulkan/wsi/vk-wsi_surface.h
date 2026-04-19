@@ -13,9 +13,9 @@
 
 // project headers --------------------------------------
 #include "backend-vulkan/depend/vulkan.h"
-#include "backend-vulkan/vk-instance.h"
-#include "backend-vulkan/vk-device.h"
-#include "backend-vulkan/vk-object-image.h"
+#include "backend-vulkan/device/vk-instance.h"
+#include "backend-vulkan/device/vk-device.h"
+#include "backend-vulkan/object/vk-object-image.h"
 
 namespace mnexus_backend::vulkan {
 
