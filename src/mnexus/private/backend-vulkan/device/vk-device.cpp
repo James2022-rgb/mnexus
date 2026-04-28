@@ -31,7 +31,6 @@ namespace mnexus_backend::vulkan {
 struct VulkanQueueState final {
   VkQueue vk_queue = VK_NULL_HANDLE;
   VkSemaphore timeline_semaphore = VK_NULL_HANDLE;
-  VkSemaphore present_binary_semaphore = VK_NULL_HANDLE;
   std::atomic<uint64_t> next_submit_serial {1}; // Valid serials start at 1.
 };
 
@@ -49,6 +48,7 @@ public:
   VmaAllocator vma_allocator() const override { return vma_allocator_; }
 
   bool IsExtensionEnabled(char const* extension_name) const override {
+    // FIXME: Implement `VulkanDevice::IsExtensionEnabled`.
     return false;
   }
 
@@ -64,12 +64,14 @@ public:
     uint32_t wait_semaphore_count,
     VkSemaphore const* wait_semaphores,
     uint64_t const* wait_values,
+    VkSemaphore present_binary_semaphore,
     VkSwapchainKHR swapchain,
     uint32_t image_index
   ) override;
   uint64_t QueuePresentSwapchainImage(
     mnexus::QueueId const& queue_id,
     uint64_t wait_serial,
+    VkSemaphore present_binary_semaphore,
     VkSwapchainKHR swapchain,
     uint32_t image_index
   ) override;
@@ -102,6 +104,7 @@ private:
     for (uint32_t i = 0; i < queue_count; ++i) {
       queue_states_[i].vk_queue = queue_states[i].vk_queue;
       queue_states_[i].timeline_semaphore = queue_states[i].timeline_semaphore;
+      queue_states_[i].next_submit_serial.store(queue_states[i].next_submit_serial.load(std::memory_order_seq_cst), std::memory_order_seq_cst);
     }
   }
 
@@ -456,25 +459,60 @@ std::unique_ptr<IVulkanDevice> IVulkanDevice::Create(
   }
   device_extensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
 
-  // Features.
-  VkPhysicalDeviceFeatures device_features {};
+  bool has_create_renderpass2 = desc.physical_device_desc->QueryExtensionSupport(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME) != nullptr;
+  if (has_create_renderpass2) {
+    device_extensions.push_back(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+  }
 
-  VkPhysicalDeviceTimelineSemaphoreFeaturesKHR timeline_semaphore_features {};
+  bool has_depth_stencil_resolve = desc.physical_device_desc->QueryExtensionSupport(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME) != nullptr;
+  if (has_depth_stencil_resolve) {
+    device_extensions.push_back(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME);
+  }
+
+  bool has_dynamic_rendering = desc.physical_device_desc->QueryExtensionSupport(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME) != nullptr;
+  if (has_dynamic_rendering) {
+    device_extensions.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+  }
+
+  // De-duplicate device extension names.
+  {
+    std::sort(device_extensions.begin(), device_extensions.end());
+    auto last = std::unique(device_extensions.begin(), device_extensions.end());
+    device_extensions.erase(last, device_extensions.end());
+  }
+
+  // Features.
+  VkPhysicalDeviceFeatures device_features{};
+
+  void** pp_next = nullptr;
+
+  VkPhysicalDeviceTimelineSemaphoreFeaturesKHR timeline_semaphore_features{};
   timeline_semaphore_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR;
   timeline_semaphore_features.timelineSemaphore = VK_TRUE;
+  pp_next = &timeline_semaphore_features.pNext;
 
-  VkPhysicalDeviceSynchronization2Features sync2_features {};
+  VkPhysicalDeviceSynchronization2Features sync2_features{};
   sync2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
-  sync2_features.pNext = &timeline_semaphore_features;
   sync2_features.synchronization2 = VK_TRUE;
+  *pp_next = &sync2_features;
+  pp_next = &sync2_features.pNext;
 
-  VkPhysicalDeviceVulkan11Features device_features_11 {};
+  VkPhysicalDeviceVulkan11Features device_features_11{};
   device_features_11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
-  device_features_11.pNext = &sync2_features;
+  *pp_next = &device_features_11;
+  pp_next = &device_features_11.pNext;
+
+  VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features{};
+  if (has_dynamic_rendering) {
+    dynamic_rendering_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
+    dynamic_rendering_features.dynamicRendering = VK_TRUE;
+    *pp_next = &dynamic_rendering_features;
+    pp_next = &dynamic_rendering_features.pNext;
+  }
 
   VkDeviceCreateInfo info {};
   info.sType                = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  info.pNext                = &device_features_11;
+  info.pNext                = &timeline_semaphore_features;
   info.queueCreateInfoCount = static_cast<uint32_t>(queue_create_infos.size());
   info.pQueueCreateInfos    = queue_create_infos.data();
   info.enabledLayerCount    = 0;
@@ -520,19 +558,6 @@ std::unique_ptr<IVulkanDevice> IVulkanDevice::Create(
     VkResult sem_result = vkCreateSemaphore(vk_device, &sem_info, nullptr, &queue_states[index].timeline_semaphore);
     if (sem_result != VK_SUCCESS) {
       MBASE_LOG_ERROR("vkCreateSemaphore (timeline) failed: {}", string_VkResult(sem_result));
-      return false;
-    }
-
-    // Binary semaphore used by QueuePresentSwapchainImage to bridge
-    // the timeline signal submit and vkQueuePresentKHR.
-    VkSemaphoreCreateInfo bin_sem_info {
-      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-      .pNext = nullptr,
-      .flags = 0,
-    };
-    sem_result = vkCreateSemaphore(vk_device, &bin_sem_info, nullptr, &queue_states[index].present_binary_semaphore);
-    if (sem_result != VK_SUCCESS) {
-      MBASE_LOG_ERROR("vkCreateSemaphore (present binary) failed: {}", string_VkResult(sem_result));
       return false;
     }
 
@@ -808,6 +833,7 @@ uint64_t VulkanDevice::QueuePresentSwapchainImage(
   uint32_t wait_semaphore_count,
   VkSemaphore const* wait_semaphores,
   uint64_t const* wait_values,
+  VkSemaphore present_binary_semaphore,
   VkSwapchainKHR swapchain,
   uint32_t image_index
 ) {
@@ -820,10 +846,9 @@ uint64_t VulkanDevice::QueuePresentSwapchainImage(
   // queue timeline we insert a command-less vkQueueSubmit2KHR that:
   //   - waits on the caller's timeline semaphores
   //   - signals the timeline semaphore with the new serial
-  //   - signals a device-owned binary semaphore for present to wait on
+  //   - signals a binary semaphore for present to wait on
   //
-  // On the same queue the GPU processes signal-then-wait in submission order,
-  // so a single binary semaphore per queue is sufficient.
+  // See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for why a single binary semaphore is NOT sufficient.
 
   // Build wait infos from the caller's timeline semaphores.
   std::vector<VkSemaphoreSubmitInfoKHR> wait_infos(wait_semaphore_count);
@@ -851,7 +876,7 @@ uint64_t VulkanDevice::QueuePresentSwapchainImage(
     {
       .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR,
       .pNext     = nullptr,
-      .semaphore = qs.present_binary_semaphore,
+      .semaphore = present_binary_semaphore,
       .value     = 0, // binary semaphore
       .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR,
       .deviceIndex = 0,
@@ -881,7 +906,7 @@ uint64_t VulkanDevice::QueuePresentSwapchainImage(
     .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
     .pNext              = nullptr,
     .waitSemaphoreCount = 1,
-    .pWaitSemaphores    = &qs.present_binary_semaphore,
+    .pWaitSemaphores    = &present_binary_semaphore,
     .swapchainCount     = 1,
     .pSwapchains        = &swapchain,
     .pImageIndices      = &image_index,
@@ -901,14 +926,15 @@ uint64_t VulkanDevice::QueuePresentSwapchainImage(
 uint64_t VulkanDevice::QueuePresentSwapchainImage(
   mnexus::QueueId const& queue_id,
   uint64_t wait_serial,
+  VkSemaphore present_binary_semaphore,
   VkSwapchainKHR swapchain,
   uint32_t image_index
 ) {
   RESOLVE_QUEUE_INDEX(index, queue_id);
 
   VulkanQueueState& qs = queue_states_[index];
-  return QueuePresentSwapchainImage(
-    queue_id, 1, &qs.timeline_semaphore, &wait_serial, swapchain, image_index
+  return this->QueuePresentSwapchainImage(
+    queue_id, 1, &qs.timeline_semaphore, &wait_serial, present_binary_semaphore, swapchain, image_index
   );
 }
 
@@ -938,10 +964,6 @@ void VulkanDevice::Shutdown() {
       if (qs.timeline_semaphore != VK_NULL_HANDLE) {
         vkDestroySemaphore(handle_, qs.timeline_semaphore, nullptr);
         qs.timeline_semaphore = VK_NULL_HANDLE;
-      }
-      if (qs.present_binary_semaphore != VK_NULL_HANDLE) {
-        vkDestroySemaphore(handle_, qs.present_binary_semaphore, nullptr);
-        qs.present_binary_semaphore = VK_NULL_HANDLE;
       }
     }
 

@@ -291,19 +291,54 @@ bool WsiSwapchain::OnSourceCreated(mnexus::SurfaceSourceDesc const& source_desc)
     MBASE_LOG_ERROR("vkGetSwapchainImagesKHR failed: {}", string_VkResult(result));
     vkDestroySwapchainKHR(vk_device_->handle(), vk_swapchain_handle_, nullptr);
     vk_swapchain_handle_ = VK_NULL_HANDLE;
-    vk_images_.clear();
+    images_.clear();
     return false;
   }
 
-  vk_images_.reserve(configuration.min_image_count);
-  for (VkImage vk_image_handle : vk_image_handles) {
-    vk_images_.emplace_back(
+  images_.reserve(configuration.min_image_count);
+  for (uint32_t i = 0; i < configuration.min_image_count; ++i) {
+    VkImage vk_image_handle = vk_image_handles[i];
+
+    VulkanImage vk_image(
       vk_image_handle,
       []() { /* Swapchain images are implicitly destroyed with the swapchain, so no explicit destruction needed. */ },
       nullptr,
       configuration.image_usage,
-      configuration.image_format
+      configuration.image_format,
+      VkExtent3D{
+        .width = configuration.extent.width,
+        .height = configuration.extent.height,
+        .depth = 1,
+      }
     );
+
+    VkSemaphoreCreateInfo semaphore_create_info {
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = 0,
+    };
+
+    VkSemaphore vk_semaphore_handle = VK_NULL_HANDLE;
+    VkResult const semaphore_result = vkCreateSemaphore(vk_device_->handle(), &semaphore_create_info, nullptr, &vk_semaphore_handle);
+    MBASE_ASSERT(semaphore_result == VK_SUCCESS);
+
+    if (vkSetDebugUtilsObjectNameEXT != nullptr) {
+      std::string name = "SwapchainPresentBinarySemaphore[ImageIndex=" + std::to_string(i) + "]";
+
+      VkDebugUtilsObjectNameInfoEXT name_info {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .pNext = nullptr,
+        .objectType = VK_OBJECT_TYPE_SEMAPHORE,
+        .objectHandle = reinterpret_cast<uint64_t>(vk_semaphore_handle),
+        .pObjectName = name.c_str(),
+      };
+      vkSetDebugUtilsObjectNameEXT(vk_device_->handle(), &name_info);
+    }
+
+    images_.emplace_back() = SwapchainImage {
+      .vk_image = std::move(vk_image),
+      .present_binary_semaphore = vk_semaphore_handle,
+    };
   }
 
   mnexus::TextureUsageFlags usage_flags;
@@ -338,13 +373,19 @@ void WsiSwapchain::OnSourceDestroyed() {
 
   vkDestroySwapchainKHR(vk_device_->handle(), vk_swapchain_handle_, nullptr);
   vk_swapchain_handle_ = VK_NULL_HANDLE;
-  vk_images_.clear();
+  for (SwapchainImage& image : images_) {
+    if (image.present_binary_semaphore != VK_NULL_HANDLE) {
+      vkDestroySemaphore(vk_device_->handle(), image.present_binary_semaphore, nullptr);
+      image.present_binary_semaphore = VK_NULL_HANDLE;
+    }
+  }
+  images_.clear();
 
   surface_->Destroy();
   surface_ = std::nullopt;
 }
 
-std::optional<std::pair<uint32_t, VulkanImage const*>> WsiSwapchain::AcquireNextImage(
+std::optional<std::pair<uint32_t, SwapchainImage const*>> WsiSwapchain::AcquireNextImage(
   uint64_t timeout_ns,
   VkSemaphore nullable_signal_semaphore,
   VkFence nullable_signal_fence
@@ -376,7 +417,7 @@ std::optional<std::pair<uint32_t, VulkanImage const*>> WsiSwapchain::AcquireNext
 
   last_acquired_image_index_ = image_index;
 
-  return std::make_pair(image_index, &vk_images_[image_index]);
+  return std::make_pair(image_index, &images_[image_index]);
 }
 
 void WsiSwapchain::ReturnImage(uint32_t image_index) {
@@ -387,13 +428,13 @@ void WsiSwapchain::ReturnImage(uint32_t image_index) {
   last_acquired_image_index_ = std::nullopt;
 }
 
-std::optional<std::pair<uint32_t, VulkanImage const*>> WsiSwapchain::GetLastAcquiredImage() const {
+std::optional<std::pair<uint32_t, SwapchainImage const*>> WsiSwapchain::GetLastAcquiredImage() const {
   mbase::LockGuard lock(mutex_);
   if (!last_acquired_image_index_.has_value()) {
     return std::nullopt;
   }
   uint32_t image_index = last_acquired_image_index_.value();
-  return std::make_pair(image_index, &vk_images_[image_index]);
+  return std::make_pair(image_index, &images_[image_index]);
 }
 
 } // namespace mnexus_backend::vulkan

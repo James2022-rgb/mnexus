@@ -26,7 +26,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::End() {
   // Transition all tracked images back to their default layouts before finalizing.
   image_layout_tracker_.TransitionAllToDefaults();
   image_layout_tracker_.FlushPendingTransitions(pending_pipeline_barrier_);
-  pending_pipeline_barrier_.FlushAndClear(encoder_.command_buffer());
+  pending_pipeline_barrier_.FlushAndClear(encoder_.vk_cb_handle());
 
   encoder_.End();
 }
@@ -65,62 +65,31 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::ClearTexture(
   auto const pool_handle = resource_pool::ResourceHandle::FromU64(texture_handle.Get());
   auto [hot, cold, lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(pool_handle);
 
-  VkImage const vk_image = hot.GetVkImage().handle();
+  VulkanImage const& vk_image = hot.GetVkImage();
+  VkImage const vk_image_handle = vk_image.handle();
   mnexus::TextureDesc const& desc = cold.GetTextureDesc();
   VkFormat const vk_format = ToVkFormat(desc.format);
 
   // Register and transition target subresources to TRANSFER_DST.
   image_layout_tracker_.RegisterImage(
-    vk_image,
+    vk_image_handle,
     ToVkImageUsageFlags(desc.usage, vk_format),
     vk_format,
     desc.mip_level_count,
     desc.array_layer_count
   );
 
-  for (uint32_t mip = subresource_range.base_mip_level;
-       mip < subresource_range.base_mip_level + subresource_range.mip_level_count;
-       ++mip) {
-    for (uint32_t layer = subresource_range.base_array_layer;
-         layer < subresource_range.base_array_layer + subresource_range.array_layer_count;
-         ++layer) {
-      image_layout_tracker_.TransitionToTransferDst(
-        vk_image, { .mip_level = mip, .array_layer = layer }
-      );
-    }
-  }
+  image_layout_tracker_.TransitionRangeToTransferDst(
+    vk_image_handle,
+    { .mip_level = subresource_range.base_mip_level, .array_layer = subresource_range.base_array_layer },
+    subresource_range.mip_level_count,
+    subresource_range.array_layer_count
+  );
 
   image_layout_tracker_.FlushPendingTransitions(pending_pipeline_barrier_);
-  pending_pipeline_barrier_.FlushAndClear(encoder_.command_buffer());
+  pending_pipeline_barrier_.FlushAndClear(encoder_.vk_cb_handle());
 
-  VkImageSubresourceRange const vk_range = ToVkImageSubresourceRange(subresource_range);
-
-  VkImageAspectFlags const aspect = ImageLayoutTracker::GetAspectMaskFromFormat(vk_format);
-  if (aspect & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
-    VkClearDepthStencilValue const ds {
-      .depth = clear_value.depth_stencil.depth,
-      .stencil = clear_value.depth_stencil.stencil,
-    };
-    vkCmdClearDepthStencilImage(
-      encoder_.command_buffer(), vk_image,
-      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-      &ds, 1, &vk_range
-    );
-  } else {
-    VkClearColorValue const color {
-      .float32 = {
-        clear_value.color.r,
-        clear_value.color.g,
-        clear_value.color.b,
-        clear_value.color.a,
-      },
-    };
-    vkCmdClearColorImage(
-      encoder_.command_buffer(), vk_image,
-      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-      &color, 1, &vk_range
-    );
-  }
+  encoder_.CmdClearImageSubresourceRange(vk_image, subresource_range, clear_value);
 
   referenced_resources_.push_back(pool_handle);
 }
@@ -132,6 +101,8 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::CopyBufferToTexture(
   mnexus::TextureSubresourceRange const& dst_subresource_range,
   mnexus::Extent3d const& copy_extent
 ) {
+  MBASE_ASSERT(dst_subresource_range.mip_level_count == 1);
+
   // Resolve source buffer.
   auto const src_pool_handle = resource_pool::ResourceHandle::FromU64(src_buffer_handle.Get());
   auto [src_hot, src_lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(src_pool_handle);
@@ -140,50 +111,37 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::CopyBufferToTexture(
   auto const dst_pool_handle = resource_pool::ResourceHandle::FromU64(dst_texture_handle.Get());
   auto [dst_hot, dst_cold, dst_lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(dst_pool_handle);
 
-  VkImage const vk_image = dst_hot.GetVkImage().handle();
+  VulkanImage const& vk_image = dst_hot.GetVkImage();
+  VkImage const vk_image_handle = vk_image.handle();
   mnexus::TextureDesc const& dst_desc = dst_cold.GetTextureDesc();
   VkFormat const vk_format = ToVkFormat(dst_desc.format);
 
   // Register the image and transition the target subresource to TRANSFER_DST_OPTIMAL.
   image_layout_tracker_.RegisterImage(
-    vk_image,
+    vk_image_handle,
     ToVkImageUsageFlags(dst_desc.usage, vk_format),
     vk_format,
     dst_desc.mip_level_count,
     dst_desc.array_layer_count
   );
 
-  // Transition each target subresource (mip level × array layer) to transfer dst.
-  for (uint32_t layer = dst_subresource_range.base_array_layer;
-       layer < dst_subresource_range.base_array_layer + dst_subresource_range.array_layer_count;
-       ++layer) {
-    image_layout_tracker_.TransitionToTransferDst(
-      vk_image,
-      { .mip_level = dst_subresource_range.base_mip_level, .array_layer = layer }
-    );
-  }
+  image_layout_tracker_.TransitionRangeToTransferDst(
+    vk_image_handle,
+    { .mip_level = dst_subresource_range.base_mip_level, .array_layer = dst_subresource_range.base_array_layer },
+    dst_subresource_range.mip_level_count,
+    dst_subresource_range.array_layer_count
+  );
 
   // Flush the layout transition barrier before the copy.
   image_layout_tracker_.FlushPendingTransitions(pending_pipeline_barrier_);
-  pending_pipeline_barrier_.FlushAndClear(encoder_.command_buffer());
+  pending_pipeline_barrier_.FlushAndClear(encoder_.vk_cb_handle());
 
-  // Build copy region. Vulkan supports tightly packed source data natively (bufferRowLength = 0).
-  VkBufferImageCopy const region {
-    .bufferOffset = src_buffer_offset,
-    .bufferRowLength = 0,
-    .bufferImageHeight = 0,
-    .imageSubresource = ToVkImageSubresourceLayers(dst_subresource_range),
-    .imageOffset = { 0, 0, 0 },
-    .imageExtent = VkExtent3D { copy_extent.width, copy_extent.height, copy_extent.depth },
-  };
-
-  vkCmdCopyBufferToImage(
-    encoder_.command_buffer(),
-    src_hot.vk_buffer.handle(),
-    vk_image,
-    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-    1,
-    &region
+  encoder_.CmdCopyBufferToImageSubresource(
+    src_hot.vk_buffer,
+    src_buffer_offset,
+    dst_hot.GetVkImage(),
+    dst_subresource_range,
+    copy_extent
   );
 
   // Track referenced resources for submit-time stamping.
@@ -245,7 +203,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::DispatchCompute(
   uint32_t workgroup_count_y,
   uint32_t workgroup_count_z
 ) {
-  encoder_.DispatchCompute(workgroup_count_x, workgroup_count_y, workgroup_count_z);
+  encoder_.CmdDispatchCompute(workgroup_count_x, workgroup_count_y, workgroup_count_z);
 }
 
 //
@@ -314,13 +272,61 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindExplicitRenderPipe
 //
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BeginRenderPass(
-  mnexus::RenderPassDesc const& /*desc*/
+  mnexus::RenderPassDesc const& desc
 ) {
-  STUB_NOT_IMPLEMENTED();
+  DynamicRenderPassDesc dyn_rp_desc{};
+
+  for (mnexus::ColorAttachmentDesc const& attachment_desc : desc.color_attachments) {
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(attachment_desc.texture.Get());
+    referenced_resources_.push_back(pool_handle);
+
+    auto [hot, cold, lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(pool_handle);
+
+    RenderTargetDesc& rt_desc = dyn_rp_desc.color_attachments.emplace_back();
+    rt_desc.vk_image = &hot.GetVkImage();
+    rt_desc.subresource_range = attachment_desc.subresource_range;
+    if (attachment_desc.load_op == mnexus::LoadOp::kClear) {
+      rt_desc.clear_value = RenderTargetClearValue {
+        .f32 = {
+          attachment_desc.clear_value.color.r,
+          attachment_desc.clear_value.color.g,
+          attachment_desc.clear_value.color.b,
+          attachment_desc.clear_value.color.a,
+        },
+      };
+    }
+  }
+
+  if (desc.depth_stencil_attachment != nullptr && desc.depth_stencil_attachment->texture.IsValid()) {
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(desc.depth_stencil_attachment->texture.Get());
+    referenced_resources_.push_back(pool_handle);
+
+    auto [hot, cold, lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(pool_handle);
+
+    RenderTargetDesc& rt_desc = dyn_rp_desc.depth_stencil_attachment.emplace();
+    rt_desc.vk_image = &hot.GetVkImage();
+    rt_desc.subresource_range = desc.depth_stencil_attachment->subresource_range;
+    if (desc.depth_stencil_attachment->depth_load_op == mnexus::LoadOp::kClear) {
+      rt_desc.clear_value = RenderTargetClearValue {
+        .f32 = {
+          desc.depth_stencil_attachment->depth_clear_value,
+        },
+      };
+    }
+    if (desc.depth_stencil_attachment->stencil_load_op == mnexus::LoadOp::kClear) {
+      rt_desc.stencil_clear_value = RenderTargetClearValue {
+          .u32 = {
+            desc.depth_stencil_attachment->stencil_clear_value,
+          },
+      };
+    }
+  }
+
+  encoder_.CmdBeginRendering(dyn_rp_desc);
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::EndRenderPass() {
-  STUB_NOT_IMPLEMENTED();
+  encoder_.CmdEndRendering();
 }
 
 //

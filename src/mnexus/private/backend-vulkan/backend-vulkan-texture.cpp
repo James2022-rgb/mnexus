@@ -32,7 +32,9 @@ VulkanImage const& TextureHot::GetVkImage() const {
         return dummy_image;
       }
 
-      return *(opt_last_acquired->second);
+      SwapchainImage const* swapchain_image = opt_last_acquired->second;
+
+      return swapchain_image->vk_image;
     }
   };
   return std::visit(
@@ -49,7 +51,7 @@ void TextureHot::Stamp(uint32_t queue_compact_index, uint64_t serial) {
     void operator()(TextureHotRegular& regular) const {
       regular.vk_image.sync_stamp().Stamp(queue_compact_index, serial);
     }
-    void operator()(TextureHotSwapchain& swapchain) const {
+    void operator()(TextureHotSwapchain&) const {
       // Swapchain image stamping is no-op since we don't track swapchain image usage with sync stamps.
     }
   };
@@ -79,7 +81,7 @@ mnexus::TextureDesc const& TextureCold::GetTextureDesc() const {
 void TextureCold::GetDefaultState(VkImageLayout& out_layout) const {
   struct Visitor {
     VkImageLayout* out_layout;
-    void operator()(TextureColdRegular const& regular) const {
+    void operator()(TextureColdRegular const&) const {
       // No-op.
       mbase::Trap();
     }
@@ -169,7 +171,8 @@ std::optional<CreateVulkanImageResult> CreateVulkanImage(
     },
     vk_device.GetDeferredDestroyer(),
     create_info.usage,
-    create_info.format
+    create_info.format,
+    create_info.extent
   );
 
   // Transition from UNDEFINED to the default layout for this image's usage.
@@ -246,13 +249,6 @@ resource_pool::ResourceHandle EmplaceTextureResourcePool(
   }
 
   CreateVulkanImageResult result = std::move(opt_result.value());
-
-  VkImageUsageFlags const vk_usage_flags = result.vk_image.vk_usage_flags();
-  VkFormat const vk_format = result.vk_image.vk_format();
-
-  VkImageLayout const default_layout = ImageLayoutTracker::GetDefaultLayout(vk_usage_flags, vk_format);
-  SyncScope const default_scope = ImageLayoutTracker::GetDefaultSyncScope(vk_usage_flags, vk_format);
-  VkImageAspectFlags const aspect_mask = ImageLayoutTracker::GetAspectMaskFromFormat(vk_format);
 
   TextureHot hot(TextureHotRegular{ .vk_image = std::move(result.vk_image) });
   TextureCold cold(TextureColdRegular{ .desc = texture_desc });

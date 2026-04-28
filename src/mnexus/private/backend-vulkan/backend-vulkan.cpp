@@ -79,7 +79,7 @@ public:
     mnexus::ICommandList* command_list
   ) {
     auto* cmd_list_vk = static_cast<MnexusCommandListVulkan*>(command_list);
-    VkCommandBuffer vk_cb_handle = cmd_list_vk->encoder().command_buffer();
+    VkCommandBuffer vk_cb_handle = cmd_list_vk->encoder().vk_cb_handle();
 
     uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, vk_cb_handle);
     vk_device_->thread_command_pool_registry().FreeCommandBuffer(vk_cb_handle, queue_id, serial);
@@ -224,7 +224,7 @@ public:
   ) {
     VkCommandBuffer vk_cb_handle = vk_device_->thread_command_pool_registry().AllocateCommandBuffer();
     return new MnexusCommandListVulkan(
-      CommandEncoder(vk_cb_handle, vk_device_->handle(), descriptor_set_allocator_, resource_storage_),
+      CommandEncoder(vk_cb_handle, vk_device_, descriptor_set_allocator_, resource_storage_),
       resource_storage_
     );
   }
@@ -233,7 +233,7 @@ public:
     mnexus::ICommandList* command_list
   ) {
     auto* cmd_list_vk = static_cast<MnexusCommandListVulkan*>(command_list);
-    VkCommandBuffer vk_cb_handle = cmd_list_vk->encoder().command_buffer();
+    VkCommandBuffer vk_cb_handle = cmd_list_vk->encoder().vk_cb_handle();
     vk_device_->thread_command_pool_registry().FreeCommandBuffer(vk_cb_handle, {}, 0);
     delete cmd_list_vk;
   }
@@ -477,6 +477,8 @@ public:
   // Local
 
   void OnSurfaceDestroyed() {
+    vkDeviceWaitIdle(vk_device_->handle());
+
     wsi_swapchain_.OnSourceDestroyed();
   }
 
@@ -496,7 +498,7 @@ public:
       return std::nullopt;
     }
 
-    auto [image_index, vk_image] = opt_acquired.value();
+    auto [image_index, swapchain_image] = opt_acquired.value();
     return image_index;
   }
 
@@ -506,10 +508,9 @@ public:
       MBASE_LOG_ERROR("No swapchain image has been acquired for presentation.");
       return false;
     }
-    auto [image_index, vk_image] = opt_last_acquired.value();
+    auto [image_index, swapchain_image] = opt_last_acquired.value();
     
-    uint64_t const serial = vk_device_->QueuePresentSwapchainImage(queue_id, wait_serial, wsi_swapchain_.GetVkSwapchainHandle(), image_index);
-    (void)serial;
+    vk_device_->QueuePresentSwapchainImage(queue_id, wait_serial, swapchain_image->present_binary_semaphore, wsi_swapchain_.GetVkSwapchainHandle(), image_index);
     wsi_swapchain_.ReturnImage(image_index);
 
     return true;
@@ -848,6 +849,8 @@ std::unique_ptr<IBackendVulkan> IBackendVulkan::Create(BackendVulkanCreateDesc c
     MBASE_LOG_ERROR("Failed to create Vulkan device.");
     return nullptr;
   }
+
+  volkLoadDevice(vk_device->handle());
 
   return std::make_unique<BackendVulkan>(std::move(vk_device));
 }

@@ -455,6 +455,7 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/device/thread_command_pool.cpp
     ${_private_backend_vulkan_dir}/device/thread_command_pool.h
     # resource/
+    ${_private_backend_vulkan_dir}/resource/image_view_cache.h
     ${_private_backend_vulkan_dir}/resource/resource_storage.cpp
     ${_private_backend_vulkan_dir}/resource/resource_storage.h
     ${_private_backend_vulkan_dir}/resource/shader_module.cpp
@@ -495,6 +496,12 @@ if(${_enable_backend_vulkan})
 endif()
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/${_private_backend_vulkan_dir}" PREFIX "Private/Backend-Vulkan" FILES ${_sources_private_backend_vulkan})
 
+
+set(_private_cache_dir "${_private_root_dir}/cache")
+set(_sources_private_cache
+  ${_private_cache_dir}/hash_cache.h
+)
+source_group("Private/Cache" FILES ${_sources_private_cache})
 
 set(_private_impl_dir "${_private_root_dir}/impl")
 set(_sources_private_impl
@@ -564,6 +571,7 @@ target_sources(${TARGET_NAME} PRIVATE
   ${_sources_private_backend_webgpu}
   ${_sources_private_binding}
   ${_sources_private_resource_pool}
+  ${_sources_private_cache}
   ${_sources_private_impl}
   ${_sources_private_pipeline}
   ${_sources_private_shader}

@@ -167,6 +167,15 @@ void ImageLayoutTracker::TransitionToTransferDst(VkImage vk_image, Subresource c
   );
 }
 
+void ImageLayoutTracker::TransitionRangeToTransferDst(VkImage vk_image, Subresource const& base_subresource, uint32_t mip_level_count, uint32_t array_layer_count) {
+  this->Transition(
+    vk_image, base_subresource,
+    VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR,
+    VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR,
+    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+  );
+}
+
 void ImageLayoutTracker::TransitionToTransferSrc(VkImage vk_image, Subresource const& subresource) {
   this->Transition(
     vk_image, subresource,

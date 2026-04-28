@@ -88,18 +88,20 @@ public:
   /// Returns the new serial.
   [[nodiscard]] virtual uint64_t QueueSubmitSingle(mnexus::QueueId const& queue_id, VkCommandBuffer command_buffer) = 0;
 
-  [[nodiscard]] virtual uint64_t QueuePresentSwapchainImage(
+  virtual uint64_t QueuePresentSwapchainImage(
     mnexus::QueueId const& queue_id,
     uint32_t wait_semaphore_count,
     VkSemaphore const* wait_semaphores,
     uint64_t const* wait_values,
+    VkSemaphore present_binary_semaphore,
     VkSwapchainKHR swapchain,
     uint32_t image_index
   ) = 0;
 
-  [[nodiscard]] virtual uint64_t QueuePresentSwapchainImage(
+  virtual uint64_t QueuePresentSwapchainImage(
     mnexus::QueueId const& queue_id,
     uint64_t wait_serial,
+    VkSemaphore present_binary_semaphore,
     VkSwapchainKHR swapchain,
     uint32_t image_index
   ) = 0;

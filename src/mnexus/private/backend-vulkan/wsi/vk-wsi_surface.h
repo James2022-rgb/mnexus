@@ -70,6 +70,11 @@ struct VulkanSwapchainConfiguration final {
   );
 };
 
+struct SwapchainImage final {
+  VulkanImage vk_image;
+  VkSemaphore present_binary_semaphore = VK_NULL_HANDLE;
+};
+
 class WsiSwapchain final {
 public:
   ~WsiSwapchain() = default;
@@ -85,13 +90,13 @@ public:
   bool OnSourceCreated(mnexus::SurfaceSourceDesc const& source_desc);
   void OnSourceDestroyed();
 
-  std::optional<std::pair<uint32_t, VulkanImage const*>> AcquireNextImage(
+  std::optional<std::pair<uint32_t, SwapchainImage const*>> AcquireNextImage(
     uint64_t timeout_ns,
     VkSemaphore nullable_signal_semaphore,
     VkFence nullable_signal_fence
   );
 
-  std::optional<std::pair<uint32_t, VulkanImage const*>> GetLastAcquiredImage() const;
+  std::optional<std::pair<uint32_t, SwapchainImage const*>> GetLastAcquiredImage() const;
   void ReturnImage(uint32_t image_index);
 
 private:
@@ -104,7 +109,7 @@ private:
 
   std::optional<WsiSurface> surface_;
   VkSwapchainKHR vk_swapchain_handle_ = VK_NULL_HANDLE;
-  std::vector<VulkanImage> vk_images_;
+  std::vector<SwapchainImage> images_;
   mnexus::TextureDesc texture_desc_;
   VkImageLayout default_vk_image_layout_ = VK_IMAGE_LAYOUT_UNDEFINED;
 
