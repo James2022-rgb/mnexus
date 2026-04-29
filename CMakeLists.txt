@@ -450,6 +450,8 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/device/vk-physical_device.h
     ${_private_backend_vulkan_dir}/device/vk-device.cpp
     ${_private_backend_vulkan_dir}/device/vk-device.h
+    ${_private_backend_vulkan_dir}/device/vk-device_helper.cpp
+    ${_private_backend_vulkan_dir}/device/vk-device_helper.h
     ${_private_backend_vulkan_dir}/device/vk-staging.cpp
     ${_private_backend_vulkan_dir}/device/vk-staging.h
     ${_private_backend_vulkan_dir}/device/thread_command_pool.cpp
