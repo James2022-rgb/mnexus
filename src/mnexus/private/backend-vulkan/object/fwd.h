@@ -3,12 +3,6 @@
 namespace mnexus_backend::vulkan {
 
 //
-// vk-deferred_destroyer.h
-//
-
-class IVulkanDeferredDestroyer;
-
-//
 // vk-object-buffer.h
 //
 

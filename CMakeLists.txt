@@ -434,7 +434,6 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/depend/vulkan_vma.h
     # object/
     ${_private_backend_vulkan_dir}/object/fwd.h
-    ${_private_backend_vulkan_dir}/object/vk-deferred_destroyer.h
     ${_private_backend_vulkan_dir}/object/vk-object.h
     ${_private_backend_vulkan_dir}/object/vk-object-buffer.h
     ${_private_backend_vulkan_dir}/object/vk-object-command_pool.h
@@ -447,6 +446,7 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/object/vk-object-shader_module.h
     # device/
     ${_private_backend_vulkan_dir}/device/fwd.h
+    ${_private_backend_vulkan_dir}/device/vk-deferred_destroyer.h
     ${_private_backend_vulkan_dir}/device/vk-instance.cpp
     ${_private_backend_vulkan_dir}/device/vk-instance.h
     ${_private_backend_vulkan_dir}/device/vk-physical_device.cpp

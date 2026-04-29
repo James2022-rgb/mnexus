@@ -16,7 +16,7 @@
 #include "sync/resource_sync.h"
 
 #include "backend-vulkan/depend/vulkan_vma.h"
-#include "backend-vulkan/object/vk-deferred_destroyer.h"
+#include "backend-vulkan/device/vk-deferred_destroyer.h"
 #include "backend-vulkan/device/vk-physical_device.h"
 #include "backend-vulkan/device/vk-staging.h"
 

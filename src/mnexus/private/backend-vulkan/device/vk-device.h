@@ -14,7 +14,6 @@
 #include "backend-vulkan/depend/vulkan_fwd.h"
 
 #include "backend-vulkan/device/fwd.h"
-#include "backend-vulkan/object/fwd.h"
 
 // Forward declarations ---------------------------------
 struct VmaAllocator_T;

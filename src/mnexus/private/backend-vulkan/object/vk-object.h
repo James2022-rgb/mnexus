@@ -14,7 +14,7 @@
 #include "sync/resource_sync.h"
 
 #include "backend-vulkan/depend/vulkan.h"
-#include "backend-vulkan/object/vk-deferred_destroyer.h"
+#include "backend-vulkan/device/vk-deferred_destroyer.h"
 
 namespace mnexus_backend::vulkan {
 
