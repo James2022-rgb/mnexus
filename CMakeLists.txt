@@ -436,6 +436,7 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/object/vk-deferred_destroyer.h
     ${_private_backend_vulkan_dir}/object/vk-object.h
     ${_private_backend_vulkan_dir}/object/vk-object-buffer.h
+    ${_private_backend_vulkan_dir}/object/vk-object-command_pool.h
     ${_private_backend_vulkan_dir}/object/vk-object-compute_pipeline.h
     ${_private_backend_vulkan_dir}/object/vk-object-descriptor_set.h
     ${_private_backend_vulkan_dir}/object/vk-object-descriptor_set_layout.h
@@ -454,8 +455,6 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/device/vk-device_helper.h
     ${_private_backend_vulkan_dir}/device/vk-staging.cpp
     ${_private_backend_vulkan_dir}/device/vk-staging.h
-    ${_private_backend_vulkan_dir}/device/thread_command_pool.cpp
-    ${_private_backend_vulkan_dir}/device/thread_command_pool.h
     # resource/
     ${_private_backend_vulkan_dir}/resource/image_view_cache.h
     ${_private_backend_vulkan_dir}/resource/resource_storage.cpp

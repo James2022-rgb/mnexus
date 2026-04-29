@@ -19,7 +19,6 @@
 #include "backend-vulkan/object/vk-deferred_destroyer.h"
 #include "backend-vulkan/device/vk-physical_device.h"
 #include "backend-vulkan/device/vk-staging.h"
-#include "backend-vulkan/device/thread_command_pool.h"
 
 #include "backend-vulkan/device/vk-device_helper.h"
 
@@ -79,7 +78,6 @@ public:
 
   StagingBufferPool& staging_buffer_pool() override { return staging_buffer_pool_; }
   TransientCommandPool& transient_command_pool() override { return transient_command_pool_; }
-  ThreadCommandPoolRegistry& thread_command_pool_registry() override { return thread_command_pool_registry_; }
   QueueIndexMap const& queue_index_map() const override { return queue_index_map_; }
 
 private:
@@ -119,7 +117,6 @@ private:
 
   StagingBufferPool staging_buffer_pool_;
   TransientCommandPool transient_command_pool_;
-  ThreadCommandPoolRegistry thread_command_pool_registry_;
 
   // --- Deferred destruction (composition, not inheritance) ---
 
@@ -368,7 +365,6 @@ std::unique_ptr<IVulkanDevice> IVulkanDevice::Create(
   // Initialize staging infrastructure.
   device->staging_buffer_pool_.Initialize(device.get());
   device->transient_command_pool_.Initialize(device.get(), selection.present_capable.queue_family_index);
-  device->thread_command_pool_registry_.Initialize(device.get(), selection.present_capable.queue_family_index);
 
   return device;
 }
@@ -688,7 +684,6 @@ void VulkanDevice::Shutdown() {
   this->ProcessPendingDestroys();
   MBASE_ASSERT_MSG(pending_destroys_.empty(), "Pending destroys remain after device idle (count: {})", pending_destroys_.size());
 
-  thread_command_pool_registry_.Shutdown();
   transient_command_pool_.Shutdown();
   staging_buffer_pool_.Shutdown();
 

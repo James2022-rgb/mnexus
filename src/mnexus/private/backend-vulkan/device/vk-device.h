@@ -26,7 +26,6 @@ namespace mnexus_backend::vulkan {
 class IVulkanDeferredDestroyer;
 class StagingBufferPool;
 class TransientCommandPool;
-class ThreadCommandPoolRegistry;
 class VulkanInstance;
 class PhysicalDeviceDesc;
 
@@ -111,7 +110,6 @@ public:
 
   [[nodiscard]] virtual StagingBufferPool& staging_buffer_pool() = 0;
   [[nodiscard]] virtual TransientCommandPool& transient_command_pool() = 0;
-  [[nodiscard]] virtual ThreadCommandPoolRegistry& thread_command_pool_registry() = 0;
   [[nodiscard]] virtual QueueIndexMap const& queue_index_map() const = 0;
 
 protected:

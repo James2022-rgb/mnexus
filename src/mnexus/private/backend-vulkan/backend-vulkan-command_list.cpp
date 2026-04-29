@@ -1,19 +1,82 @@
 // TU header --------------------------------------------
 #include "backend-vulkan/backend-vulkan-command_list.h"
 
+// public project headers -------------------------------
+#include "mbase/public/log.h"
+
 // project headers --------------------------------------
 #include "impl/impl_macros.h"
 
+#include "backend-vulkan/device/vk-device.h"
 #include "backend-vulkan/resource/resource_storage.h"
 #include "backend-vulkan/resource/types_bridge.h"
 
 namespace mnexus_backend::vulkan {
 
+namespace {
+
+VkCommandPool CreateCommandPool(IVulkanDevice* vk_device) {
+  uint32_t const queue_family_index = vk_device->queue_selection().present_capable.queue_family_index;
+  VkCommandPoolCreateInfo pool_info {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+    .pNext = nullptr,
+    .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+    .queueFamilyIndex = queue_family_index,
+  };
+  VkCommandPool vk_pool = VK_NULL_HANDLE;
+  VkResult const result = vkCreateCommandPool(vk_device->handle(), &pool_info, nullptr, &vk_pool);
+  if (result != VK_SUCCESS) {
+    MBASE_LOG_ERROR("vkCreateCommandPool failed: {}", string_VkResult(result));
+  }
+  return vk_pool;
+}
+
+VkCommandBuffer AllocateAndBeginCommandBuffer(IVulkanDevice* vk_device, VkCommandPool vk_pool) {
+  VkCommandBufferAllocateInfo alloc_info {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+    .pNext = nullptr,
+    .commandPool = vk_pool,
+    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+    .commandBufferCount = 1,
+  };
+  VkCommandBuffer vk_cb = VK_NULL_HANDLE;
+  VkResult const alloc_result = vkAllocateCommandBuffers(vk_device->handle(), &alloc_info, &vk_cb);
+  if (alloc_result != VK_SUCCESS) {
+    MBASE_LOG_ERROR("vkAllocateCommandBuffers failed: {}", string_VkResult(alloc_result));
+    return VK_NULL_HANDLE;
+  }
+
+  VkCommandBufferBeginInfo begin_info {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    .pNext = nullptr,
+    .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    .pInheritanceInfo = nullptr,
+  };
+  VkResult const begin_result = vkBeginCommandBuffer(vk_cb, &begin_info);
+  if (begin_result != VK_SUCCESS) {
+    MBASE_LOG_ERROR("vkBeginCommandBuffer failed: {}", string_VkResult(begin_result));
+  }
+  return vk_cb;
+}
+
+VulkanCommandPool MakeVulkanCommandPool(IVulkanDevice* vk_device, VkCommandPool vk_pool) {
+  VkDevice const vk_device_handle = vk_device->handle();
+  return VulkanCommandPool(
+    vk_pool,
+    [vk_device_handle, vk_pool] { vkDestroyCommandPool(vk_device_handle, vk_pool, nullptr); },
+    vk_device->GetDeferredDestroyer()
+  );
+}
+
+} // namespace
+
 MnexusCommandListVulkan::MnexusCommandListVulkan(
-  CommandEncoder encoder,
+  IVulkanDevice* vk_device,
+  IDescriptorSetAllocator* ds_allocator,
   ResourceStorage* resource_storage
 ) :
-  encoder_(std::move(encoder)),
+  vk_command_pool_(MakeVulkanCommandPool(vk_device, CreateCommandPool(vk_device))),
+  encoder_(AllocateAndBeginCommandBuffer(vk_device, vk_command_pool_.handle()), vk_device, ds_allocator, resource_storage),
   resource_storage_(resource_storage)
 {
 }

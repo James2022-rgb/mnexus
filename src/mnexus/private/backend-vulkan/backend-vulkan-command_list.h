@@ -14,17 +14,21 @@
 
 #include "backend-vulkan/command/command_encoder.h"
 #include "backend-vulkan/command/image_layout_tracker.h"
+#include "backend-vulkan/object/vk-object-command_pool.h"
 
 namespace mnexus_backend::vulkan {
 
+class IVulkanDevice;
+class IDescriptorSetAllocator;
 struct ResourceStorage;
 
 class MnexusCommandListVulkan : public mnexus::ICommandList {
 public:
-  MnexusCommandListVulkan(CommandEncoder encoder, ResourceStorage* resource_storage);
+  MnexusCommandListVulkan(IVulkanDevice* vk_device, IDescriptorSetAllocator* ds_allocator, ResourceStorage* resource_storage);
   ~MnexusCommandListVulkan() override = default;
 
   [[nodiscard]] CommandEncoder& encoder() { return encoder_; }
+  [[nodiscard]] VulkanCommandPool& vk_command_pool() { return vk_command_pool_; }
   [[nodiscard]] mbase::ArrayProxy<resource_pool::ResourceHandle const> GetReferencedResources() const { return referenced_resources_; }
 
   // --------------------------------------------------------------------------------------------------
@@ -229,6 +233,7 @@ public:
   ) override;
 
 private:
+  VulkanCommandPool vk_command_pool_;
   CommandEncoder encoder_;
   ResourceStorage* resource_storage_ = nullptr;
   std::vector<resource_pool::ResourceHandle> referenced_resources_;

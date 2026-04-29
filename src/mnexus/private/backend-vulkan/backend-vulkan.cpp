@@ -28,7 +28,6 @@
 #include "backend-vulkan/device/vk-physical_device.h"
 #include "backend-vulkan/device/vk-staging.h"
 #include "backend-vulkan/wsi/vk-wsi_surface.h"
-#include "backend-vulkan/device/thread_command_pool.h"
 #include "backend-vulkan/depend/vulkan_vma.h"
 #include "backend-vulkan/resource/resource_storage.h"
 
@@ -82,9 +81,11 @@ public:
     VkCommandBuffer vk_cb_handle = cmd_list_vk->encoder().vk_cb_handle();
 
     uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, vk_cb_handle);
-    vk_device_->thread_command_pool_registry().FreeCommandBuffer(vk_cb_handle, queue_id, serial);
 
     uint32_t const queue_compact_index = *vk_device_->queue_index_map().Find(queue_id);
+
+    // Stamp the per-list command pool so its deferred destruction waits for GPU completion.
+    cmd_list_vk->vk_command_pool().sync_stamp().Stamp(queue_compact_index, serial);
 
     mbase::ArrayProxy<resource_pool::ResourceHandle const> referenced = cmd_list_vk->GetReferencedResources();
     for (resource_pool::ResourceHandle const& handle : referenced) {
@@ -222,20 +223,15 @@ public:
   IMPL_VAPI(mnexus::ICommandList*, CreateCommandList,
     mnexus::CommandListDesc const& /*desc*/
   ) {
-    VkCommandBuffer vk_cb_handle = vk_device_->thread_command_pool_registry().AllocateCommandBuffer();
-    return new MnexusCommandListVulkan(
-      CommandEncoder(vk_cb_handle, vk_device_, descriptor_set_allocator_, resource_storage_),
-      resource_storage_
-    );
+    return new MnexusCommandListVulkan(vk_device_, descriptor_set_allocator_, resource_storage_);
   }
 
   IMPL_VAPI(void, DiscardCommandList,
     mnexus::ICommandList* command_list
   ) {
-    auto* cmd_list_vk = static_cast<MnexusCommandListVulkan*>(command_list);
-    VkCommandBuffer vk_cb_handle = cmd_list_vk->encoder().vk_cb_handle();
-    vk_device_->thread_command_pool_registry().FreeCommandBuffer(vk_cb_handle, {}, 0);
-    delete cmd_list_vk;
+    // The owned VulkanCommandPool's destructor enqueues deferred destruction;
+    // since it was never stamped, it'll fire immediately (used_mask == 0).
+    delete static_cast<MnexusCommandListVulkan*>(command_list);
   }
 
   // ----------------------------------------------------------------------------------------------
