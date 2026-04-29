@@ -10,6 +10,7 @@
 // project headers --------------------------------------
 #include "backend-vulkan/command/image_layout_tracker.h"
 #include "backend-vulkan/resource/types_bridge.h"
+#include "backend-vulkan/device/vk-queue.h"
 #include "backend-vulkan/device/vk-staging.h"
 #include "backend-vulkan/wsi/vk-wsi_surface.h"
 
@@ -104,6 +105,7 @@ struct CreateVulkanImageResult {
 
 std::optional<CreateVulkanImageResult> CreateVulkanImage(
   IVulkanDevice& vk_device,
+  IVulkanQueue& present_queue,
   TransientCommandPool& transient_command_pool,
   mnexus::TextureDesc const& texture_desc
 ) {
@@ -222,13 +224,12 @@ std::optional<CreateVulkanImageResult> CreateVulkanImage(
     vkCmdPipelineBarrier2KHR(cb, &dep);
     vkEndCommandBuffer(cb);
 
-    mnexus::QueueId const queue_id = vk_device.queue_selection().present_capable;
-    uint64_t const serial = vk_device.QueueSubmitSingle(queue_id, cb);
-    transient_command_pool.Release(cb, queue_id, serial);
+    uint64_t const serial = present_queue.SubmitSingle(cb);
+    transient_command_pool.Release(cb, present_queue.queue_id(), serial);
 
     // FIXME: Blocking wait. Replace with cross-queue timeline semaphore waits
     // (SubmitWaitAnotherQueueSubmissionId) to avoid stalling the CPU.
-    vk_device.QueueWaitSubmitSerial(queue_id, serial);
+    present_queue.WaitSubmitSerial(serial);
   }
 
   return CreateVulkanImageResult {
@@ -242,10 +243,11 @@ std::optional<CreateVulkanImageResult> CreateVulkanImage(
 resource_pool::ResourceHandle EmplaceTextureResourcePool(
   TextureResourcePool& out_pool,
   IVulkanDevice& vk_device,
+  IVulkanQueue& present_queue,
   TransientCommandPool& transient_command_pool,
   mnexus::TextureDesc const& texture_desc
 ) {
-  std::optional<CreateVulkanImageResult> opt_result = CreateVulkanImage(vk_device, transient_command_pool, texture_desc);
+  std::optional<CreateVulkanImageResult> opt_result = CreateVulkanImage(vk_device, present_queue, transient_command_pool, texture_desc);
   if (!opt_result.has_value()) {
     return resource_pool::ResourceHandle::Null();
   }

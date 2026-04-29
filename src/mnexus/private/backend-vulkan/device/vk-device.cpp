@@ -3,7 +3,6 @@
 
 // c++ headers ------------------------------------------
 #include <algorithm>
-#include <atomic>
 #include <functional>
 #include <mutex>
 #include <vector>
@@ -19,6 +18,7 @@
 #include "backend-vulkan/depend/vulkan_vma.h"
 #include "backend-vulkan/device/vk-deferred_destroyer.h"
 #include "backend-vulkan/device/vk-physical_device.h"
+#include "backend-vulkan/device/vk-queue.h"
 
 #include "backend-vulkan/device/vk-device_helper.h"
 
@@ -27,12 +27,6 @@ namespace mnexus_backend::vulkan {
 // ====================================================================================================
 // VulkanDevice
 //
-
-struct VulkanQueueState final {
-  VkQueue vk_queue = VK_NULL_HANDLE;
-  VkSemaphore timeline_semaphore = VK_NULL_HANDLE;
-  std::atomic<uint64_t> next_submit_serial {1}; // Valid serials start at 1.
-};
 
 class VulkanDevice final : public IVulkanDevice {
 public:
@@ -54,27 +48,7 @@ public:
 
   IVulkanDeferredDestroyer* GetDeferredDestroyer() const override { return &deferred_destroyer_; }
 
-  uint64_t QueueGetCompletedValue(mnexus::QueueId const& queue_id) override;
-  void QueueWaitSubmitSerial(mnexus::QueueId const& queue_id, uint64_t value) override;
-  uint64_t QueueWaitIdle(mnexus::QueueId const& queue_id) override;
-  uint64_t QueueAdvanceTimeline(mnexus::QueueId const& queue_id) override;
-  uint64_t QueueSubmitSingle(mnexus::QueueId const& queue_id, VkCommandBuffer command_buffer) override;
-  uint64_t QueuePresentSwapchainImage(
-    mnexus::QueueId const& queue_id,
-    uint32_t wait_semaphore_count,
-    VkSemaphore const* wait_semaphores,
-    uint64_t const* wait_values,
-    VkSemaphore present_binary_semaphore,
-    VkSwapchainKHR swapchain,
-    uint32_t image_index
-  ) override;
-  uint64_t QueuePresentSwapchainImage(
-    mnexus::QueueId const& queue_id,
-    uint64_t wait_serial,
-    VkSemaphore present_binary_semaphore,
-    VkSwapchainKHR swapchain,
-    uint32_t image_index
-  ) override;
+  IVulkanQueue* GetQueue(mnexus::QueueId const& queue_id) override;
 
 private:
   friend class IVulkanDevice; // For Create() to construct.
@@ -85,30 +59,22 @@ private:
     VkDevice handle,
     mnexus::QueueSelection queue_selection,
     QueueIndexMap queue_index_map,
-    VulkanQueueState const* queue_states,
-    uint32_t queue_count,
     VmaAllocator vma_allocator
   ) :
     instance_(std::move(instance)),
     physical_device_desc_(std::make_unique<PhysicalDeviceDesc>(physical_device_desc)),
-    queue_selection_(queue_selection),
     handle_(handle),
+    queue_selection_(queue_selection),
     queue_index_map_(queue_index_map),
     vma_allocator_(vma_allocator)
-  {
-    for (uint32_t i = 0; i < queue_count; ++i) {
-      queue_states_[i].vk_queue = queue_states[i].vk_queue;
-      queue_states_[i].timeline_semaphore = queue_states[i].timeline_semaphore;
-      queue_states_[i].next_submit_serial.store(queue_states[i].next_submit_serial.load(std::memory_order_seq_cst), std::memory_order_seq_cst);
-    }
-  }
+  {}
 
   VulkanInstance instance_;
   std::unique_ptr<PhysicalDeviceDesc> physical_device_desc_;
   VkDevice handle_ = VK_NULL_HANDLE;
   mnexus::QueueSelection queue_selection_;
   QueueIndexMap queue_index_map_;
-  VulkanQueueState queue_states_[kMaxQueues] {};
+  std::unique_ptr<IVulkanQueue> queues_[kMaxQueues] {};
   VmaAllocator vma_allocator_ = VK_NULL_HANDLE;
 
   // --- Deferred destruction (composition, not inheritance) ---
@@ -120,6 +86,7 @@ private:
       std::function<void()> destroy_func,
       ResourceSyncStamp::Snapshot snapshot
     ) override;
+    void Process() override;
   private:
     VulkanDevice& owner_;
   };
@@ -136,11 +103,6 @@ private:
   mbase::Lockable<std::mutex> pending_destroys_mutex_;
   std::vector<PendingDestroy> pending_destroys_ MBASE_GUARDED_BY(pending_destroys_mutex_);
 };
-
-#define RESOLVE_QUEUE_INDEX(var_name, queue_id) \
-  std::optional<uint32_t> opt_##var_name = queue_index_map_.Find(queue_id); \
-  MBASE_ASSERT_MSG(opt_##var_name.has_value(), "Unknown QueueId ({}, {})", (queue_id).queue_family_index, (queue_id).queue_index); \
-  uint32_t const var_name = *opt_##var_name
 
 
 // ----------------------------------------------------------------------------------------------------
@@ -256,64 +218,7 @@ std::unique_ptr<IVulkanDevice> IVulkanDevice::Create(
     return nullptr;
   }
 
-  // Retrieve VkQueues and create timeline semaphores.
   mnexus_backend::QueueIndexMap queue_index_map(selection);
-  VulkanQueueState queue_states[mnexus_backend::kMaxQueues] {};
-
-  auto InitQueueState = [&](mnexus::QueueId const& queue_id) -> bool {
-    std::optional<uint32_t> opt_index = queue_index_map.Find(queue_id);
-    MBASE_ASSERT(opt_index.has_value());
-    uint32_t const index = *opt_index;
-
-    vkGetDeviceQueue(
-      vk_device,
-      queue_id.queue_family_index,
-      queue_id.queue_index,
-      &queue_states[index].vk_queue
-    );
-
-    VkSemaphoreTypeCreateInfoKHR type_info {
-      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO_KHR,
-      .pNext = nullptr,
-      .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR,
-      .initialValue = 0,
-    };
-    VkSemaphoreCreateInfo sem_info {
-      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-      .pNext = &type_info,
-      .flags = 0,
-    };
-    VkResult sem_result = vkCreateSemaphore(vk_device, &sem_info, nullptr, &queue_states[index].timeline_semaphore);
-    if (sem_result != VK_SUCCESS) {
-      MBASE_LOG_ERROR("vkCreateSemaphore (timeline) failed: {}", string_VkResult(sem_result));
-      return false;
-    }
-
-    return true;
-  };
-
-  // TODO: Use a finally-like scope guard here to clean up the device if any of these fail.
-
-  if (!InitQueueState(selection.present_capable)) {
-    vkDestroyDevice(vk_device, nullptr);
-    return nullptr;
-  }
-  if (selection.dedicated_compute.has_value() && !InitQueueState(*selection.dedicated_compute)) {
-    vkDestroyDevice(vk_device, nullptr);
-    return nullptr;
-  }
-  if (selection.dedicated_transfer.has_value() && !InitQueueState(*selection.dedicated_transfer)) {
-    vkDestroyDevice(vk_device, nullptr);
-    return nullptr;
-  }
-  if (selection.dedicated_video_decode.has_value() && !InitQueueState(*selection.dedicated_video_decode)) {
-    vkDestroyDevice(vk_device, nullptr);
-    return nullptr;
-  }
-  if (selection.dedicated_video_encode.has_value() && !InitQueueState(*selection.dedicated_video_encode)) {
-    vkDestroyDevice(vk_device, nullptr);
-    return nullptr;
-  }
 
   VmaAllocator vma_allocator = VK_NULL_HANDLE;
   {
@@ -335,7 +240,6 @@ std::unique_ptr<IVulkanDevice> IVulkanDevice::Create(
       .pTypeExternalMemoryHandleTypes = nullptr,
     };
 
-    
     VkResult const vma_result = vmaCreateAllocator(&vma_info, &vma_allocator);
     if (vma_result != VK_SUCCESS) {
       MBASE_LOG_ERROR("vmaCreateAllocator failed: {}", string_VkResult(vma_result));
@@ -350,10 +254,71 @@ std::unique_ptr<IVulkanDevice> IVulkanDevice::Create(
     vk_device,
     selection,
     queue_index_map,
-    queue_states,
-    queue_index_map.Count(),
     vma_allocator
   ));
+
+  // Retrieve VkQueues, create timeline semaphores, and construct IVulkanQueue
+  // entries. The deferred destroyer is hooked up to each queue so that
+  // queue ops opportunistically drive deferred destruction.
+  auto InitQueue = [&](mnexus::QueueId const& queue_id) -> bool {
+    std::optional<uint32_t> opt_index = queue_index_map.Find(queue_id);
+    MBASE_ASSERT(opt_index.has_value());
+    uint32_t const compact_index = *opt_index;
+
+    VkQueue vk_queue = VK_NULL_HANDLE;
+    vkGetDeviceQueue(
+      vk_device,
+      queue_id.queue_family_index,
+      queue_id.queue_index,
+      &vk_queue
+    );
+
+    VkSemaphoreTypeCreateInfoKHR type_info {
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO_KHR,
+      .pNext = nullptr,
+      .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR,
+      .initialValue = 0,
+    };
+    VkSemaphoreCreateInfo sem_info {
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+      .pNext = &type_info,
+      .flags = 0,
+    };
+    VkSemaphore timeline_semaphore = VK_NULL_HANDLE;
+    VkResult const sem_result = vkCreateSemaphore(vk_device, &sem_info, nullptr, &timeline_semaphore);
+    if (sem_result != VK_SUCCESS) {
+      MBASE_LOG_ERROR("vkCreateSemaphore (timeline) failed: {}", string_VkResult(sem_result));
+      return false;
+    }
+
+    device->queues_[compact_index] = IVulkanQueue::Create(
+      vk_device,
+      vk_queue,
+      timeline_semaphore,
+      queue_id,
+      compact_index,
+      device->GetDeferredDestroyer()
+    );
+    return true;
+  };
+
+  // TODO: Use a finally-like scope guard here to clean up the device if any of these fail.
+
+  if (!InitQueue(selection.present_capable)) {
+    return nullptr;
+  }
+  if (selection.dedicated_compute.has_value() && !InitQueue(*selection.dedicated_compute)) {
+    return nullptr;
+  }
+  if (selection.dedicated_transfer.has_value() && !InitQueue(*selection.dedicated_transfer)) {
+    return nullptr;
+  }
+  if (selection.dedicated_video_decode.has_value() && !InitQueue(*selection.dedicated_video_decode)) {
+    return nullptr;
+  }
+  if (selection.dedicated_video_encode.has_value() && !InitQueue(*selection.dedicated_video_encode)) {
+    return nullptr;
+  }
 
   return device;
 }
@@ -378,8 +343,8 @@ void VulkanDevice::DeferredDestroyer::EnqueueDestroy(
     if ((snapshot.used_mask & (1u << index)) != 0) {
       uint64_t const last_used = snapshot.last_used[index];
 
-      uint64_t completed_value = 0;
-      vkGetSemaphoreCounterValueKHR(device.handle_, device.queue_states_[index].timeline_semaphore, &completed_value);
+      MBASE_ASSERT(device.queues_[index] != nullptr);
+      uint64_t const completed_value = device.queues_[index]->GetCompletedValue();
 
       if (completed_value < last_used) {
         completed = false;
@@ -393,6 +358,14 @@ void VulkanDevice::DeferredDestroyer::EnqueueDestroy(
   } else {
     device.EnqueuePendingDestroy(std::move(destroy_func), snapshot);
   }
+}
+
+// ----------------------------------------------------------------------------------------------------
+// VulkanDevice::DeferredDestroyer::Process
+//
+
+void VulkanDevice::DeferredDestroyer::Process() {
+  owner_.ProcessPendingDestroys();
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -421,8 +394,8 @@ void VulkanDevice::ProcessPendingDestroys() {
     bool completed = true;
     for (uint32_t qi = 0; qi < kMaxQueues; ++qi) {
       if ((entry.snapshot.used_mask & (1u << qi)) != 0) {
-        uint64_t completed_value = 0;
-        vkGetSemaphoreCounterValueKHR(handle_, queue_states_[qi].timeline_semaphore, &completed_value);
+        MBASE_ASSERT(queues_[qi] != nullptr);
+        uint64_t const completed_value = queues_[qi]->GetCompletedValue();
         if (completed_value < entry.snapshot.last_used[qi]) {
           completed = false;
           break;
@@ -442,223 +415,15 @@ void VulkanDevice::ProcessPendingDestroys() {
 }
 
 // ----------------------------------------------------------------------------------------------------
-// VulkanDevice::QueueGetCompletedValue
+// VulkanDevice::GetQueue
 //
 
-uint64_t VulkanDevice::QueueGetCompletedValue(mnexus::QueueId const& queue_id) {
-  RESOLVE_QUEUE_INDEX(index, queue_id);
-
-  uint64_t completed_value = 0;
-  vkGetSemaphoreCounterValueKHR(handle_, queue_states_[index].timeline_semaphore, &completed_value);
-  return completed_value;
-}
-
-// ----------------------------------------------------------------------------------------------------
-// VulkanDevice::QueueWaitSubmitSerial
-//
-
-void VulkanDevice::QueueWaitSubmitSerial(mnexus::QueueId const& queue_id, uint64_t value) {
-  if (value == 0) {
-    return;
+IVulkanQueue* VulkanDevice::GetQueue(mnexus::QueueId const& queue_id) {
+  std::optional<uint32_t> opt_index = queue_index_map_.Find(queue_id);
+  if (!opt_index.has_value()) {
+    return nullptr;
   }
-
-  RESOLVE_QUEUE_INDEX(index, queue_id);
-
-  VulkanQueueState& qs = queue_states_[index];
-  VkSemaphoreWaitInfoKHR wait_info {
-    .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO_KHR,
-    .pNext = nullptr,
-    .flags = 0,
-    .semaphoreCount = 1,
-    .pSemaphores = &qs.timeline_semaphore,
-    .pValues = &value,
-  };
-  vkWaitSemaphoresKHR(handle_, &wait_info, UINT64_MAX);
-
-  this->ProcessPendingDestroys();
-}
-
-// ----------------------------------------------------------------------------------------------------
-// VulkanDevice::QueueWaitIdle
-//
-
-uint64_t VulkanDevice::QueueWaitIdle(mnexus::QueueId const& queue_id) {
-  RESOLVE_QUEUE_INDEX(index, queue_id);
-
-  uint64_t const last_submitted = queue_states_[index].next_submit_serial.load(std::memory_order_acquire) - 1;
-  this->QueueWaitSubmitSerial(queue_id, last_submitted);
-  return last_submitted;
-}
-
-// ----------------------------------------------------------------------------------------------------
-// VulkanDevice::QueueAdvanceTimeline
-//
-
-uint64_t VulkanDevice::QueueAdvanceTimeline(mnexus::QueueId const& queue_id) {
-  RESOLVE_QUEUE_INDEX(index, queue_id);
-  uint64_t const serial = queue_states_[index].next_submit_serial.fetch_add(1, std::memory_order_acq_rel);
-
-  this->ProcessPendingDestroys();
-
-  return serial;
-}
-
-// ----------------------------------------------------------------------------------------------------
-// VulkanDevice::QueueSubmitSingle
-//
-
-uint64_t VulkanDevice::QueueSubmitSingle(mnexus::QueueId const& queue_id, VkCommandBuffer command_buffer) {
-  RESOLVE_QUEUE_INDEX(index, queue_id);
-
-  VulkanQueueState& qs = queue_states_[index];
-  uint64_t const serial = qs.next_submit_serial.fetch_add(1, std::memory_order_acq_rel);
-
-  VkCommandBufferSubmitInfoKHR cmd_info {
-    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO_KHR,
-    .pNext = nullptr,
-    .commandBuffer = command_buffer,
-    .deviceMask = 0,
-  };
-
-  VkSemaphoreSubmitInfoKHR signal_info {
-    .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR,
-    .pNext = nullptr,
-    .semaphore = qs.timeline_semaphore,
-    .value = serial,
-    .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR,
-    .deviceIndex = 0,
-  };
-
-  VkSubmitInfo2KHR submit_info {
-    .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR,
-    .pNext = nullptr,
-    .flags = 0,
-    .waitSemaphoreInfoCount = 0,
-    .pWaitSemaphoreInfos = nullptr,
-    .commandBufferInfoCount = 1,
-    .pCommandBufferInfos = &cmd_info,
-    .signalSemaphoreInfoCount = 1,
-    .pSignalSemaphoreInfos = &signal_info,
-  };
-
-  VkResult const result = vkQueueSubmit2KHR(qs.vk_queue, 1, &submit_info, VK_NULL_HANDLE);
-  if (result != VK_SUCCESS) {
-    MBASE_LOG_ERROR("vkQueueSubmit2KHR failed: {}", string_VkResult(result));
-  }
-
-  this->ProcessPendingDestroys();
-
-  return serial;
-}
-
-uint64_t VulkanDevice::QueuePresentSwapchainImage(
-  mnexus::QueueId const& queue_id,
-  uint32_t wait_semaphore_count,
-  VkSemaphore const* wait_semaphores,
-  uint64_t const* wait_values,
-  VkSemaphore present_binary_semaphore,
-  VkSwapchainKHR swapchain,
-  uint32_t image_index
-) {
-  RESOLVE_QUEUE_INDEX(index, queue_id);
-
-  VulkanQueueState& qs = queue_states_[index];
-  uint64_t const serial = qs.next_submit_serial.fetch_add(1, std::memory_order_acq_rel);
-
-  // vkQueuePresentKHR does not support timeline semaphores. To advance the
-  // queue timeline we insert a command-less vkQueueSubmit2KHR that:
-  //   - waits on the caller's timeline semaphores
-  //   - signals the timeline semaphore with the new serial
-  //   - signals a binary semaphore for present to wait on
-  //
-  // See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for why a single binary semaphore is NOT sufficient.
-
-  // Build wait infos from the caller's timeline semaphores.
-  std::vector<VkSemaphoreSubmitInfoKHR> wait_infos(wait_semaphore_count);
-  for (uint32_t i = 0; i < wait_semaphore_count; ++i) {
-    wait_infos[i] = {
-      .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR,
-      .pNext     = nullptr,
-      .semaphore = wait_semaphores[i],
-      .value     = wait_values[i],
-      .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR,
-      .deviceIndex = 0,
-    };
-  }
-
-  // Signal both the timeline (serial tracking) and binary (for present).
-  VkSemaphoreSubmitInfoKHR signal_infos[2] {
-    {
-      .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR,
-      .pNext     = nullptr,
-      .semaphore = qs.timeline_semaphore,
-      .value     = serial,
-      .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR,
-      .deviceIndex = 0,
-    },
-    {
-      .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR,
-      .pNext     = nullptr,
-      .semaphore = present_binary_semaphore,
-      .value     = 0, // binary semaphore
-      .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR,
-      .deviceIndex = 0,
-    },
-  };
-
-  VkSubmitInfo2KHR submit_info {
-    .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR,
-    .pNext                    = nullptr,
-    .flags                    = 0,
-    .waitSemaphoreInfoCount   = wait_semaphore_count,
-    .pWaitSemaphoreInfos      = wait_infos.data(),
-    .commandBufferInfoCount   = 0,
-    .pCommandBufferInfos      = nullptr,
-    .signalSemaphoreInfoCount = 2,
-    .pSignalSemaphoreInfos    = signal_infos,
-  };
-
-  VkResult result = vkQueueSubmit2KHR(qs.vk_queue, 1, &submit_info, VK_NULL_HANDLE);
-  if (result != VK_SUCCESS) {
-    MBASE_LOG_ERROR("vkQueueSubmit2KHR (pre-present) failed: {}", string_VkResult(result));
-    return 0;
-  }
-
-  // Present, waiting on the binary semaphore.
-  VkPresentInfoKHR present_info {
-    .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-    .pNext              = nullptr,
-    .waitSemaphoreCount = 1,
-    .pWaitSemaphores    = &present_binary_semaphore,
-    .swapchainCount     = 1,
-    .pSwapchains        = &swapchain,
-    .pImageIndices      = &image_index,
-    .pResults           = nullptr,
-  };
-
-  result = vkQueuePresentKHR(qs.vk_queue, &present_info);
-  if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-    MBASE_LOG_ERROR("vkQueuePresentKHR failed: {}", string_VkResult(result));
-  }
-
-  this->ProcessPendingDestroys();
-
-  return serial;
-}
-
-uint64_t VulkanDevice::QueuePresentSwapchainImage(
-  mnexus::QueueId const& queue_id,
-  uint64_t wait_serial,
-  VkSemaphore present_binary_semaphore,
-  VkSwapchainKHR swapchain,
-  uint32_t image_index
-) {
-  RESOLVE_QUEUE_INDEX(index, queue_id);
-
-  VulkanQueueState& qs = queue_states_[index];
-  return this->QueuePresentSwapchainImage(
-    queue_id, 1, &qs.timeline_semaphore, &wait_serial, present_binary_semaphore, swapchain, image_index
-  );
+  return queues_[*opt_index].get();
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -679,10 +444,10 @@ void VulkanDevice::Shutdown() {
   }
 
   if (handle_ != VK_NULL_HANDLE) {
-    for (auto& qs : queue_states_) {
-      if (qs.timeline_semaphore != VK_NULL_HANDLE) {
-        vkDestroySemaphore(handle_, qs.timeline_semaphore, nullptr);
-        qs.timeline_semaphore = VK_NULL_HANDLE;
+    for (auto& q : queues_) {
+      if (q != nullptr) {
+        q->Shutdown();
+        q.reset();
       }
     }
 

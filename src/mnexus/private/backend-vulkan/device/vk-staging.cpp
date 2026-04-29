@@ -7,6 +7,7 @@
 
 // project headers --------------------------------------
 #include "backend-vulkan/device/vk-device.h"
+#include "backend-vulkan/device/vk-queue.h"
 
 namespace mnexus_backend::vulkan {
 
@@ -43,7 +44,7 @@ StagingBuffer* StagingBufferPool::Acquire(VkDeviceSize size) {
   // Scan pending buffers for one that is completed and large enough.
   for (size_t i = 0; i < pending_buffers_.size(); ++i) {
     PendingEntry& entry = pending_buffers_[i];
-    uint64_t const completed = device_->QueueGetCompletedValue(entry.queue_id);
+    uint64_t const completed = device_->GetQueue(entry.queue_id)->GetCompletedValue();
     if (completed >= entry.serial && entry.buffer->size >= size) {
       StagingBuffer* buf = entry.buffer;
       pending_buffers_.erase(pending_buffers_.begin() + static_cast<ptrdiff_t>(i));
@@ -159,7 +160,7 @@ VkCommandBuffer TransientCommandPool::Acquire() {
   // Scan pending command buffers for one that has completed.
   for (size_t i = 0; i < pending_command_buffers_.size(); ++i) {
     PendingEntry& entry = pending_command_buffers_[i];
-    uint64_t const completed = device_->QueueGetCompletedValue(entry.queue_id);
+    uint64_t const completed = device_->GetQueue(entry.queue_id)->GetCompletedValue();
     if (completed >= entry.serial) {
       cmd = entry.command_buffer;
       pending_command_buffers_.erase(pending_command_buffers_.begin() + static_cast<ptrdiff_t>(i));

@@ -15,8 +15,6 @@
 // project headers --------------------------------------
 #include "resource_pool/generational_pool.h"
 
-#include "sync/resource_sync.h"
-
 #include "impl/impl_macros.h"
 
 #include "backend-vulkan/backend-vulkan-command_list.h"
@@ -28,6 +26,7 @@
 #include "backend-vulkan/device/vk-device.h"
 #include "backend-vulkan/device/vk-instance.h"
 #include "backend-vulkan/device/vk-physical_device.h"
+#include "backend-vulkan/device/vk-queue.h"
 #include "backend-vulkan/device/vk-staging.h"
 #include "backend-vulkan/wsi/vk-wsi_surface.h"
 #include "backend-vulkan/depend/vulkan_vma.h"
@@ -46,13 +45,11 @@ public:
     IVulkanDevice* vk_device,
     StagingBufferPool& staging_buffer_pool,
     TransientCommandPool& transient_command_pool,
-    QueueIndexMap const& queue_index_map,
     ResourceStorage* resource_storage
   ) :
     vk_device_(vk_device),
     staging_buffer_pool_(staging_buffer_pool),
     transient_command_pool_(transient_command_pool),
-    queue_index_map_(queue_index_map),
     wsi_swapchain_(WsiSwapchain::Create(vk_device->instance(), vk_device)),
     resource_storage_(resource_storage)
   {
@@ -91,9 +88,9 @@ public:
     auto* cmd_list_vk = static_cast<MnexusCommandListVulkan*>(command_list);
     VkCommandBuffer vk_cb_handle = cmd_list_vk->encoder().vk_cb_handle();
 
-    uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, vk_cb_handle);
-
-    uint32_t const queue_compact_index = *queue_index_map_.Find(queue_id);
+    IVulkanQueue* const queue = vk_device_->GetQueue(queue_id);
+    uint64_t const serial = queue->SubmitSingle(vk_cb_handle);
+    uint32_t const queue_compact_index = queue->compact_index();
 
     // Stamp the per-list command pool so its deferred destruction waits for GPU completion.
     cmd_list_vk->vk_command_pool().sync_stamp().Stamp(queue_compact_index, serial);
@@ -117,6 +114,8 @@ public:
     auto const pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
     auto [hot, lock] = resource_storage_->buffers.GetHotRefWithSharedLockGuard(pool_handle);
 
+    IVulkanQueue* const queue = vk_device_->GetQueue(queue_id);
+
     if (hot.mapped_data != nullptr) {
       // Mappable buffer: direct memcpy + flush.
       std::memcpy(static_cast<uint8_t*>(hot.mapped_data) + buffer_offset, data, data_size_in_bytes);
@@ -124,7 +123,7 @@ public:
 
       // No actual queue submit needed; data is visible after flush.
       // Advance timeline to satisfy the API contract.
-      uint64_t const serial = vk_device_->QueueAdvanceTimeline(queue_id);
+      uint64_t const serial = queue->AdvanceTimeline();
       return mnexus::IntraQueueSubmissionId { serial };
     }
 
@@ -147,10 +146,9 @@ public:
     vkCmdCopyBuffer(vk_cb_handle, staging->vk_buffer, hot.vk_buffer.handle(), 1, &region);
     vkEndCommandBuffer(vk_cb_handle);
 
-    uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, vk_cb_handle);
+    uint64_t const serial = queue->SubmitSingle(vk_cb_handle);
 
-    uint32_t const queue_compact_index = *queue_index_map_.Find(queue_id);
-    hot.vk_buffer.sync_stamp().Stamp(queue_compact_index, serial);
+    hot.vk_buffer.sync_stamp().Stamp(queue->compact_index(), serial);
 
     transient_command_pool_.Release(vk_cb_handle, queue_id, serial);
     staging_buffer_pool_.Release(staging, queue_id, serial);
@@ -168,11 +166,13 @@ public:
     auto const pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
     auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
 
+    IVulkanQueue* const queue = vk_device_->GetQueue(queue_id);
+
     if (hot.mapped_data != nullptr) {
       // Mappable buffer: direct read after invalidate.
       vmaInvalidateAllocation(hot.vma_allocator, hot.vma_allocation, buffer_offset, size_in_bytes);
       std::memcpy(dst, static_cast<uint8_t const*>(hot.mapped_data) + buffer_offset, size_in_bytes);
-      uint64_t const serial = vk_device_->QueueAdvanceTimeline(queue_id);
+      uint64_t const serial = queue->AdvanceTimeline();
       return mnexus::IntraQueueSubmissionId { serial };
     }
 
@@ -192,7 +192,7 @@ public:
     vkCmdCopyBuffer(vk_cb_handle, hot.vk_buffer.handle(), staging->vk_buffer, 1, &region);
     vkEndCommandBuffer(vk_cb_handle);
 
-    uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, vk_cb_handle);
+    uint64_t const serial = queue->SubmitSingle(vk_cb_handle);
 
     transient_command_pool_.Release(vk_cb_handle, queue_id, serial);
 
@@ -216,14 +216,14 @@ public:
   IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueGetCompletedValue,
     mnexus::QueueId const& queue_id
   ) {
-    return mnexus::IntraQueueSubmissionId { vk_device_->QueueGetCompletedValue(queue_id) };
+    return mnexus::IntraQueueSubmissionId { vk_device_->GetQueue(queue_id)->GetCompletedValue() };
   }
 
   IMPL_VAPI(void, QueueWaitIdle,
     mnexus::QueueId const& queue_id,
     mnexus::IntraQueueSubmissionId value
   ) {
-    vk_device_->QueueWaitSubmitSerial(queue_id, value.Get());
+    vk_device_->GetQueue(queue_id)->WaitSubmitSerial(value.Get());
     this->ProcessPendingReadbacks();
   }
 
@@ -295,6 +295,7 @@ public:
     resource_pool::ResourceHandle const pool_handle = EmplaceTextureResourcePool(
       resource_storage_->textures,
       *vk_device_,
+      *vk_device_->GetQueue(vk_device_->queue_selection().present_capable),
       transient_command_pool_,
       desc
     );
@@ -518,7 +519,7 @@ public:
     }
     auto [image_index, swapchain_image] = opt_last_acquired.value();
     
-    vk_device_->QueuePresentSwapchainImage(queue_id, wait_serial, swapchain_image->present_binary_semaphore, wsi_swapchain_.GetVkSwapchainHandle(), image_index);
+    vk_device_->GetQueue(queue_id)->PresentSwapchainImage(wait_serial, swapchain_image->present_binary_semaphore, wsi_swapchain_.GetVkSwapchainHandle(), image_index);
     wsi_swapchain_.ReturnImage(image_index);
 
     return true;
@@ -538,7 +539,7 @@ private:
 
     for (uint32_t i = 0; i < pending_readbacks_.size();) {
       PendingReadback& rb = pending_readbacks_[i];
-      uint64_t const completed = vk_device_->QueueGetCompletedValue(rb.queue_id);
+      uint64_t const completed = vk_device_->GetQueue(rb.queue_id)->GetCompletedValue();
       if (completed >= rb.serial) {
         vmaInvalidateAllocation(vk_device_->vma_allocator(), rb.staging->allocation, 0, rb.size_in_bytes);
         std::memcpy(rb.dst, rb.staging->mapped_data, rb.size_in_bytes);
@@ -553,7 +554,6 @@ private:
   IVulkanDevice* vk_device_ = nullptr;
   StagingBufferPool& staging_buffer_pool_;
   TransientCommandPool& transient_command_pool_;
-  QueueIndexMap const& queue_index_map_;
   WsiSwapchain wsi_swapchain_;
   ResourceStorage* resource_storage_ = nullptr;
   IDescriptorSetAllocator* descriptor_set_allocator_ = nullptr;
@@ -569,12 +569,10 @@ class BackendVulkan final : public IBackendVulkan {
 public:
   explicit BackendVulkan(std::unique_ptr<IVulkanDevice> vk_device) :
     vk_device_(std::move(vk_device)),
-    queue_index_map_(vk_device_->queue_selection()),
     device_(
       vk_device_.get(),
       staging_buffer_pool_,
       transient_command_pool_,
-      queue_index_map_,
       &resource_storage_
     )
   {
@@ -674,7 +672,7 @@ public:
       vkCmdPipelineBarrier2KHR(vk_cb_handle, &dependency_info);
       vkEndCommandBuffer(vk_cb_handle);
 
-      uint64_t const serial = vk_device_->QueueSubmitSingle(queue_id, vk_cb_handle);
+      uint64_t const serial = vk_device_->GetQueue(queue_id)->SubmitSingle(vk_cb_handle);
       transient_command_pool_.Release(vk_cb_handle, queue_id, serial);
     }
 
@@ -734,7 +732,7 @@ public:
       vkCmdPipelineBarrier2KHR(vk_cb_handle, &dependency_info);
       vkEndCommandBuffer(vk_cb_handle);
 
-      serial = vk_device_->QueueSubmitSingle(queue_id, vk_cb_handle);
+      serial = vk_device_->GetQueue(queue_id)->SubmitSingle(vk_cb_handle);
       transient_command_pool_.Release(vk_cb_handle, queue_id, serial);
     }
 
@@ -761,7 +759,6 @@ private:
   std::unique_ptr<IVulkanDevice> vk_device_;
 
   ResourceStorage resource_storage_;
-  QueueIndexMap queue_index_map_;
   StagingBufferPool staging_buffer_pool_;
   TransientCommandPool transient_command_pool_;
   MnexusDeviceVulkan device_;

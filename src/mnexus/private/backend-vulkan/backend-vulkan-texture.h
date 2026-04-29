@@ -76,6 +76,7 @@ using TextureResourcePool = resource_pool::TResourceGenerationalPool<TextureHot,
 resource_pool::ResourceHandle EmplaceTextureResourcePool(
   TextureResourcePool& out_pool,
   IVulkanDevice& vk_device,
+  IVulkanQueue& present_queue,
   TransientCommandPool& transient_command_pool,
   mnexus::TextureDesc const& texture_desc
 );

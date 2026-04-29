@@ -24,6 +24,11 @@ public:
     std::function<void()> destroy_func,
     ResourceSyncStamp::Snapshot snapshot
   ) = 0;
+
+  /// Re-checks all pending destroy entries and runs any whose retire
+  /// snapshot has been satisfied. Called opportunistically by IVulkanQueue
+  /// after operations that progress GPU completion.
+  virtual void Process() = 0;
 };
 
 } // namespace mnexus_backend::vulkan

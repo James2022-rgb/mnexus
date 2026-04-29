@@ -58,44 +58,11 @@ public:
   [[nodiscard]] virtual IVulkanDeferredDestroyer* GetDeferredDestroyer() const = 0;
 
   // ----------------------------------------------------------------------------------------------
-  // Queue operations.
+  // Queue access.
 
-  /// Returns the highest completed serial on the given queue.
-  [[nodiscard]] virtual uint64_t QueueGetCompletedValue(mnexus::QueueId const& queue_id) = 0;
-
-  /// Blocks until the given serial has completed on the given queue.
-  virtual void QueueWaitSubmitSerial(mnexus::QueueId const& queue_id, uint64_t value) = 0;
-
-  /// Blocks until all submitted work on the given queue has completed.
-  /// Returns the last submitted serial (0 if nothing has been submitted).
-  [[nodiscard]] virtual uint64_t QueueWaitIdle(mnexus::QueueId const& queue_id) = 0;
-
-  /// Advances the queue timeline without an actual GPU submit.
-  /// Returns the new serial. Used for mappable buffer writes where
-  /// the data is visible immediately after a host flush.
-  [[nodiscard]] virtual uint64_t QueueAdvanceTimeline(mnexus::QueueId const& queue_id) = 0;
-
-  /// Submits a command buffer to the given queue, signaling the timeline semaphore.
-  /// Returns the new serial.
-  [[nodiscard]] virtual uint64_t QueueSubmitSingle(mnexus::QueueId const& queue_id, VkCommandBuffer command_buffer) = 0;
-
-  virtual uint64_t QueuePresentSwapchainImage(
-    mnexus::QueueId const& queue_id,
-    uint32_t wait_semaphore_count,
-    VkSemaphore const* wait_semaphores,
-    uint64_t const* wait_values,
-    VkSemaphore present_binary_semaphore,
-    VkSwapchainKHR swapchain,
-    uint32_t image_index
-  ) = 0;
-
-  virtual uint64_t QueuePresentSwapchainImage(
-    mnexus::QueueId const& queue_id,
-    uint64_t wait_serial,
-    VkSemaphore present_binary_semaphore,
-    VkSwapchainKHR swapchain,
-    uint32_t image_index
-  ) = 0;
+  /// Returns the queue for the given QueueId, or nullptr if the QueueId is
+  /// not part of this device's QueueSelection.
+  [[nodiscard]] virtual IVulkanQueue* GetQueue(mnexus::QueueId const& queue_id) = 0;
 
 protected:
   IVulkanDevice() = default;

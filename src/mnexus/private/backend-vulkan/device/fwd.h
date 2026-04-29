@@ -34,6 +34,12 @@ class VulkanInstance;
 class PhysicalDeviceDesc;
 
 //
+// vk-queue.h
+//
+
+class IVulkanQueue;
+
+//
 // vk-staging.h
 //
 

@@ -455,6 +455,8 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/device/vk-device.h
     ${_private_backend_vulkan_dir}/device/vk-device_helper.cpp
     ${_private_backend_vulkan_dir}/device/vk-device_helper.h
+    ${_private_backend_vulkan_dir}/device/vk-queue.cpp
+    ${_private_backend_vulkan_dir}/device/vk-queue.h
     ${_private_backend_vulkan_dir}/device/vk-staging.cpp
     ${_private_backend_vulkan_dir}/device/vk-staging.h
     # resource/
