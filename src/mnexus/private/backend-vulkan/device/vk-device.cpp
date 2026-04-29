@@ -33,7 +33,34 @@ public:
   ~VulkanDevice() override = default;
   MBASE_DISALLOW_COPY_MOVE(VulkanDevice);
 
-  void Shutdown() override;
+  void Shutdown() override {
+    if (handle_ != VK_NULL_HANDLE) {
+      vkDeviceWaitIdle(handle_);
+    }
+
+    this->ProcessPendingDestroys();
+    MBASE_ASSERT_MSG(pending_destroys_.empty(), "Pending destroys remain after device idle (count: {})", pending_destroys_.size());
+
+    if (vma_allocator_ != VK_NULL_HANDLE) {
+      vmaDestroyAllocator(vma_allocator_);
+      vma_allocator_ = VK_NULL_HANDLE;
+    }
+
+    if (handle_ != VK_NULL_HANDLE) {
+      for (auto& q : queues_) {
+        if (q != nullptr) {
+          q->Shutdown();
+          q.reset();
+        }
+      }
+
+      vkDestroyDevice(handle_, nullptr);
+      handle_ = VK_NULL_HANDLE;
+    }
+
+    instance_.Shutdown();
+    VulkanInstance::ShutdownVolk();
+  }
 
   VulkanInstance const* instance() const override { return &instance_; }
   PhysicalDeviceDesc const& physical_device_desc() const override { return *physical_device_desc_; }
@@ -48,7 +75,13 @@ public:
 
   IVulkanDeferredDestroyer* GetDeferredDestroyer() const override { return &deferred_destroyer_; }
 
-  IVulkanQueue* GetQueue(mnexus::QueueId const& queue_id) override;
+  IVulkanQueue* GetQueue(mnexus::QueueId const& queue_id) override {
+    std::optional<uint32_t> opt_index = queue_index_map_.Find(queue_id);
+    if (!opt_index.has_value()) {
+      return nullptr;
+    }
+    return queues_[*opt_index].get();
+  }
 
 private:
   friend class IVulkanDevice; // For Create() to construct.
@@ -82,11 +115,42 @@ private:
   class DeferredDestroyer final : public IVulkanDeferredDestroyer {
   public:
     explicit DeferredDestroyer(VulkanDevice& owner) : owner_(owner) {}
+
     void EnqueueDestroy(
       std::function<void()> destroy_func,
       ResourceSyncStamp::Snapshot snapshot
-    ) override;
-    void Process() override;
+    ) override {
+      if (snapshot.used_mask == 0) {
+        destroy_func();
+        return;
+      }
+
+      bool completed = true;
+      for (uint32_t index = 0; index < kMaxQueues; ++index) {
+        if ((snapshot.used_mask & (1u << index)) != 0) {
+          uint64_t const last_used = snapshot.last_used[index];
+
+          MBASE_ASSERT(owner_.queues_[index] != nullptr);
+          uint64_t const completed_value = owner_.queues_[index]->GetCompletedValue();
+
+          if (completed_value < last_used) {
+            completed = false;
+            break;
+          }
+        }
+      }
+
+      if (completed) {
+        destroy_func();
+      } else {
+        owner_.EnqueuePendingDestroy(std::move(destroy_func), snapshot);
+      }
+    }
+
+    void Process() override {
+      owner_.ProcessPendingDestroys();
+    }
+
   private:
     VulkanDevice& owner_;
   };
@@ -97,8 +161,44 @@ private:
     ResourceSyncStamp::Snapshot snapshot;
   };
 
-  void EnqueuePendingDestroy(std::function<void()> destroy_func, ResourceSyncStamp::Snapshot snapshot);
-  void ProcessPendingDestroys();
+  void EnqueuePendingDestroy(std::function<void()> destroy_func, ResourceSyncStamp::Snapshot snapshot) {
+    mbase::LockGuard lock(pending_destroys_mutex_);
+    pending_destroys_.emplace_back(
+      PendingDestroy {
+        .destroy_func = std::move(destroy_func),
+        .snapshot = snapshot,
+      }
+    );
+  }
+
+  void ProcessPendingDestroys() {
+    mbase::LockGuard lock(pending_destroys_mutex_);
+
+    for (size_t i = 0; i < pending_destroys_.size(); ) {
+      PendingDestroy& entry = pending_destroys_[i];
+
+      bool completed = true;
+      for (uint32_t qi = 0; qi < kMaxQueues; ++qi) {
+        if ((entry.snapshot.used_mask & (1u << qi)) != 0) {
+          MBASE_ASSERT(queues_[qi] != nullptr);
+          uint64_t const completed_value = queues_[qi]->GetCompletedValue();
+          if (completed_value < entry.snapshot.last_used[qi]) {
+            completed = false;
+            break;
+          }
+        }
+      }
+
+      if (completed) {
+        entry.destroy_func();
+        // Swap with last and pop (order doesn't matter).
+        entry = std::move(pending_destroys_.back());
+        pending_destroys_.pop_back();
+      } else {
+        ++i;
+      }
+    }
+  }
 
   mbase::Lockable<std::mutex> pending_destroys_mutex_;
   std::vector<PendingDestroy> pending_destroys_ MBASE_GUARDED_BY(pending_destroys_mutex_);
@@ -321,142 +421,6 @@ std::unique_ptr<IVulkanDevice> IVulkanDevice::Create(
   }
 
   return device;
-}
-
-// ----------------------------------------------------------------------------------------------------
-// VulkanDevice::DeferredDestroyer::EnqueueDestroy
-//
-
-void VulkanDevice::DeferredDestroyer::EnqueueDestroy(
-  std::function<void()> destroy_func,
-  ResourceSyncStamp::Snapshot snapshot
-) {
-  auto& device = owner_;
-
-  if (snapshot.used_mask == 0) {
-    destroy_func();
-    return;
-  }
-
-  bool completed = true;
-  for (uint32_t index = 0; index < kMaxQueues; ++index) {
-    if ((snapshot.used_mask & (1u << index)) != 0) {
-      uint64_t const last_used = snapshot.last_used[index];
-
-      MBASE_ASSERT(device.queues_[index] != nullptr);
-      uint64_t const completed_value = device.queues_[index]->GetCompletedValue();
-
-      if (completed_value < last_used) {
-        completed = false;
-        break;
-      }
-    }
-  }
-
-  if (completed) {
-    destroy_func();
-  } else {
-    device.EnqueuePendingDestroy(std::move(destroy_func), snapshot);
-  }
-}
-
-// ----------------------------------------------------------------------------------------------------
-// VulkanDevice::DeferredDestroyer::Process
-//
-
-void VulkanDevice::DeferredDestroyer::Process() {
-  owner_.ProcessPendingDestroys();
-}
-
-// ----------------------------------------------------------------------------------------------------
-// VulkanDevice::EnqueuePendingDestroy (private)
-//
-
-void VulkanDevice::EnqueuePendingDestroy(
-  std::function<void()> destroy_func,
-  ResourceSyncStamp::Snapshot snapshot
-) {
-  mbase::LockGuard lock(pending_destroys_mutex_);
-  pending_destroys_.emplace_back(
-    PendingDestroy {
-      .destroy_func = std::move(destroy_func),
-      .snapshot = snapshot,
-    }
-  );
-}
-
-void VulkanDevice::ProcessPendingDestroys() {
-  mbase::LockGuard lock(pending_destroys_mutex_);
-
-  for (size_t i = 0; i < pending_destroys_.size(); ) {
-    PendingDestroy& entry = pending_destroys_[i];
-
-    bool completed = true;
-    for (uint32_t qi = 0; qi < kMaxQueues; ++qi) {
-      if ((entry.snapshot.used_mask & (1u << qi)) != 0) {
-        MBASE_ASSERT(queues_[qi] != nullptr);
-        uint64_t const completed_value = queues_[qi]->GetCompletedValue();
-        if (completed_value < entry.snapshot.last_used[qi]) {
-          completed = false;
-          break;
-        }
-      }
-    }
-
-    if (completed) {
-      entry.destroy_func();
-      // Swap with last and pop (order doesn't matter).
-      entry = std::move(pending_destroys_.back());
-      pending_destroys_.pop_back();
-    } else {
-      ++i;
-    }
-  }
-}
-
-// ----------------------------------------------------------------------------------------------------
-// VulkanDevice::GetQueue
-//
-
-IVulkanQueue* VulkanDevice::GetQueue(mnexus::QueueId const& queue_id) {
-  std::optional<uint32_t> opt_index = queue_index_map_.Find(queue_id);
-  if (!opt_index.has_value()) {
-    return nullptr;
-  }
-  return queues_[*opt_index].get();
-}
-
-// ----------------------------------------------------------------------------------------------------
-// VulkanDevice::Shutdown
-//
-
-void VulkanDevice::Shutdown() {
-  if (handle_ != VK_NULL_HANDLE) {
-    vkDeviceWaitIdle(handle_);
-  }
-
-  this->ProcessPendingDestroys();
-  MBASE_ASSERT_MSG(pending_destroys_.empty(), "Pending destroys remain after device idle (count: {})", pending_destroys_.size());
-
-  if (vma_allocator_ != VK_NULL_HANDLE) {
-    vmaDestroyAllocator(vma_allocator_);
-    vma_allocator_ = VK_NULL_HANDLE;
-  }
-
-  if (handle_ != VK_NULL_HANDLE) {
-    for (auto& q : queues_) {
-      if (q != nullptr) {
-        q->Shutdown();
-        q.reset();
-      }
-    }
-
-    vkDestroyDevice(handle_, nullptr);
-    handle_ = VK_NULL_HANDLE;
-  }
-
-  instance_.Shutdown();
-  VulkanInstance::ShutdownVolk();
 }
 
 } // namespace mnexus_backend::vulkan
