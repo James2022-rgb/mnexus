@@ -433,6 +433,7 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/depend/vulkan_vma.cpp
     ${_private_backend_vulkan_dir}/depend/vulkan_vma.h
     # object/
+    ${_private_backend_vulkan_dir}/object/fwd.h
     ${_private_backend_vulkan_dir}/object/vk-deferred_destroyer.h
     ${_private_backend_vulkan_dir}/object/vk-object.h
     ${_private_backend_vulkan_dir}/object/vk-object-buffer.h
@@ -445,6 +446,7 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/object/vk-object-sampler.h
     ${_private_backend_vulkan_dir}/object/vk-object-shader_module.h
     # device/
+    ${_private_backend_vulkan_dir}/device/fwd.h
     ${_private_backend_vulkan_dir}/device/vk-instance.cpp
     ${_private_backend_vulkan_dir}/device/vk-instance.h
     ${_private_backend_vulkan_dir}/device/vk-physical_device.cpp
@@ -456,6 +458,7 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/device/vk-staging.cpp
     ${_private_backend_vulkan_dir}/device/vk-staging.h
     # resource/
+    ${_private_backend_vulkan_dir}/resource/fwd.h
     ${_private_backend_vulkan_dir}/resource/image_view_cache.h
     ${_private_backend_vulkan_dir}/resource/resource_storage.cpp
     ${_private_backend_vulkan_dir}/resource/resource_storage.h
@@ -464,6 +467,7 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/resource/types_bridge.cpp
     ${_private_backend_vulkan_dir}/resource/types_bridge.h
     # descriptor/
+    ${_private_backend_vulkan_dir}/descriptor/fwd.h
     ${_private_backend_vulkan_dir}/descriptor/descriptor_set_allocator.cpp
     ${_private_backend_vulkan_dir}/descriptor/descriptor_set_allocator.h
     ${_private_backend_vulkan_dir}/descriptor/descriptor_set_binder.cpp
@@ -471,6 +475,7 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/descriptor/descriptor_set_write.cpp
     ${_private_backend_vulkan_dir}/descriptor/descriptor_set_write.h
     # command/
+    ${_private_backend_vulkan_dir}/command/fwd.h
     ${_private_backend_vulkan_dir}/command/command_encoder.cpp
     ${_private_backend_vulkan_dir}/command/command_encoder.h
     ${_private_backend_vulkan_dir}/command/image_layout_tracker.cpp
@@ -478,6 +483,7 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/command/pending_pipeline_barrier.cpp
     ${_private_backend_vulkan_dir}/command/pending_pipeline_barrier.h
     # wsi/
+    ${_private_backend_vulkan_dir}/wsi/fwd.h
     ${_private_backend_vulkan_dir}/wsi/vk-wsi_surface.cpp
     ${_private_backend_vulkan_dir}/wsi/vk-wsi_surface.h
     # root

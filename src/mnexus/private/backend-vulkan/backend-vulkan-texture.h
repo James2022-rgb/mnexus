@@ -16,14 +16,13 @@
 #include "backend-vulkan/object/vk-object-image.h"
 #include "backend-vulkan/object/vk-object-sampler.h"
 
+#include "backend-vulkan/wsi/fwd.h"
+
 namespace mnexus_backend::vulkan {
 
 // ----------------------------------------------------------------------------------------------------
 // Texture
 //
-
-// vk-wsi_surface.h
-class WsiSwapchain;
 
 struct TextureHotRegular final {
   VulkanImage vk_image;

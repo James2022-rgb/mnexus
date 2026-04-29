@@ -15,16 +15,11 @@
 #include "backend-vulkan/depend/vulkan.h"
 #include "backend-vulkan/descriptor/descriptor_set_binder.h"
 
+#include "backend-vulkan/descriptor/fwd.h"
+#include "backend-vulkan/object/fwd.h"
+#include "backend-vulkan/resource/fwd.h"
+
 namespace mnexus_backend::vulkan {
-
-class IDescriptorSetAllocator;
-class VulkanDescriptorSetLayout;
-struct ResourceStorage;
-
-// vk-object-image.h
-class VulkanImage;
-// vk-object-buffer.h
-class VulkanBuffer;
 
 union RenderTargetClearValue final {
   /// Also used for depth.

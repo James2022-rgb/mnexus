@@ -15,9 +15,9 @@
 // project headers --------------------------------------
 #include "backend-vulkan/depend/vulkan.h"
 
-namespace mnexus_backend::vulkan {
+#include "backend-vulkan/object/fwd.h"
 
-class VulkanDescriptorSetLayout;
+namespace mnexus_backend::vulkan {
 
 // ----------------------------------------------------------------------------------------------------
 // Descriptor write types

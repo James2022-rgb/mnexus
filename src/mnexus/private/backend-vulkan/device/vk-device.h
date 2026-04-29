@@ -13,6 +13,9 @@
 // project headers --------------------------------------
 #include "backend-vulkan/depend/vulkan_fwd.h"
 
+#include "backend-vulkan/device/fwd.h"
+#include "backend-vulkan/object/fwd.h"
+
 // Forward declarations ---------------------------------
 struct VmaAllocator_T;
 typedef VmaAllocator_T* VmaAllocator;
@@ -22,12 +25,6 @@ class QueueIndexMap;
 }
 
 namespace mnexus_backend::vulkan {
-
-class IVulkanDeferredDestroyer;
-class StagingBufferPool;
-class TransientCommandPool;
-class VulkanInstance;
-class PhysicalDeviceDesc;
 
 struct VulkanDeviceDesc final {
   PhysicalDeviceDesc const* physical_device_desc = nullptr;

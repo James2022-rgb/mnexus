@@ -14,10 +14,9 @@
 #include "backend-vulkan/descriptor/descriptor_set_allocator.h"
 #include "backend-vulkan/descriptor/descriptor_set_write.h"
 
-namespace mnexus_backend::vulkan {
+#include "backend-vulkan/object/fwd.h"
 
-class IDescriptorSetAllocator;
-class VulkanDescriptorSetLayout;
+namespace mnexus_backend::vulkan {
 
 // ----------------------------------------------------------------------------------------------------
 // DescriptorSetBinder

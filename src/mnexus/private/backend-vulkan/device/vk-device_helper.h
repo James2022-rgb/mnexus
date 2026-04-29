@@ -9,9 +9,9 @@
 // project headers --------------------------------------
 #include "backend-vulkan/depend/vulkan.h"
 
-namespace mnexus_backend::vulkan {
+#include "backend-vulkan/device/fwd.h"
 
-class PhysicalDeviceDesc;
+namespace mnexus_backend::vulkan {
 
 // ----------------------------------------------------------------------------------------------------
 // Queue family selection

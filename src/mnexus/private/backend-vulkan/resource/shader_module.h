@@ -3,12 +3,12 @@
 // project headers --------------------------------------
 #include "backend-vulkan/depend/vulkan.h"
 
+#include "backend-vulkan/device/fwd.h"
+
 // public project headers -------------------------------
 #include "mnexus/public/types.h"
 
 namespace mnexus_backend::vulkan {
-
-class IVulkanDevice;
 
 /// Create a VkShaderModule from a ShaderModuleDesc.
 /// Only SPIR-V is supported.

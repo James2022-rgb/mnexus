@@ -8,10 +8,10 @@
 #include "backend-vulkan/descriptor/descriptor_set_write.h"
 #include "backend-vulkan/object/vk-object-descriptor_set.h"
 
-namespace mnexus_backend::vulkan {
+#include "backend-vulkan/device/fwd.h"
+#include "backend-vulkan/object/fwd.h"
 
-class VulkanDescriptorSetLayout;
-class IVulkanDevice;
+namespace mnexus_backend::vulkan {
 
 // ----------------------------------------------------------------------------------------------------
 // IDescriptorSetAllocator

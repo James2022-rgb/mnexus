@@ -12,9 +12,9 @@
 // project headers --------------------------------------
 #include "backend-vulkan/depend/vulkan_vma.h"
 
-namespace mnexus_backend::vulkan {
+#include "backend-vulkan/device/fwd.h"
 
-class IVulkanDevice;
+namespace mnexus_backend::vulkan {
 
 // ----------------------------------------------------------------------------------------------------
 // StagingBuffer

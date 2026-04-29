@@ -16,11 +16,11 @@
 #include "backend-vulkan/command/image_layout_tracker.h"
 #include "backend-vulkan/object/vk-object-command_pool.h"
 
-namespace mnexus_backend::vulkan {
+#include "backend-vulkan/descriptor/fwd.h"
+#include "backend-vulkan/device/fwd.h"
+#include "backend-vulkan/resource/fwd.h"
 
-class IVulkanDevice;
-class IDescriptorSetAllocator;
-struct ResourceStorage;
+namespace mnexus_backend::vulkan {
 
 class MnexusCommandListVulkan : public mnexus::ICommandList {
 public:
