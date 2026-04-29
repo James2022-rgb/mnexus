@@ -44,13 +44,34 @@ MNEXUS_NO_THROW mnexus::RenderStateEventLog& MNEXUS_CALL MnexusCommandListVulkan
 //
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::PushDebugGroup(
-  mnexus::container::ArrayProxy<char const> /*name*/, float const* /*color*/
+  mnexus::container::ArrayProxy<char const> name, float const* color
 ) {
-  STUB_NOT_IMPLEMENTED();
+  if (vkCmdBeginDebugUtilsLabelEXT != nullptr) {
+    // `VkDebugUtilsLabelEXT` expects a null-terminated string, but `name` may not be null-terminated. Create a temporary null-terminated string for this call.
+    std::string name_str(name.data(), name.size());
+
+    VkDebugUtilsLabelEXT label_info{
+      .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+      .pNext = nullptr,
+      .pLabelName = name_str.c_str(),
+      .color = { 0.f, 0.f, 0.f, 0.f }
+    };
+
+    std::array<float, 4> default_color = { 0.f, 0.f, 0.f, 1.f };
+    if (color != nullptr) {
+      std::copy_n(color, 4, label_info.color);
+    } else {
+      std::copy_n(default_color.data(), 4, label_info.color);
+    }
+
+    vkCmdBeginDebugUtilsLabelEXT(encoder_.vk_cb_handle(), &label_info);
+  }
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::PopDebugGroup() {
-  STUB_NOT_IMPLEMENTED();
+  if (vkCmdEndDebugUtilsLabelEXT != nullptr) {
+    vkCmdEndDebugUtilsLabelEXT(encoder_.vk_cb_handle());
+  }
 }
 
 //
