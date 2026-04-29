@@ -104,6 +104,7 @@ struct CreateVulkanImageResult {
 
 std::optional<CreateVulkanImageResult> CreateVulkanImage(
   IVulkanDevice& vk_device,
+  TransientCommandPool& transient_command_pool,
   mnexus::TextureDesc const& texture_desc
 ) {
   VkFormat const vk_format = ToVkFormat(texture_desc.format);
@@ -183,7 +184,7 @@ std::optional<CreateVulkanImageResult> CreateVulkanImage(
     SyncScope const default_scope = ImageLayoutTracker::GetDefaultSyncScope(create_info.usage, vk_format);
     VkImageAspectFlags const aspect_mask = ImageLayoutTracker::GetAspectMaskFromFormat(vk_format);
 
-    VkCommandBuffer cb = vk_device.transient_command_pool().Acquire();
+    VkCommandBuffer cb = transient_command_pool.Acquire();
 
     VkImageMemoryBarrier2KHR barrier {
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR,
@@ -223,7 +224,7 @@ std::optional<CreateVulkanImageResult> CreateVulkanImage(
 
     mnexus::QueueId const queue_id = vk_device.queue_selection().present_capable;
     uint64_t const serial = vk_device.QueueSubmitSingle(queue_id, cb);
-    vk_device.transient_command_pool().Release(cb, queue_id, serial);
+    transient_command_pool.Release(cb, queue_id, serial);
 
     // FIXME: Blocking wait. Replace with cross-queue timeline semaphore waits
     // (SubmitWaitAnotherQueueSubmissionId) to avoid stalling the CPU.
@@ -241,9 +242,10 @@ std::optional<CreateVulkanImageResult> CreateVulkanImage(
 resource_pool::ResourceHandle EmplaceTextureResourcePool(
   TextureResourcePool& out_pool,
   IVulkanDevice& vk_device,
+  TransientCommandPool& transient_command_pool,
   mnexus::TextureDesc const& texture_desc
 ) {
-  std::optional<CreateVulkanImageResult> opt_result = CreateVulkanImage(vk_device, texture_desc);
+  std::optional<CreateVulkanImageResult> opt_result = CreateVulkanImage(vk_device, transient_command_pool, texture_desc);
   if (!opt_result.has_value()) {
     return resource_pool::ResourceHandle::Null();
   }

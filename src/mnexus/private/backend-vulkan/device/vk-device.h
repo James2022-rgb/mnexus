@@ -19,10 +19,6 @@
 struct VmaAllocator_T;
 typedef VmaAllocator_T* VmaAllocator;
 
-namespace mnexus_backend {
-class QueueIndexMap;
-}
-
 namespace mnexus_backend::vulkan {
 
 struct VulkanDeviceDesc final {
@@ -100,13 +96,6 @@ public:
     VkSwapchainKHR swapchain,
     uint32_t image_index
   ) = 0;
-
-  // ----------------------------------------------------------------------------------------------
-  // Sub-system accessors.
-
-  [[nodiscard]] virtual StagingBufferPool& staging_buffer_pool() = 0;
-  [[nodiscard]] virtual TransientCommandPool& transient_command_pool() = 0;
-  [[nodiscard]] virtual QueueIndexMap const& queue_index_map() const = 0;
 
 protected:
   IVulkanDevice() = default;
