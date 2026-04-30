@@ -7,6 +7,7 @@
 
 // public project headers -------------------------------
 #include "mbase/public/call.h"
+#include "mbase/public/pp.h"
 
 #if defined(__cplusplus)
 # include "mnexus/public/render_state_event_log.h"
@@ -880,6 +881,24 @@ public:
 protected:
   ICommandList() = default;
 };
+
+class ScopedDebugGroup final {
+public:
+  ScopedDebugGroup(ICommandList* command_list, char const* name) :
+      command_list_(command_list)
+  {
+    command_list_->PushDebugGroup(name);
+  }
+  ~ScopedDebugGroup() {
+    command_list_->PopDebugGroup();
+  }
+  MBASE_DISALLOW_COPY_MOVE(ScopedDebugGroup);
+
+private:
+  ICommandList* command_list_ = nullptr;
+};
+
+#define MNEXUS_SCOPED_DEBUG_REGION(command_list, name) mnexus::ScopedDebugGroup MBASE_PP_CONCAT(scoped_debug_group_, __COUNTER__)(command_list, name)
 
 //
 // Wrappers around handles to provide easy access to resource descriptions etc.
