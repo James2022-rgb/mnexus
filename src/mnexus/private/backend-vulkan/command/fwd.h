@@ -9,7 +9,8 @@ namespace mnexus_backend::vulkan {
 union RenderTargetClearValue;
 struct RenderTargetDesc;
 struct DynamicRenderPassDesc;
-class CommandEncoder;
+struct CommandEncoderDesc;
+class ICommandEncoder;
 
 //
 // image_layout_tracker.h

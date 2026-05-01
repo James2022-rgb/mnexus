@@ -76,9 +76,21 @@ MnexusCommandListVulkan::MnexusCommandListVulkan(
   ResourceStorage* resource_storage
 ) :
   vk_command_pool_(MakeVulkanCommandPool(vk_device, CreateCommandPool(vk_device))),
-  encoder_(AllocateAndBeginCommandBuffer(vk_device, vk_command_pool_.handle()), vk_device, ds_allocator, resource_storage),
+  encoder_(ICommandEncoder::Create(CommandEncoderDesc {
+    .vk_cb_handle = AllocateAndBeginCommandBuffer(vk_device, vk_command_pool_.handle()),
+    .vk_device = vk_device,
+    .ds_allocator = ds_allocator,
+    .resource_storage = resource_storage,
+  })),
   resource_storage_(resource_storage)
 {
+}
+
+MnexusCommandListVulkan::~MnexusCommandListVulkan() {
+  if (encoder_ != nullptr) {
+    encoder_->Shutdown();
+    encoder_ = nullptr;
+  }
 }
 
 // --------------------------------------------------------------------------------------------------
@@ -89,9 +101,9 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::End() {
   // Transition all tracked images back to their default layouts before finalizing.
   image_layout_tracker_.TransitionAllToDefaults();
   image_layout_tracker_.FlushPendingTransitions(pending_pipeline_barrier_);
-  pending_pipeline_barrier_.FlushAndClear(encoder_.vk_cb_handle());
+  pending_pipeline_barrier_.FlushAndClear(encoder_->vk_cb_handle());
 
-  encoder_.End();
+  encoder_->End();
 }
 
 //
@@ -127,13 +139,13 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::PushDebugGroup(
       std::copy_n(default_color.data(), 4, label_info.color);
     }
 
-    vkCmdBeginDebugUtilsLabelEXT(encoder_.vk_cb_handle(), &label_info);
+    vkCmdBeginDebugUtilsLabelEXT(encoder_->vk_cb_handle(), &label_info);
   }
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::PopDebugGroup() {
   if (vkCmdEndDebugUtilsLabelEXT != nullptr) {
-    vkCmdEndDebugUtilsLabelEXT(encoder_.vk_cb_handle());
+    vkCmdEndDebugUtilsLabelEXT(encoder_->vk_cb_handle());
   }
 }
 
@@ -171,9 +183,9 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::ClearTexture(
   );
 
   image_layout_tracker_.FlushPendingTransitions(pending_pipeline_barrier_);
-  pending_pipeline_barrier_.FlushAndClear(encoder_.vk_cb_handle());
+  pending_pipeline_barrier_.FlushAndClear(encoder_->vk_cb_handle());
 
-  encoder_.CmdClearImageSubresourceRange(vk_image, subresource_range, clear_value);
+  encoder_->CmdClearImageSubresourceRange(vk_image, subresource_range, clear_value);
 
   referenced_resources_.push_back(pool_handle);
 }
@@ -218,9 +230,9 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::CopyBufferToTexture(
 
   // Flush the layout transition barrier before the copy.
   image_layout_tracker_.FlushPendingTransitions(pending_pipeline_barrier_);
-  pending_pipeline_barrier_.FlushAndClear(encoder_.vk_cb_handle());
+  pending_pipeline_barrier_.FlushAndClear(encoder_->vk_cb_handle());
 
-  encoder_.CmdCopyBufferToImageSubresource(
+  encoder_->CmdCopyBufferToImageSubresource(
     src_hot.vk_buffer,
     src_buffer_offset,
     dst_hot.GetVkImage(),
@@ -269,7 +281,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindExplicitComputePip
 
   VulkanPipelineLayoutPtr const& pipeline_layout_ref = hot.pipeline_layout_ref();
 
-  encoder_.BindComputePipeline(
+  encoder_->BindComputePipeline(
     hot.vk_compute_pipeline().handle(),
     pipeline_layout_ref->handle(),
     pipeline_layout_ref->descriptor_set_layouts.data(),
@@ -287,7 +299,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::DispatchCompute(
   uint32_t workgroup_count_y,
   uint32_t workgroup_count_z
 ) {
-  encoder_.CmdDispatchCompute(workgroup_count_x, workgroup_count_y, workgroup_count_z);
+  encoder_->CmdDispatchCompute(workgroup_count_x, workgroup_count_y, workgroup_count_z);
 }
 
 //
@@ -302,7 +314,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindUniformBuffer(
 ) {
   auto const pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
   auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
-  encoder_.BindBuffer(
+  encoder_->BindBuffer(
     id.group, id.binding, id.array_element,
     VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
     buffer_handle.Get(), hot.vk_buffer.handle(), offset, size
@@ -318,7 +330,7 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BindStorageBuffer(
 ) {
   auto const pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
   auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
-  encoder_.BindBuffer(
+  encoder_->BindBuffer(
     id.group, id.binding, id.array_element,
     VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
     buffer_handle.Get(), hot.vk_buffer.handle(), offset, size
@@ -406,11 +418,11 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::BeginRenderPass(
     }
   }
 
-  encoder_.CmdBeginRendering(dyn_rp_desc);
+  encoder_->CmdBeginRendering(dyn_rp_desc);
 }
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListVulkan::EndRenderPass() {
-  encoder_.CmdEndRendering();
+  encoder_->CmdEndRendering();
 }
 
 //
