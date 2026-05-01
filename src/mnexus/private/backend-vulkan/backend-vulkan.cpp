@@ -21,7 +21,9 @@
 #include "backend-vulkan/backend-vulkan-shader.h"
 #include "backend-vulkan/backend-vulkan-texture.h"
 #include "backend-vulkan/backend-vulkan-compute_pipeline.h"
+#include "backend-vulkan/command/command_encoder.h"
 #include "backend-vulkan/descriptor/descriptor_set_allocator.h"
+#include "backend-vulkan/object/vk-object-command_pool.h"
 
 #include "backend-vulkan/device/vk-device.h"
 #include "backend-vulkan/device/vk-instance.h"
@@ -85,7 +87,7 @@ public:
     mnexus::QueueId const& queue_id,
     mnexus::ICommandList* command_list
   ) {
-    auto* cmd_list_vk = static_cast<MnexusCommandListVulkan*>(command_list);
+    auto* cmd_list_vk = static_cast<IMnexusCommandListVulkan*>(command_list);
     VkCommandBuffer vk_cb_handle = cmd_list_vk->encoder().vk_cb_handle();
 
     IVulkanQueue* const queue = vk_device_->GetQueue(queue_id);
@@ -100,7 +102,7 @@ public:
       resource_storage_->StampResourceUse(handle, queue_compact_index, serial);
     }
 
-    delete cmd_list_vk;
+    cmd_list_vk->Shutdown();
     return mnexus::IntraQueueSubmissionId { serial };
   }
 
@@ -234,7 +236,7 @@ public:
   IMPL_VAPI(mnexus::ICommandList*, CreateCommandList,
     mnexus::CommandListDesc const& /*desc*/
   ) {
-    return new MnexusCommandListVulkan(vk_device_, descriptor_set_allocator_, resource_storage_);
+    return IMnexusCommandListVulkan::Create(vk_device_, descriptor_set_allocator_, resource_storage_);
   }
 
   IMPL_VAPI(void, DiscardCommandList,
@@ -242,7 +244,7 @@ public:
   ) {
     // The owned VulkanCommandPool's destructor enqueues deferred destruction;
     // since it was never stamped, it'll fire immediately (used_mask == 0).
-    delete static_cast<MnexusCommandListVulkan*>(command_list);
+    static_cast<IMnexusCommandListVulkan*>(command_list)->Shutdown();
   }
 
   // ----------------------------------------------------------------------------------------------
