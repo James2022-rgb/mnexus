@@ -45,7 +45,7 @@ resource_pool::ResourceHandle EmplaceShaderModuleResourcePool(
 
 struct ProgramHot final {
   VkPipelineLayout vk_pipeline_layout = VK_NULL_HANDLE; // Non-owning; kept alive by the cache.
-  VulkanPipelineLayoutPtr pipeline_layout_ref;           // Shared ownership with the cache.
+  VulkanPipelineLayoutPtr pipeline_layout_ref;          // Shared ownership with the cache.
 
   void Stamp(uint32_t queue_compact_index, uint64_t serial) {
     this->pipeline_layout_ref->sync_stamp().Stamp(queue_compact_index, serial);

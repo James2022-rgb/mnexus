@@ -392,6 +392,12 @@ VkBlendOp ToVkBlendOp(mnexus::BlendOp value) {
   return VK_BLEND_OP_ADD;
 }
 
+VkColorComponentFlags ToVkColorComponentFlags(mnexus::ColorWriteMask value) {
+  // mnexus::ColorWriteMask bits and VkColorComponentFlagBits use the same
+  // bit positions (R=0, G=1, B=2, A=3), so a direct cast is correct.
+  return static_cast<VkColorComponentFlags>(value);
+}
+
 // ====================================================================================================
 // Rasterization
 //

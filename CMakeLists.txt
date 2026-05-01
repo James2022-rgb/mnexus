@@ -442,6 +442,7 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/object/vk-object-descriptor_set_layout.h
     ${_private_backend_vulkan_dir}/object/vk-object-image.h
     ${_private_backend_vulkan_dir}/object/vk-object-pipeline_layout.h
+    ${_private_backend_vulkan_dir}/object/vk-object-render_pipeline.h
     ${_private_backend_vulkan_dir}/object/vk-object-sampler.h
     ${_private_backend_vulkan_dir}/object/vk-object-shader_module.h
     # device/
@@ -497,6 +498,8 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/backend-vulkan-buffer.h
     ${_private_backend_vulkan_dir}/backend-vulkan-compute_pipeline.cpp
     ${_private_backend_vulkan_dir}/backend-vulkan-compute_pipeline.h
+    ${_private_backend_vulkan_dir}/backend-vulkan-render_pipeline.cpp
+    ${_private_backend_vulkan_dir}/backend-vulkan-render_pipeline.h
     ${_private_backend_vulkan_dir}/backend-vulkan-shader.cpp
     ${_private_backend_vulkan_dir}/backend-vulkan-shader.h
     ${_private_backend_vulkan_dir}/backend-vulkan-texture.cpp

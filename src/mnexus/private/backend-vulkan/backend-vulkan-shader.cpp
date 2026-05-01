@@ -12,6 +12,10 @@
 
 namespace mnexus_backend::vulkan {
 
+//
+// ShaderModule
+//
+
 resource_pool::ResourceHandle EmplaceShaderModuleResourcePool(
   ShaderModuleResourcePool& out_pool,
   IVulkanDevice const& device,
@@ -63,6 +67,10 @@ resource_pool::ResourceHandle EmplaceShaderModuleResourcePool(
     std::forward_as_tuple(std::move(cold))
   );
 }
+
+//
+// Program
+//
 
 resource_pool::ResourceHandle EmplaceProgramResourcePool(
   ProgramResourcePool& out_pool,

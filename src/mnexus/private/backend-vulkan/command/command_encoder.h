@@ -117,6 +117,42 @@ public:
   /// Inside. Ends the current render pass scope.
   virtual void CmdEndRendering() = 0;
 
+  /// Binds a graphics pipeline. The descriptor_set_layouts must match the
+  /// pipeline layout. Same shape as `BindComputePipeline`.
+  virtual void BindRenderPipeline(
+    VkPipeline pipeline,
+    VkPipelineLayout layout,
+    VulkanDescriptorSetLayout const* descriptor_set_layouts,
+    uint32_t descriptor_set_count
+  ) = 0;
+
+  /// Binds a single vertex buffer slot. Forwards directly to vkCmdBindVertexBuffers.
+  virtual void CmdBindVertexBuffer(uint32_t binding, VkBuffer buffer, VkDeviceSize offset) = 0;
+
+  /// Binds the index buffer. Forwards directly to vkCmdBindIndexBuffer.
+  virtual void CmdBindIndexBuffer(VkBuffer buffer, VkDeviceSize offset, VkIndexType index_type) = 0;
+
+  // ----------------------------------------------------------------------------------------------
+  // Dynamic State (Vulkan 1.0 viewport/scissor)
+  //
+
+  virtual void CmdSetViewport(VkViewport const& viewport) = 0;
+  virtual void CmdSetScissor(VkRect2D const& scissor) = 0;
+
+  // ----------------------------------------------------------------------------------------------
+  // Draw
+  //
+
+  virtual void CmdDraw(
+    uint32_t vertex_count, uint32_t instance_count,
+    uint32_t first_vertex, uint32_t first_instance
+  ) = 0;
+
+  virtual void CmdDrawIndexed(
+    uint32_t index_count, uint32_t instance_count,
+    uint32_t first_index, int32_t vertex_offset, uint32_t first_instance
+  ) = 0;
+
   // ----------------------------------------------------------------------------------------------
   // Compute Pipeline
   //

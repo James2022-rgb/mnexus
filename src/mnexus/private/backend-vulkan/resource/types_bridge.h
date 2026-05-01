@@ -50,10 +50,11 @@ VkSamplerAddressMode ToVkSamplerAddressMode(mnexus::AddressMode value);
 // Compare / stencil / blend
 //
 
-VkCompareOp   ToVkCompareOp(mnexus::CompareOp value);
-VkStencilOp   ToVkStencilOp(mnexus::StencilOp value);
-VkBlendFactor ToVkBlendFactor(mnexus::BlendFactor value);
-VkBlendOp     ToVkBlendOp(mnexus::BlendOp value);
+VkCompareOp           ToVkCompareOp(mnexus::CompareOp value);
+VkStencilOp           ToVkStencilOp(mnexus::StencilOp value);
+VkBlendFactor         ToVkBlendFactor(mnexus::BlendFactor value);
+VkBlendOp             ToVkBlendOp(mnexus::BlendOp value);
+VkColorComponentFlags ToVkColorComponentFlags(mnexus::ColorWriteMask value);
 
 // ----------------------------------------------------------------------------------------------------
 // Rasterization

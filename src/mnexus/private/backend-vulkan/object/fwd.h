@@ -46,6 +46,12 @@ class VulkanImageView;
 class VulkanPipelineLayout;
 
 //
+// vk-object-render_pipeline.h
+//
+
+class VulkanRenderPipeline;
+
+//
 // vk-object-sampler.h
 //
 

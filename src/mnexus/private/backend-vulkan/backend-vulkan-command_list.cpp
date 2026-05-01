@@ -14,9 +14,13 @@
 // project headers --------------------------------------
 #include "impl/impl_macros.h"
 
+#include "pipeline/render_pipeline_state_tracker.h"
+
+#include "backend-vulkan/backend-vulkan-render_pipeline.h"
 #include "backend-vulkan/command/command_encoder.h"
 #include "backend-vulkan/command/image_layout_tracker.h"
 #include "backend-vulkan/object/vk-object-command_pool.h"
+#include "backend-vulkan/object/vk-object-render_pipeline.h"
 
 #include "backend-vulkan/device/vk-device.h"
 #include "backend-vulkan/resource/resource_storage.h"
@@ -86,6 +90,7 @@ public:
     IDescriptorSetAllocator* ds_allocator,
     ResourceStorage* resource_storage
   ) :
+    vk_device_(vk_device),
     vk_command_pool_(MakeVulkanCommandPool(vk_device, CreateCommandPool(vk_device))),
     encoder_(ICommandEncoder::Create(CommandEncoderDesc {
       .vk_cb_handle = AllocateAndBeginCommandBuffer(vk_device, vk_command_pool_.handle()),
@@ -392,14 +397,25 @@ public:
   ) override {
     DynamicRenderPassDesc dyn_rp_desc{};
 
+    mbase::SmallVector<mnexus::Format, 4> color_formats;
+    mnexus::Format depth_stencil_format = mnexus::Format::kUndefined;
+    VkExtent2D render_area { 0, 0 };
+
     for (mnexus::ColorAttachmentDesc const& attachment_desc : desc.color_attachments) {
       auto const pool_handle = resource_pool::ResourceHandle::FromU64(attachment_desc.texture.Get());
       referenced_resources_.push_back(pool_handle);
 
       auto [hot, cold, lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(pool_handle);
 
+      VulkanImage const& vk_image = hot.GetVkImage();
+      VkExtent3D const& extent = vk_image.extent();
+      render_area.width  = std::max(render_area.width, extent.width);
+      render_area.height = std::max(render_area.height, extent.height);
+
+      color_formats.emplace_back(FromVkFormat(vk_image.vk_format()));
+
       RenderTargetDesc& rt_desc = dyn_rp_desc.color_attachments.emplace_back();
-      rt_desc.vk_image = &hot.GetVkImage();
+      rt_desc.vk_image = &vk_image;
       rt_desc.subresource_range = attachment_desc.subresource_range;
       if (attachment_desc.load_op == mnexus::LoadOp::kClear) {
         rt_desc.clear_value = RenderTargetClearValue {
@@ -419,8 +435,15 @@ public:
 
       auto [hot, cold, lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(pool_handle);
 
+      VulkanImage const& vk_image = hot.GetVkImage();
+      VkExtent3D const& extent = vk_image.extent();
+      render_area.width  = std::max(render_area.width, extent.width);
+      render_area.height = std::max(render_area.height, extent.height);
+
+      depth_stencil_format = FromVkFormat(vk_image.vk_format());
+
       RenderTargetDesc& rt_desc = dyn_rp_desc.depth_stencil_attachment.emplace();
-      rt_desc.vk_image = &hot.GetVkImage();
+      rt_desc.vk_image = &vk_image;
       rt_desc.subresource_range = desc.depth_stencil_attachment->subresource_range;
       if (desc.depth_stencil_attachment->depth_load_op == mnexus::LoadOp::kClear) {
         rt_desc.clear_value = RenderTargetClearValue {
@@ -439,6 +462,29 @@ public:
     }
 
     encoder_->CmdBeginRendering(dyn_rp_desc);
+
+    // Configure state tracker with render target info; the next Draw will
+    // build the cache key using this.
+    render_pipeline_state_tracker_.SetRenderTargetConfig(
+      std::move(color_formats),
+      depth_stencil_format,
+      1 // sample_count (always 1 for now)
+    );
+
+    // Push the default viewport / scissor matching the render area. Callers
+    // can overwrite later via SetViewport / SetScissor before Draw.
+    encoder_->CmdSetViewport(VkViewport {
+      .x = 0.0f,
+      .y = 0.0f,
+      .width = static_cast<float>(render_area.width),
+      .height = static_cast<float>(render_area.height),
+      .minDepth = 0.0f,
+      .maxDepth = 1.0f,
+    });
+    encoder_->CmdSetScissor(VkRect2D {
+      .offset = VkOffset2D { .x = 0, .y = 0 },
+      .extent = render_area,
+    });
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL EndRenderPass() override {
@@ -452,25 +498,45 @@ public:
   MNEXUS_NO_THROW void MNEXUS_CALL BindRenderProgram(
     mnexus::ProgramHandle program_handle
   ) override {
-    auto const pool_handle = resource_pool::ResourceHandle::FromU64(program_handle.Get());
-    auto [hot, cold, lock] = resource_storage_->programs.GetConstRefWithSharedLockGuard(pool_handle);
-
-    STUB_NOT_IMPLEMENTED();
+    referenced_resources_.push_back(resource_pool::ResourceHandle::FromU64(program_handle.Get()));
+    render_pipeline_state_tracker_.SetProgram(program_handle);
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL SetVertexInputLayout(
-    mnexus::container::ArrayProxy<mnexus::VertexInputBindingDesc const> /*bindings*/,
-    mnexus::container::ArrayProxy<mnexus::VertexInputAttributeDesc const> /*attributes*/
+    mnexus::container::ArrayProxy<mnexus::VertexInputBindingDesc const> bindings,
+    mnexus::container::ArrayProxy<mnexus::VertexInputAttributeDesc const> attributes
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    mbase::SmallVector<mnexus::VertexInputBindingDesc, 4> bindings_vec;
+    bindings_vec.reserve(bindings.size());
+    for (uint32_t i = 0; i < bindings.size(); ++i) {
+      bindings_vec.emplace_back(bindings[i]);
+    }
+
+    mbase::SmallVector<mnexus::VertexInputAttributeDesc, 8> attributes_vec;
+    attributes_vec.reserve(attributes.size());
+    for (uint32_t i = 0; i < attributes.size(); ++i) {
+      attributes_vec.emplace_back(attributes[i]);
+    }
+
+    render_pipeline_state_tracker_.SetVertexInputLayout(
+      std::move(bindings_vec),
+      std::move(attributes_vec)
+    );
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL BindVertexBuffer(
-    uint32_t /*binding*/,
-    mnexus::BufferHandle /*buffer_handle*/,
-    uint64_t /*offset*/
+    uint32_t binding,
+    mnexus::BufferHandle buffer_handle,
+    uint64_t offset
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    if (binding >= bound_vertex_buffers_.size()) {
+      bound_vertex_buffers_.resize(binding + 1);
+    }
+    bound_vertex_buffers_[binding] = BoundVertexBuffer {
+      .handle = buffer_handle,
+      .offset = offset,
+    };
+    referenced_resources_.push_back(resource_pool::ResourceHandle::FromU64(buffer_handle.Get()));
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL BindIndexBuffer(
@@ -482,85 +548,88 @@ public:
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL SetPrimitiveTopology(
-    mnexus::PrimitiveTopology /*topology*/
+    mnexus::PrimitiveTopology topology
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    render_pipeline_state_tracker_.SetPrimitiveTopology(topology);
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL SetPolygonMode(
-    mnexus::PolygonMode /*mode*/
+    mnexus::PolygonMode mode
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    render_pipeline_state_tracker_.SetPolygonMode(mode);
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL SetCullMode(
-    mnexus::CullMode /*cull_mode*/
+    mnexus::CullMode cull_mode
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    render_pipeline_state_tracker_.SetCullMode(cull_mode);
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL SetFrontFace(
-    mnexus::FrontFace /*front_face*/
+    mnexus::FrontFace front_face
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    render_pipeline_state_tracker_.SetFrontFace(front_face);
   }
 
   // Depth
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetDepthTestEnabled(bool /*enabled*/) override {
-    STUB_NOT_IMPLEMENTED();
+  MNEXUS_NO_THROW void MNEXUS_CALL SetDepthTestEnabled(bool enabled) override {
+    render_pipeline_state_tracker_.SetDepthTestEnabled(enabled);
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetDepthWriteEnabled(bool /*enabled*/) override {
-    STUB_NOT_IMPLEMENTED();
+  MNEXUS_NO_THROW void MNEXUS_CALL SetDepthWriteEnabled(bool enabled) override {
+    render_pipeline_state_tracker_.SetDepthWriteEnabled(enabled);
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL SetDepthCompareOp(
-    mnexus::CompareOp /*op*/
+    mnexus::CompareOp op
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    render_pipeline_state_tracker_.SetDepthCompareOp(op);
   }
 
   // Stencil
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetStencilTestEnabled(bool /*enabled*/) override {
-    STUB_NOT_IMPLEMENTED();
+  MNEXUS_NO_THROW void MNEXUS_CALL SetStencilTestEnabled(bool enabled) override {
+    render_pipeline_state_tracker_.SetStencilTestEnabled(enabled);
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL SetStencilFrontOps(
-    mnexus::StencilOp /*fail*/, mnexus::StencilOp /*pass*/,
-    mnexus::StencilOp /*depth_fail*/, mnexus::CompareOp /*compare*/
+    mnexus::StencilOp fail, mnexus::StencilOp pass,
+    mnexus::StencilOp depth_fail, mnexus::CompareOp compare
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    render_pipeline_state_tracker_.SetStencilFrontOps(fail, pass, depth_fail, compare);
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL SetStencilBackOps(
-    mnexus::StencilOp /*fail*/, mnexus::StencilOp /*pass*/,
-    mnexus::StencilOp /*depth_fail*/, mnexus::CompareOp /*compare*/
+    mnexus::StencilOp fail, mnexus::StencilOp pass,
+    mnexus::StencilOp depth_fail, mnexus::CompareOp compare
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    render_pipeline_state_tracker_.SetStencilBackOps(fail, pass, depth_fail, compare);
   }
 
   // Per-attachment blend
 
   MNEXUS_NO_THROW void MNEXUS_CALL SetBlendEnabled(
-    uint32_t /*attachment*/, bool /*enabled*/
+    uint32_t attachment, bool enabled
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    render_pipeline_state_tracker_.SetBlendEnabled(attachment, enabled);
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL SetBlendFactors(
-    uint32_t /*attachment*/,
-    mnexus::BlendFactor /*src_color*/, mnexus::BlendFactor /*dst_color*/, mnexus::BlendOp /*color_op*/,
-    mnexus::BlendFactor /*src_alpha*/, mnexus::BlendFactor /*dst_alpha*/, mnexus::BlendOp /*alpha_op*/
+    uint32_t attachment,
+    mnexus::BlendFactor src_color, mnexus::BlendFactor dst_color, mnexus::BlendOp color_op,
+    mnexus::BlendFactor src_alpha, mnexus::BlendFactor dst_alpha, mnexus::BlendOp alpha_op
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    render_pipeline_state_tracker_.SetBlendFactors(
+      attachment, src_color, dst_color, color_op,
+      src_alpha, dst_alpha, alpha_op
+    );
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL SetColorWriteMask(
-    uint32_t /*attachment*/, mnexus::ColorWriteMask /*mask*/
+    uint32_t attachment, mnexus::ColorWriteMask mask
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    render_pipeline_state_tracker_.SetColorWriteMask(attachment, mask);
   }
 
   //
@@ -568,10 +637,12 @@ public:
   //
 
   MNEXUS_NO_THROW void MNEXUS_CALL Draw(
-    uint32_t /*vertex_count*/, uint32_t /*instance_count*/,
-    uint32_t /*first_vertex*/, uint32_t /*first_instance*/
+    uint32_t vertex_count, uint32_t instance_count,
+    uint32_t first_vertex, uint32_t first_instance
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    this->FlushRenderPipeline();
+    this->FlushVertexBuffers();
+    encoder_->CmdDraw(vertex_count, instance_count, first_vertex, first_instance);
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL DrawIndexed(
@@ -599,6 +670,67 @@ public:
   }
 
 private:
+  struct BoundVertexBuffer {
+    mnexus::BufferHandle handle = mnexus::BufferHandle::Invalid();
+    uint64_t offset = 0;
+  };
+
+  /// Resolves the dirty render pipeline state to a VkPipeline (via cache),
+  /// then binds it on the encoder. No-op if not dirty.
+  void FlushRenderPipeline() {
+    if (!render_pipeline_state_tracker_.IsDirty()) {
+      return;
+    }
+    pipeline::RenderPipelineCacheKey key = render_pipeline_state_tracker_.BuildCacheKey();
+    render_pipeline_state_tracker_.MarkClean();
+
+    bool cache_hit = false;
+    VulkanRenderPipelinePtr pipeline = resource_storage_->render_pipeline_cache.FindOrInsert(
+      key,
+      [this](pipeline::RenderPipelineCacheKey const& k) -> VulkanRenderPipelinePtr {
+        return CreateVulkanRenderPipelineFromCacheKey(
+          *vk_device_,
+          k,
+          resource_storage_->programs,
+          resource_storage_->shader_modules
+        );
+      },
+      &cache_hit
+    );
+    if (pipeline == nullptr) {
+      MBASE_LOG_ERROR("FlushRenderPipeline: failed to acquire VkPipeline");
+      return;
+    }
+
+    // Look up the program's pipeline layout (lives next to the program in the pool).
+    auto const program_pool_handle = resource_pool::ResourceHandle::FromU64(key.program.Get());
+    auto [program_hot, program_cold, program_lock] =
+      resource_storage_->programs.GetConstRefWithSharedLockGuard(program_pool_handle);
+
+    VulkanPipelineLayoutPtr const& pipeline_layout_ref = program_hot.pipeline_layout_ref;
+
+    encoder_->BindRenderPipeline(
+      pipeline->handle(),
+      pipeline_layout_ref->handle(),
+      pipeline_layout_ref->descriptor_set_layouts.data(),
+      static_cast<uint32_t>(pipeline_layout_ref->descriptor_set_layouts.size())
+    );
+  }
+
+  /// Pushes all currently-bound vertex buffers to the encoder.
+  void FlushVertexBuffers() {
+    for (uint32_t i = 0; i < bound_vertex_buffers_.size(); ++i) {
+      BoundVertexBuffer const& bvb = bound_vertex_buffers_[i];
+      if (!bvb.handle.IsValid()) {
+        continue;
+      }
+      auto const buffer_pool_handle = resource_pool::ResourceHandle::FromU64(bvb.handle.Get());
+      auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(buffer_pool_handle);
+      encoder_->CmdBindVertexBuffer(i, hot.vk_buffer.handle(), bvb.offset);
+    }
+  }
+
+  IVulkanDevice* vk_device_ = nullptr;
   VulkanCommandPool vk_command_pool_;
   ICommandEncoder* encoder_ = nullptr;
   ResourceStorage* resource_storage_ = nullptr;
@@ -606,6 +738,9 @@ private:
   ImageLayoutTracker image_layout_tracker_;
   PendingPipelineBarrier pending_pipeline_barrier_;
   mnexus::RenderStateEventLog render_state_event_log_;
+
+  pipeline::RenderPipelineStateTracker render_pipeline_state_tracker_;
+  mbase::SmallVector<BoundVertexBuffer, 4> bound_vertex_buffers_;
 };
 
 } // namespace

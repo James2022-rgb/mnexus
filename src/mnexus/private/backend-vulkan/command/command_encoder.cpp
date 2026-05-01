@@ -319,6 +319,53 @@ public:
     gfx_state_.rp_state = std::monostate{};
   }
 
+  void BindRenderPipeline(
+    VkPipeline pipeline,
+    VkPipelineLayout layout,
+    VulkanDescriptorSetLayout const* descriptor_set_layouts,
+    uint32_t descriptor_set_count
+  ) override {
+    current_pipeline_layout_ = layout;
+
+    vkCmdBindPipeline(vk_cb_handle_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+
+    descriptor_set_binder_.AssumePipelineLayout(layout, descriptor_set_layouts, descriptor_set_count);
+  }
+
+  void CmdBindVertexBuffer(uint32_t binding, VkBuffer buffer, VkDeviceSize offset) override {
+    vkCmdBindVertexBuffers(vk_cb_handle_, binding, 1, &buffer, &offset);
+  }
+
+  void CmdBindIndexBuffer(VkBuffer buffer, VkDeviceSize offset, VkIndexType index_type) override {
+    vkCmdBindIndexBuffer(vk_cb_handle_, buffer, offset, index_type);
+  }
+
+  void CmdSetViewport(VkViewport const& viewport) override {
+    vkCmdSetViewport(vk_cb_handle_, 0, 1, &viewport);
+  }
+
+  void CmdSetScissor(VkRect2D const& scissor) override {
+    vkCmdSetScissor(vk_cb_handle_, 0, 1, &scissor);
+  }
+
+  void CmdDraw(
+    uint32_t vertex_count, uint32_t instance_count,
+    uint32_t first_vertex, uint32_t first_instance
+  ) override {
+    this->ResolveDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS);
+
+    vkCmdDraw(vk_cb_handle_, vertex_count, instance_count, first_vertex, first_instance);
+  }
+
+  void CmdDrawIndexed(
+    uint32_t index_count, uint32_t instance_count,
+    uint32_t first_index, int32_t vertex_offset, uint32_t first_instance
+  ) override {
+    this->ResolveDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS);
+
+    vkCmdDrawIndexed(vk_cb_handle_, index_count, instance_count, first_index, vertex_offset, first_instance);
+  }
+
   void BindComputePipeline(
     VkPipeline pipeline,
     VkPipelineLayout layout,
