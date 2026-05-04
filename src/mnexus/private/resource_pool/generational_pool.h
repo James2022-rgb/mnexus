@@ -176,6 +176,16 @@ public:
     }
   }
 
+  // O(slot_count) — const overload, callback receives `const Hot&` / `const Cold&`.
+  template <class F>
+  void ForEachAlive(F&& f) const {
+    for (uint32_t i = 0; i < gen_.size(); ++i) {
+      if (!hot_[i].has_value()) continue;
+      Handle h = Handle::Make(i, gen_[i], ResourceType);
+      f(h, *hot_[i], *cold_[i]);
+    }
+  }
+
 private:
   uint32_t AllocateSlot() {
     if (!freelist_.empty()) {

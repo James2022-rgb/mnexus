@@ -6,6 +6,11 @@
 
 // c++ headers ------------------------------------------
 
+// external headers -------------------------------------
+#if MNEXUS_HAVE_DEAR_IMGUI
+# include "imgui.h"
+#endif
+
 // public project headers -------------------------------
 #include "mbase/public/assert.h"
 #include "mbase/public/log.h"
@@ -23,8 +28,13 @@ namespace mnexus {
 
 class Nexus final : public INexus {
 public:
-  explicit Nexus(std::unique_ptr<mnexus_backend::IBackend> backend, bool headless) :
+  explicit Nexus(
+    std::unique_ptr<mnexus_backend::IBackend> backend,
+    mnexus::BackendType backend_type,
+    bool headless
+  ) :
     backend_(std::move(backend)),
+    backend_type_(backend_type),
     headless_(headless)
   {
   }
@@ -76,11 +86,20 @@ public:
   // Debug UI
 
   MNEXUS_NO_THROW void MNEXUS_CALL ShowDebugUi() override {
-    backend_->ShowDebugUi();
+#if MNEXUS_HAVE_DEAR_IMGUI
+    if (ImGui::Begin("mnexus")) {
+      ImGui::Text("Backend: %.*s", static_cast<int>(ToString(backend_type_).size()), ToString(backend_type_).data());
+      ImGui::Text("Headless: %s", headless_ ? "true" : "false");
+
+      backend_->ShowDebugUi();
+    }
+    ImGui::End();
+#endif
   }
 
 private:
   std::unique_ptr<mnexus_backend::IBackend> backend_;
+  mnexus::BackendType backend_type_;
   bool headless_ = false;
 };
 
@@ -122,7 +141,7 @@ INexus* INexus::Create(NexusDesc const& desc) {
   }
 
   if (!backend) return nullptr;
-  return new Nexus(std::move(backend), desc.headless);
+  return new Nexus(std::move(backend), desc.backend_type, desc.headless);
 }
 
 } // namespace mnexus

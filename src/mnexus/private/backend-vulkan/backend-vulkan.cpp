@@ -7,6 +7,11 @@
 #include <vector>
 #include <optional>
 
+// external headers -------------------------------------
+#if MNEXUS_HAVE_DEAR_IMGUI
+# include "imgui.h"
+#endif
+
 // public project headers -------------------------------
 #include "mbase/public/log.h"
 #include "mbase/public/trap.h"
@@ -770,7 +775,11 @@ public:
   // Debug UI
 
   void ShowDebugUi() override {
-    STUB_NOT_IMPLEMENTED();
+#if MNEXUS_HAVE_DEAR_IMGUI
+    if (ImGui::CollapsingHeader("Resource Storage")) {
+      resource_storage_.ShowDebugUi();
+    }
+#endif
   }
 
   // ----------------------------------------------------------------------------------------------

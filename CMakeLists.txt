@@ -402,6 +402,7 @@ if(${_enable_backend_webgpu})
     ${_private_backend_webgpu_dir}/backend-webgpu-layout.h
     ${_private_backend_webgpu_dir}/backend-webgpu-render_pipeline.cpp
     ${_private_backend_webgpu_dir}/backend-webgpu-render_pipeline.h
+    ${_private_backend_webgpu_dir}/backend-webgpu-resource_storage.cpp
     ${_private_backend_webgpu_dir}/backend-webgpu-shader.cpp
     ${_private_backend_webgpu_dir}/backend-webgpu-shader.h
     ${_private_backend_webgpu_dir}/backend-webgpu-texture.cpp
@@ -528,6 +529,13 @@ set(_sources_private_resource_pool
 )
 source_group("Private/ResourcePool" FILES ${_sources_private_resource_pool})
 
+set(_private_debug_ui_dir "${_private_root_dir}/debug_ui")
+set(_sources_private_debug_ui
+  ${_private_debug_ui_dir}/resource_pool_debug_ui.cpp
+  ${_private_debug_ui_dir}/resource_pool_debug_ui.h
+)
+source_group("Private/DebugUi" FILES ${_sources_private_debug_ui})
+
 set(_private_binding_dir "${_private_root_dir}/binding")
 set(_sources_private_binding
   ${_private_binding_dir}/cache_key.h
@@ -582,6 +590,7 @@ target_sources(${TARGET_NAME} PRIVATE
   ${_sources_private_backend_vulkan}
   ${_sources_private_backend_webgpu}
   ${_sources_private_binding}
+  ${_sources_private_debug_ui}
   ${_sources_private_resource_pool}
   ${_sources_private_cache}
   ${_sources_private_impl}

@@ -1050,7 +1050,9 @@ public:
 
   void ShowDebugUi() override {
 #if MNEXUS_HAVE_DEAR_IMGUI
-    ImGui::Text("PLACEHOLDER: WebGPU backend debug UI is not implemented yet.");
+    if (ImGui::CollapsingHeader("Resource Storage")) {
+      resource_storage_.ShowDebugUi();
+    }
 #endif
   }
 

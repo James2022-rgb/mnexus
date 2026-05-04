@@ -47,6 +47,8 @@ struct ResourceStorage final {
 
   std::mutex swapchain_texture_mutex; // Protects `TextureHot` and `TextureCold`.
   resource_pool::ResourceHandle swapchain_texture_handle = resource_pool::ResourceHandle::Null(); // Not protected; set only during initialization.
+
+  void ShowDebugUi() const;
 };
 
 class MnexusCommandListWebGpu : public mnexus::ICommandList {

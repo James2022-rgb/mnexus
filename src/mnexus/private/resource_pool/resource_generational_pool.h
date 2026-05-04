@@ -113,6 +113,23 @@ public:
     mutex_.unlock_shared();
   }
 
+  // Read-only iteration with shared-lock guard. Callback receives
+  // `(GenerationalHandle, THot const&, TCold const&)` for each live slot.
+  template <class F>
+  void ForEachAliveSharedLocked(F&& f) const MBASE_EXCLUDES(mutex_) MBASE_NO_THREAD_SAFETY_ANALYSIS {
+    mbase::SharedLockGuard lock(mutex_);
+    inner_.ForEachAlive(std::forward<F>(f));
+  }
+
+  [[nodiscard]] uint32_t GetLiveCountSharedLocked() const MBASE_EXCLUDES(mutex_) MBASE_NO_THREAD_SAFETY_ANALYSIS {
+    mbase::SharedLockGuard lock(mutex_);
+    return inner_.GetLiveCount();
+  }
+  [[nodiscard]] uint32_t GetSlotCountSharedLocked() const MBASE_EXCLUDES(mutex_) MBASE_NO_THREAD_SAFETY_ANALYSIS {
+    mbase::SharedLockGuard lock(mutex_);
+    return inner_.GetSlotCount();
+  }
+
 private:
   mbase::SharedLockable<std::shared_mutex> mutable mutex_;
   resource_pool::GenerationalPool<THot, TCold, ResourceType> inner_;

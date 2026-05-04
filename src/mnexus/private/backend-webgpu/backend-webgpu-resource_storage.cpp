@@ -1,5 +1,5 @@
 // TU header --------------------------------------------
-#include "backend-vulkan/resource/resource_storage.h"
+#include "backend-webgpu/backend-webgpu-command_list.h" // ResourceStorage lives next to the command list.
 
 // project headers --------------------------------------
 #if MNEXUS_HAVE_DEAR_IMGUI
@@ -11,51 +11,7 @@
 # include "imgui.h"
 #endif
 
-namespace mnexus_backend::vulkan {
-
-void ResourceStorage::StampResourceUse(resource_pool::ResourceHandle handle, uint32_t queue_compact_index, uint64_t serial) {
-  switch (handle.resource_type()) {
-  case mnexus::kResourceTypeBuffer: {
-    auto& hot = buffers.LockSharedAndGetRefHot(handle);
-    hot.Stamp(queue_compact_index, serial);
-    buffers.UnlockShared();
-    break;
-  }
-  case mnexus::kResourceTypeTexture: {
-    auto& hot = textures.LockSharedAndGetRefHot(handle);
-    hot.Stamp(queue_compact_index, serial);
-    textures.UnlockShared();
-    break;
-  }
-  case mnexus::kResourceTypeShaderModule: {
-    auto& hot = shader_modules.LockSharedAndGetRefHot(handle);
-    hot.Stamp(queue_compact_index, serial);
-    shader_modules.UnlockShared();
-    break;
-  }
-  case mnexus::kResourceTypeProgram: {
-    auto& hot = programs.LockSharedAndGetRefHot(handle);
-    hot.Stamp(queue_compact_index, serial);
-    programs.UnlockShared();
-    break;
-  }
-  case mnexus::kResourceTypeComputePipeline: {
-    auto& hot = compute_pipelines.LockSharedAndGetRefHot(handle);
-    hot.Stamp(queue_compact_index, serial);
-    compute_pipelines.UnlockShared();
-    break;
-  }
-  case mnexus::kResourceTypeSampler: {
-    auto& hot = samplers.LockSharedAndGetRefHot(handle);
-    hot.Stamp(queue_compact_index, serial);
-    samplers.UnlockShared();
-    break;
-  }
-  default:
-    MBASE_ASSERT_MSG(false, "StampResourceUse: unhandled resource type {}", handle.resource_type());
-    break;
-  }
-}
+namespace mnexus_backend::webgpu {
 
 void ResourceStorage::ShowDebugUi() const {
 #if MNEXUS_HAVE_DEAR_IMGUI
@@ -71,6 +27,8 @@ void ResourceStorage::ShowDebugUi() const {
   uint32_t const program_slots        = programs.GetSlotCountSharedLocked();
   uint32_t const compute_pipe_live    = compute_pipelines.GetLiveCountSharedLocked();
   uint32_t const compute_pipe_slots   = compute_pipelines.GetSlotCountSharedLocked();
+  uint32_t const render_pipe_live     = render_pipelines.GetLiveCountSharedLocked();
+  uint32_t const render_pipe_slots    = render_pipelines.GetSlotCountSharedLocked();
 
   // Summary table.
   if (ImGui::BeginTable("ResourceStorageSummary", 3,
@@ -85,6 +43,7 @@ void ResourceStorage::ShowDebugUi() const {
     debug_ui::RenderPoolSummaryRow("ShaderModules",    shader_module_live, shader_module_slots);
     debug_ui::RenderPoolSummaryRow("Programs",         program_live,       program_slots);
     debug_ui::RenderPoolSummaryRow("ComputePipelines", compute_pipe_live,  compute_pipe_slots);
+    debug_ui::RenderPoolSummaryRow("RenderPipelines", render_pipe_live,    render_pipe_slots);
     ImGui::EndTable();
   }
 
@@ -100,26 +59,23 @@ void ResourceStorage::ShowDebugUi() const {
 
   ImGui::Spacing();
 
-  // Buffers — Vulkan-specific 4th column shows VMA-mapped status.
+  // Buffers — WebGPU has no per-Hot mapped flag, so we only render the desc-driven 3 columns.
   if (ImGui::CollapsingHeader("Buffers")) {
     debug_ui::RenderPoolTable(
-      "Buffers", {"Handle", "Size (bytes)", "Usage", "Mapped"},
+      "Buffers", {"Handle", "Size (bytes)", "Usage"},
       buffer_live, buffers,
-      [](resource_pool::ResourceHandle handle, BufferHot const& hot, BufferCold const& cold) {
+      [](resource_pool::ResourceHandle handle, BufferHot const& /*hot*/, BufferCold const& cold) {
         ImGui::TableNextColumn(); debug_ui::RenderHandleCell(handle);
         debug_ui::WriteBufferDescCells(cold.desc);
-        ImGui::TableNextColumn(); ImGui::TextUnformatted(hot.mapped_data ? "yes" : "no");
       }
     );
   }
 
-  // Textures — Vulkan TextureCold wraps the desc behind GetTextureDesc().
+  // Textures — WebGPU TextureCold exposes the desc directly.
   if (ImGui::CollapsingHeader("Textures")) {
     debug_ui::RenderTexturesSection(
       textures, texture_live, swapchain_texture_handle,
-      [](TextureCold const& cold) -> mnexus::TextureDesc const& {
-        return cold.GetTextureDesc();
-      }
+      [](TextureCold const& cold) -> mnexus::TextureDesc const& { return cold.desc; }
     );
   }
 
@@ -135,16 +91,24 @@ void ResourceStorage::ShowDebugUi() const {
     debug_ui::RenderProgramsSection(programs, program_live);
   }
 
-  // Compute pipelines — Vulkan stores program/shader-module handles in cold.
+  // Compute pipelines — WebGPU ComputePipelineCold is empty, so we only show the handle.
   if (ImGui::CollapsingHeader("Compute Pipelines")) {
     debug_ui::RenderPoolTable(
-      "ComputePipelines", {"Handle", "Program"},
+      "ComputePipelines", {"Handle"},
       compute_pipe_live, compute_pipelines,
-      [](resource_pool::ResourceHandle handle, ComputePipelineHot const& /*hot*/, ComputePipelineCold const& cold) {
+      [](resource_pool::ResourceHandle handle, ComputePipelineHot const& /*hot*/, ComputePipelineCold const& /*cold*/) {
         ImGui::TableNextColumn(); debug_ui::RenderHandleCell(handle);
-        ImGui::TableNextColumn();
-        auto const program_handle = resource_pool::ResourceHandle::FromU64(cold.program_handle().Get());
-        ImGui::Text("%u/g%u", program_handle.index(), program_handle.generation());
+      }
+    );
+  }
+
+  // Render pipelines (WebGPU-only resource pool — Vulkan keeps these solely in the cache).
+  if (ImGui::CollapsingHeader("Render Pipelines")) {
+    debug_ui::RenderPoolTable(
+      "RenderPipelines", {"Handle"},
+      render_pipe_live, render_pipelines,
+      [](resource_pool::ResourceHandle handle, RenderPipelineHot const& /*hot*/, RenderPipelineCold const& /*cold*/) {
+        ImGui::TableNextColumn(); debug_ui::RenderHandleCell(handle);
       }
     );
   }
@@ -153,9 +117,8 @@ void ResourceStorage::ShowDebugUi() const {
   if (ImGui::CollapsingHeader("Caches", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::BulletText("Pipeline Layout Cache: %zu entries", pipeline_layout_cache.size());
     debug_ui::RenderRenderPipelineCacheStats(render_pipeline_cache.GetDiagnostics());
-    ImGui::BulletText("Image View Cache: %zu entries", image_view_cache.size());
   }
 #endif // MNEXUS_HAVE_DEAR_IMGUI
 }
 
-} // namespace mnexus_backend::vulkan
+} // namespace mnexus_backend::webgpu
