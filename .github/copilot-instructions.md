@@ -32,18 +32,37 @@ Key CMake options:
 
 Compiler warnings: `-Wall -Wextra -Werror` (GCC/Clang), `/W4` (MSVC). Thread-safety analysis (`-Werror=thread-safety`) is enabled on Clang/GCC.
 
+**Dear ImGui integration:** if the consuming project defines a `dear_imgui` CMake target, mnexus links it transitively (`PUBLIC`) and defines `MNEXUS_HAVE_DEAR_IMGUI=1` for downstream code; otherwise it's `0`. mnexus does not vendor Dear ImGui itself.
+
 **Emscripten note:** mnexus propagates `--use-port=emdawnwebgpu` as PUBLIC but does NOT propagate `--closure=1`. Final binaries that want Closure optimization (e.g., wentos-desktop) must specify `--closure=1` on their own target. This is because Closure conflicts with ASYNCIFY + exception handling (`_setThrew` undeclared).
 
 ## Architecture
 
-mnexus is a graphics abstraction layer providing a unified API over WebGPU (via Dawn on native platforms, or native WebGPU on Emscripten/Web) and Vulkan. The WebGPU backend is fully implemented. The Vulkan backend has substantial low-level infrastructure (device, queues, timeline semaphores, VMA memory allocation, command pools, descriptor sets, staging buffers) but most `IDevice` facade methods are still stubbed (`STUB_NOT_IMPLEMENTED`).
+mnexus is a graphics abstraction layer providing a unified API over WebGPU (via Dawn on native platforms, or native WebGPU on Emscripten/Web) and Vulkan. The WebGPU backend is fully implemented. The Vulkan backend records render, compute, and transfer commands end-to-end: explicit `TextureBarrier`, `ClearTexture`, `CopyBufferToTexture`, `BlitTexture`, dynamic render passes (`VK_KHR_dynamic_rendering`) with the auto-generation render-pipeline path (cache + state-event log), `Draw` / `DrawIndexed`, `DispatchCompute`, and full descriptor binding (uniform buffer, storage buffer, sampled texture, sampler) via the shared `DescriptorSetAllocator` / `DescriptorSetBinder`. A few `IDevice` facade methods remain stubbed (`STUB_NOT_IMPLEMENTED`); see `STUB_NOT_IMPLEMENTED` references for the current set.
 
 ### Core Interfaces (`src/mnexus/public/mnexus.h`)
 
 - `INexus` - Main entry point; static `Create()` / `Destroy()`, surface lifecycle, presentation, and device access. `EnumerateBackends()` returns available backends at runtime
 - `IDevice` - Resource creation (buffers, textures, samplers, shaders, programs, pipelines) and command submission. Provides queue operations (`QueueSubmitCommandList`, `QueueWriteBuffer`, `QueueReadBuffer`, `QueueWaitIdle`), device capabilities (`GetAdapterCapability`, `GetClipSpaceConvention`, `GetAdapterInfo`), and PSO cache diagnostics (`GetRenderPipelineCacheSnapshot`)
-- `ICommandList` - Command recording for render, compute, and transfer operations. Thread-affine (all recording must happen on the creating thread). Supports debug markers (`PushDebugGroup` / `PopDebugGroup`), explicit pipeline binding, auto-generation render state setters, and `GetStateEventLog()` for per-command-list PSO diagnostics
+- `ICommandList` - Command recording for render, compute, and transfer operations. Thread-affine (all recording must happen on the creating thread). Supports debug markers (`PushDebugGroup` / `PopDebugGroup`), explicit pipeline binding, auto-generation render state setters, explicit resource transitions via `TextureBarrier`, and `GetStateEventLog()` for per-command-list PSO diagnostics
 - `Texture` - RAII wrapper around texture handles
+
+### Resource Barriers (`ICommandList::TextureBarrier`)
+
+Resource state transitions are caller-driven. The backend never auto-transitions a texture inside a transfer / dispatch / render-pass op — callers must emit a `TextureBarrier` first.
+
+- `mnexus::ResourceBarrierState` (in `types.h`): abstract destination state — `kIndirectArgument`, `kIndexBuffer`, `kVertexBuffer`, `kUniformBuffer`, `kReadOnly`, `kAttachment`, `kUnorderedAccess`, `kTransferSrc`, `kTransferDst`.
+- `mnexus::ResourceBarrierStageFlags`: pipeline-stage mask — `kDrawIndirectInput`, `kVertexInput`, `kVertexShader`, `kEarlyFragmentTests`, `kFragmentShader`, `kLateFragmentTests`, `kColorAttachmentOutput`, `kComputeIndirectInput`, `kComputeShader`, `kTransfer`, plus presets `kFragmentTestsBits` / `kGraphicsBits` / `kComputeBits`.
+
+State contracts the backend assumes at op entry (documented on each method in `mnexus.h`):
+- `ClearTexture` / `CopyBufferToTexture` / `BlitTexture(dst)` — `kTransferDst` (stage `kTransfer`).
+- `BlitTexture(src)` — `kTransferSrc` (stage `kTransfer`).
+- `BeginRenderPass` color/depth attachments — `kAttachment` (stage `kColorAttachmentOutput` for color, `kEarlyFragmentTests` / `kLateFragmentTests` for depth).
+- `BindSampledTexture` — `kReadOnly` (stage `kFragmentShader` / etc.).
+
+The Vulkan backend queues transitions via `command/image_layout_tracker.h` and flushes them through `command/pending_pipeline_barrier.h` at the start of every transfer / dispatch op and at `BeginRenderPass` — never inside a render pass instance. The WebGPU backend implements `TextureBarrier` as a no-op (WebGPU manages resource state implicitly).
+
+Stage-aware access derivation: in the Vulkan backend, `ToVkAccessFlags2(state, stage_flags)` masks attachment access bits by the stage mask so `kAttachment` + `kColorAttachmentOutput` emits only `COLOR_ATTACHMENT_R/W`, while `kAttachment` + fragment-tests emits only `DEPTH_STENCIL_ATTACHMENT_R/W` — required to satisfy `VUID-VkImageMemoryBarrier2-dstAccessMask-*`.
 
 ### Public Utility (`src/mnexus/public/container/array_proxy.h`)
 
@@ -137,27 +156,41 @@ log.Clear();
   - `include_dawn.h` - Platform-appropriate WebGPU header inclusion
   - `webgpu_cpp_print.h` - `operator<<` for wgpu types (debug output)
   - `webgpu_format.h` - spdlog formatter specializations for wgpu types
-- `backend-vulkan/` - Vulkan implementation (infrastructure largely in place; `IDevice` facade mostly stubbed)
+- `backend-vulkan/` - Vulkan implementation (records render / compute / transfer end-to-end; a few `IDevice` facade methods still stubbed)
   - `backend-vulkan.cpp/.h` - Main backend: `IBackendVulkan`, `MnexusDeviceVulkan`
-  - `backend-vulkan-buffer.cpp/.h` - Buffer resource management with VMA
-  - `backend-vulkan-command_list.cpp/.h` - `MnexusCommandListVulkan` recording implementation
-  - `backend-vulkan-compute_pipeline.cpp/.h` - Compute pipeline
-  - `backend-vulkan-shader.cpp/.h` - Shader module management
-  - `backend-vulkan-texture.cpp/.h` - Texture resource management
-  - `command_encoder.cpp/.h` - Vulkan command buffer encoder
-  - `descriptor_set_allocator.cpp/.h` - Descriptor set pool allocation
-  - `descriptor_set_binder.cpp/.h` - Descriptor set binding state
-  - `descriptor_set_write.cpp/.h` - Descriptor set update writes
-  - `resource_storage.cpp/.h` - Centralized resource storage with per-resource use tracking
-  - `shader_module.cpp/.h` - SPIR-V shader module wrapper
-  - `thread_command_pool.cpp/.h` - Per-thread command pool registry
-  - `vk-device.cpp/.h` - `VulkanDevice`: logical device, queue management, timeline semaphores, VMA allocator
-  - `vk-deferred_destroyer.h` - Interface for deferred GPU resource destruction
-  - `vk-instance.cpp/.h` - Vulkan instance and debug messenger
-  - `vk-object.h` - Vulkan object handle wrapper
-  - `vk-physical_device.cpp/.h` - Physical device selection and queue family enumeration
-  - `vk-staging.cpp/.h` - Staging buffer pool for CPU-to-GPU transfers
-  - `vk-wsi_surface.cpp/.h` - WSI surface creation (Win32, Android, etc.)
+  - `backend-vulkan-buffer.cpp/.h` - Buffer resource pool (`BufferHot`, `BufferCold`); VMA-backed
+  - `backend-vulkan-command_list.cpp/.h` - `IMnexusCommandListVulkan` (interface + `Create` factory) — top-level command recording. Owns an `ICommandEncoder`, an `ImageLayoutTracker`, a `PendingPipelineBarrier`, and a `RenderPipelineStateTracker`. `End()` transitions all touched textures back to their default state and flushes the final barrier. `BeginRenderPass` flushes pending barriers before recording the dynamic-rendering instance
+  - `backend-vulkan-compute_pipeline.cpp/.h` - Compute pipeline resource pool
+  - `backend-vulkan-render_pipeline.cpp/.h` - Render pipeline resource pool + `CreateVulkanRenderPipelineFromCacheKey` (used by `TRenderPipelineCache`)
+  - `backend-vulkan-shader.cpp/.h` - Shader module / program resource pools
+  - `backend-vulkan-texture.cpp/.h` - Texture resource pool (`TextureHot` / `TextureCold`)
+  - `command/` - Per-command-list recording infrastructure
+    - `command_encoder.cpp/.h` - `ICommandEncoder` interface + factory; concrete encoder lives in the `.cpp`'s anonymous namespace. Wraps a `VkCommandBuffer` + dirty tracking for descriptor-set resolution, dynamic rendering begin/end, and pipeline-binding operations
+    - `image_layout_tracker.cpp/.h` - Per-(image, mip, layer) layout tracker. `Transition()` queues a transition; `FlushPendingTransitions()` emits matching `VkImageMemoryBarrier2KHR`s into a `PendingPipelineBarrier`. `TransitionAllToDefaults()` returns each touched texture to the format-derived default state (used by `End()`)
+    - `pending_pipeline_barrier.cpp/.h` - Accumulator for `VkImageMemoryBarrier2KHR` (and global memory barriers); `FlushAndClear()` records `vkCmdPipelineBarrier2KHR`
+    - `fwd.h` - Forward declarations for the `command/` package
+  - `descriptor/` - Descriptor set lifetime + binding
+    - `descriptor_set_allocator.cpp/.h` - `IDescriptorSetAllocator` interface + factory. Per-layout pool with deferred free; safe under shutdown
+    - `descriptor_set_binder.cpp/.h` - Per-command-list descriptor-set state with dirty tracking. `AssumeRenderPipelineLayout` / `AssumeComputePipelineLayout` are called eagerly at `BindRenderProgram` / `BindExplicitComputePipeline` so descriptor writes route to the right set
+    - `descriptor_set_write.cpp/.h` - Descriptor write helpers
+    - `fwd.h` - Forward declarations for the `descriptor/` package
+  - `device/` - Device / instance / queue / staging
+    - `vk-device.cpp/.h` - `IVulkanDevice` interface + factory. Logical device, VMA allocator, timeline semaphores, queue selection
+    - `vk-device_helper.cpp/.h` - Shared device-construction helpers
+    - `vk-queue.cpp/.h` - `IVulkanQueue` interface + factory. Per-queue submit / present / wait
+    - `vk-instance.cpp/.h` - Vulkan instance + debug messenger
+    - `vk-physical_device.cpp/.h` - Physical-device selection and queue-family enumeration
+    - `vk-staging.cpp/.h` - Staging buffer pool for CPU↔GPU transfers
+    - `vk-deferred_destroyer.h` - Interface for deferred destruction of GPU resources after submission completes
+    - `fwd.h` - Forward declarations for the `device/` package
+  - `object/` - Refcounted wrappers around Vulkan handles (`vk-object-buffer.h`, `vk-object-image.h`, `vk-object-sampler.h`, `vk-object-shader_module.h`, `vk-object-render_pipeline.h`, `vk-object-compute_pipeline.h`, `vk-object-pipeline_layout.h`, `vk-object-descriptor_set.h`, `vk-object-descriptor_set_layout.h`, `vk-object-command_pool.h`, `vk-object.h`, `fwd.h`)
+  - `resource/` - Resource storage / type bridging
+    - `resource_storage.cpp/.h` - Centralized resource storage (textures / buffers / samplers / shader modules / programs / pipelines / pipeline-layout cache / render-pipeline cache)
+    - `types_bridge.cpp/.h` - mnexus ↔ Vulkan conversions (formats, blend, stencil, vertex layout, image aspect / subresource, `ToVkPipelineStageFlags2`, stage-aware `ToVkAccessFlags2`, `ToVkImageLayout`, etc.)
+    - `image_view_cache.h` - Per-texture image-view cache
+    - `shader_module.cpp/.h` - SPIR-V shader module helper used by the program / pipeline construction paths
+    - `fwd.h` - Forward declarations for the `resource/` package
+  - `wsi/` - Window-system integration (`vk-wsi_surface.cpp/.h`, `fwd.h`)
   - `depend/` - Vulkan header includes (`vulkan.h`, `vulkan_fwd.h`) and VMA integration (`vulkan_vma.cpp/.h`)
 
 ### Shader Reflection and Conversion (`src/mnexus/private/shader/`)
