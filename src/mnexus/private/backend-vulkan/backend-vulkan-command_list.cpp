@@ -285,17 +285,70 @@ public:
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL BlitTexture(
-    mnexus::TextureHandle /*src_texture_handle*/,
-    mnexus::TextureSubresourceRange const& /*src_subresource_range*/,
-    mnexus::Offset3d const& /*src_offset*/,
-    mnexus::Extent3d const& /*src_extent*/,
-    mnexus::TextureHandle /*dst_texture_handle*/,
-    mnexus::TextureSubresourceRange const& /*dst_subresource_range*/,
-    mnexus::Offset3d const& /*dst_offset*/,
-    mnexus::Extent3d const& /*dst_extent*/,
-    mnexus::Filter /*filter*/
+    mnexus::TextureHandle src_texture_handle,
+    mnexus::TextureSubresourceRange const& src_subresource_range,
+    mnexus::Offset3d const& src_offset,
+    mnexus::Extent3d const& src_extent,
+    mnexus::TextureHandle dst_texture_handle,
+    mnexus::TextureSubresourceRange const& dst_subresource_range,
+    mnexus::Offset3d const& dst_offset,
+    mnexus::Extent3d const& dst_extent,
+    mnexus::Filter filter
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    // Caller is required to have transitioned src into kTransferSrc and dst
+    // into kTransferDst via TextureBarrier.
+    this->FlushPipelineBarrier();
+
+    auto const src_pool_handle = resource_pool::ResourceHandle::FromU64(src_texture_handle.Get());
+    auto [src_hot, src_cold, src_lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(src_pool_handle);
+    VkImage const src_vk_image = src_hot.GetVkImage().handle();
+
+    auto const dst_pool_handle = resource_pool::ResourceHandle::FromU64(dst_texture_handle.Get());
+    auto [dst_hot, dst_cold, dst_lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(dst_pool_handle);
+    VkImage const dst_vk_image = dst_hot.GetVkImage().handle();
+
+    VkImageBlit const region {
+      .srcSubresource = ToVkImageSubresourceLayers(src_subresource_range),
+      .srcOffsets = {
+        VkOffset3D {
+          static_cast<int32_t>(src_offset.x),
+          static_cast<int32_t>(src_offset.y),
+          static_cast<int32_t>(src_offset.z),
+        },
+        VkOffset3D {
+          static_cast<int32_t>(src_offset.x + src_extent.width),
+          static_cast<int32_t>(src_offset.y + src_extent.height),
+          static_cast<int32_t>(src_offset.z + src_extent.depth),
+        },
+      },
+      .dstSubresource = ToVkImageSubresourceLayers(dst_subresource_range),
+      .dstOffsets = {
+        VkOffset3D {
+          static_cast<int32_t>(dst_offset.x),
+          static_cast<int32_t>(dst_offset.y),
+          static_cast<int32_t>(dst_offset.z),
+        },
+        VkOffset3D {
+          static_cast<int32_t>(dst_offset.x + dst_extent.width),
+          static_cast<int32_t>(dst_offset.y + dst_extent.height),
+          static_cast<int32_t>(dst_offset.z + dst_extent.depth),
+        },
+      },
+    };
+
+    vkCmdBlitImage(
+      encoder_->vk_cb_handle(),
+      src_vk_image,
+      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+      dst_vk_image,
+      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      1,
+      &region,
+      ToVkFilter(filter)
+    );
+
+    referenced_resources_.push_back(src_pool_handle);
+    referenced_resources_.push_back(dst_pool_handle);
   }
 
   //

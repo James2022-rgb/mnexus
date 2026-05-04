@@ -887,6 +887,12 @@ public:
     Extent3d const& copy_extent
   );
 
+  /// Blits (with optional scaling and filtering) a region of `src_texture` to a region of `dst_texture`.
+  ///
+  /// > Caller must transition `src_texture` into `ResourceBarrierState::kTransferSrc`
+  /// > and `dst_texture` into `ResourceBarrierState::kTransferDst`
+  /// > (stage `ResourceBarrierStageFlagBits::kTransfer`) via `TextureBarrier`
+  /// > before calling this method.
   _MNEXUS_VAPI(void, BlitTexture,
     TextureHandle src_texture_handle,
     TextureSubresourceRange const& src_subresource_range,
