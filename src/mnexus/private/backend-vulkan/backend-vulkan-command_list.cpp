@@ -100,7 +100,9 @@ public:
       .resource_storage = resource_storage,
     })),
     resource_storage_(resource_storage)
-  {}
+  {
+    render_pipeline_state_tracker_.SetEventLog(&render_state_event_log_);
+  }
   ~MnexusCommandListVulkan() override {
     if (encoder_ != nullptr) {
       encoder_->Shutdown();
@@ -571,9 +573,20 @@ public:
       .offset = VkOffset2D { .x = 0, .y = 0 },
       .extent = render_area,
     });
+
+    if (render_state_event_log_.IsEnabled()) {
+      render_state_event_log_.Record(
+        mnexus::RenderStateEventTag::kBeginRenderPass,
+        render_pipeline_state_tracker_.BuildSnapshot());
+    }
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL EndRenderPass() override {
+    if (render_state_event_log_.IsEnabled()) {
+      render_state_event_log_.Record(
+        mnexus::RenderStateEventTag::kEndRenderPass,
+        render_pipeline_state_tracker_.BuildSnapshot());
+    }
     encoder_->CmdEndRendering();
   }
 
@@ -748,6 +761,13 @@ public:
   ) override {
     this->FlushRenderPipeline();
     this->FlushVertexBuffers();
+
+    if (render_state_event_log_.IsEnabled()) {
+      render_state_event_log_.Record(
+        mnexus::RenderStateEventTag::kDraw,
+        render_pipeline_state_tracker_.BuildSnapshot());
+    }
+
     encoder_->CmdDraw(vertex_count, instance_count, first_vertex, first_instance);
   }
 
@@ -758,6 +778,13 @@ public:
     this->FlushRenderPipeline();
     this->FlushVertexBuffers();
     this->FlushIndexBuffer();
+
+    if (render_state_event_log_.IsEnabled()) {
+      render_state_event_log_.Record(
+        mnexus::RenderStateEventTag::kDrawIndexed,
+        render_pipeline_state_tracker_.BuildSnapshot());
+    }
+
     encoder_->CmdDrawIndexed(index_count, instance_count, first_index, vertex_offset, first_instance);
   }
 
@@ -825,6 +852,13 @@ private:
     if (pipeline == nullptr) {
       MBASE_LOG_ERROR("FlushRenderPipeline: failed to acquire VkPipeline");
       return;
+    }
+
+    if (render_state_event_log_.IsEnabled()) {
+      render_state_event_log_.RecordPso(
+        render_pipeline_state_tracker_.BuildSnapshot(),
+        key.ComputeHash(),
+        cache_hit);
     }
 
     // Look up the program's pipeline layout (lives next to the program in the pool).
