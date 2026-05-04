@@ -128,8 +128,7 @@ public:
   MNEXUS_NO_THROW void MNEXUS_CALL End() override {
     // Transition all tracked images back to their default layouts before finalizing.
     image_layout_tracker_.TransitionAllToDefaults();
-    image_layout_tracker_.FlushPendingTransitions(pending_pipeline_barrier_);
-    pending_pipeline_barrier_.FlushAndClear(encoder_->vk_cb_handle());
+    this->FlushPipelineBarrier();
 
     encoder_->End();
   }
@@ -178,13 +177,14 @@ public:
   }
 
   //
-  // Transfer
+  // Pipeline Barriers
   //
 
-  MNEXUS_NO_THROW void MNEXUS_CALL ClearTexture(
+  MNEXUS_NO_THROW void MNEXUS_CALL TextureBarrier(
     mnexus::TextureHandle texture_handle,
     mnexus::TextureSubresourceRange const& subresource_range,
-    mnexus::ClearValue const& clear_value
+    mnexus::ResourceBarrierStageFlags dst_stage_flags,
+    mnexus::ResourceBarrierState dst_state
   ) override {
     auto const pool_handle = resource_pool::ResourceHandle::FromU64(texture_handle.Get());
     auto [hot, cold, lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(pool_handle);
@@ -194,7 +194,6 @@ public:
     mnexus::TextureDesc const& desc = cold.GetTextureDesc();
     VkFormat const vk_format = ToVkFormat(desc.format);
 
-    // Register and transition target subresources to TRANSFER_DST.
     image_layout_tracker_.RegisterImage(
       vk_image_handle,
       ToVkImageUsageFlags(desc.usage, vk_format),
@@ -203,17 +202,43 @@ public:
       desc.array_layer_count
     );
 
-    image_layout_tracker_.TransitionRangeToTransferDst(
-      vk_image_handle,
-      { .mip_level = subresource_range.base_mip_level, .array_layer = subresource_range.base_array_layer },
-      subresource_range.mip_level_count,
-      subresource_range.array_layer_count
-    );
+    VkPipelineStageFlags2KHR const vk_stage_mask = ToVkPipelineStageFlags2(dst_stage_flags);
+    VkAccessFlags2KHR const vk_access_mask = ToVkAccessFlags2(dst_state, dst_stage_flags);
+    VkImageLayout const vk_layout = ToVkImageLayout(dst_state);
 
-    image_layout_tracker_.FlushPendingTransitions(pending_pipeline_barrier_);
-    pending_pipeline_barrier_.FlushAndClear(encoder_->vk_cb_handle());
+    for (uint32_t mip = 0; mip < subresource_range.mip_level_count; ++mip) {
+      for (uint32_t layer = 0; layer < subresource_range.array_layer_count; ++layer) {
+        image_layout_tracker_.Transition(
+          vk_image_handle,
+          { .mip_level = subresource_range.base_mip_level + mip,
+            .array_layer = subresource_range.base_array_layer + layer },
+          vk_stage_mask,
+          vk_access_mask,
+          vk_layout
+        );
+      }
+    }
 
-    encoder_->CmdClearImageSubresourceRange(vk_image, subresource_range, clear_value);
+    referenced_resources_.push_back(pool_handle);
+  }
+
+  //
+  // Transfer
+  //
+
+  MNEXUS_NO_THROW void MNEXUS_CALL ClearTexture(
+    mnexus::TextureHandle texture_handle,
+    mnexus::TextureSubresourceRange const& subresource_range,
+    mnexus::ClearValue const& clear_value
+  ) override {
+    // The caller is responsible for putting the target subresource into
+    // ResourceBarrierState::kTransferDst beforehand via TextureBarrier.
+    this->FlushPipelineBarrier();
+
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(texture_handle.Get());
+    auto [hot, cold, lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(pool_handle);
+
+    encoder_->CmdClearImageSubresourceRange(hot.GetVkImage(), subresource_range, clear_value);
 
     referenced_resources_.push_back(pool_handle);
   }
@@ -227,38 +252,15 @@ public:
   ) override {
     MBASE_ASSERT(dst_subresource_range.mip_level_count == 1);
 
-    // Resolve source buffer.
+    // The caller is responsible for putting the destination subresource
+    // into ResourceBarrierState::kTransferDst beforehand via TextureBarrier.
+    this->FlushPipelineBarrier();
+
     auto const src_pool_handle = resource_pool::ResourceHandle::FromU64(src_buffer_handle.Get());
     auto [src_hot, src_lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(src_pool_handle);
 
-    // Resolve destination texture.
     auto const dst_pool_handle = resource_pool::ResourceHandle::FromU64(dst_texture_handle.Get());
     auto [dst_hot, dst_cold, dst_lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(dst_pool_handle);
-
-    VulkanImage const& vk_image = dst_hot.GetVkImage();
-    VkImage const vk_image_handle = vk_image.handle();
-    mnexus::TextureDesc const& dst_desc = dst_cold.GetTextureDesc();
-    VkFormat const vk_format = ToVkFormat(dst_desc.format);
-
-    // Register the image and transition the target subresource to TRANSFER_DST_OPTIMAL.
-    image_layout_tracker_.RegisterImage(
-      vk_image_handle,
-      ToVkImageUsageFlags(dst_desc.usage, vk_format),
-      vk_format,
-      dst_desc.mip_level_count,
-      dst_desc.array_layer_count
-    );
-
-    image_layout_tracker_.TransitionRangeToTransferDst(
-      vk_image_handle,
-      { .mip_level = dst_subresource_range.base_mip_level, .array_layer = dst_subresource_range.base_array_layer },
-      dst_subresource_range.mip_level_count,
-      dst_subresource_range.array_layer_count
-    );
-
-    // Flush the layout transition barrier before the copy.
-    image_layout_tracker_.FlushPendingTransitions(pending_pipeline_barrier_);
-    pending_pipeline_barrier_.FlushAndClear(encoder_->vk_cb_handle());
 
     encoder_->CmdCopyBufferToImageSubresource(
       src_hot.vk_buffer,
@@ -268,7 +270,6 @@ public:
       copy_extent
     );
 
-    // Track referenced resources for submit-time stamping.
     referenced_resources_.push_back(src_pool_handle);
     referenced_resources_.push_back(dst_pool_handle);
   }
@@ -327,6 +328,7 @@ public:
     uint32_t workgroup_count_y,
     uint32_t workgroup_count_z
   ) override {
+    this->FlushPipelineBarrier();
     encoder_->CmdDispatchCompute(workgroup_count_x, workgroup_count_y, workgroup_count_z);
   }
 
@@ -480,8 +482,7 @@ public:
   ) override {
     // Flush any pending pipeline barriers before entering the render pass:
     // vkCmdPipelineBarrier2 is not allowed inside a dynamic rendering instance.
-    image_layout_tracker_.FlushPendingTransitions(pending_pipeline_barrier_);
-    pending_pipeline_barrier_.FlushAndClear(encoder_->vk_cb_handle());
+    this->FlushPipelineBarrier();
 
     DynamicRenderPassDesc dyn_rp_desc{};
 
@@ -887,6 +888,15 @@ private:
       auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(buffer_pool_handle);
       encoder_->CmdBindVertexBuffer(i, hot.vk_buffer.handle(), bvb.offset);
     }
+  }
+
+  /// Emits queued image-layout transitions (TextureBarrier) to the GPU.
+  /// Must be called at the start of each op that requires the GPU state to
+  /// match what the user has queued via TextureBarrier (i.e. before transfer
+  /// ops, dispatch, and BeginRenderPass; never inside a render pass).
+  void FlushPipelineBarrier() {
+    image_layout_tracker_.FlushPendingTransitions(pending_pipeline_barrier_);
+    pending_pipeline_barrier_.FlushAndClear(encoder_->vk_cb_handle());
   }
 
   /// Pushes the currently-bound index buffer to the encoder, if any.

@@ -95,4 +95,18 @@ VkImageSubresourceLayers ToVkImageSubresourceLayers(mnexus::TextureSubresourceRa
 
 VkDescriptorType ToVkDescriptorType(mnexus::BindGroupLayoutEntryType value);
 
+// ----------------------------------------------------------------------------------------------------
+// Resource barriers
+//
+
+VkPipelineStageFlags2KHR ToVkPipelineStageFlags2(mnexus::ResourceBarrierStageFlags value);
+
+/// Maps a ResourceBarrierState to the matching VkAccessFlags2KHR, masked by
+/// `stage_flags` so the result satisfies the per-stage access constraints in
+/// the Vulkan spec (e.g. DEPTH_STENCIL_ATTACHMENT_* requires EARLY/LATE
+/// FRAGMENT_TESTS; COLOR_ATTACHMENT_* requires COLOR_ATTACHMENT_OUTPUT).
+VkAccessFlags2KHR        ToVkAccessFlags2(mnexus::ResourceBarrierState state, mnexus::ResourceBarrierStageFlags stage_flags);
+
+VkImageLayout            ToVkImageLayout(mnexus::ResourceBarrierState value);
+
 } // namespace mnexus_backend::vulkan

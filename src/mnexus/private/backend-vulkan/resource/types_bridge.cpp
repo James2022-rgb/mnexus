@@ -558,4 +558,78 @@ VkDescriptorType ToVkDescriptorType(mnexus::BindGroupLayoutEntryType value) {
   return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 }
 
+// ====================================================================================================
+// Resource barriers
+//
+
+VkPipelineStageFlags2KHR ToVkPipelineStageFlags2(mnexus::ResourceBarrierStageFlags value) {
+  using B = mnexus::ResourceBarrierStageFlagBits;
+  VkPipelineStageFlags2KHR result = 0;
+  if (value.HasAnyOf(B::kDrawIndirectInput))     { result |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT_KHR; }
+  if (value.HasAnyOf(B::kVertexInput))           { result |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT_KHR; }
+  if (value.HasAnyOf(B::kVertexShader))          { result |= VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT_KHR; }
+  if (value.HasAnyOf(B::kEarlyFragmentTests))    { result |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT_KHR; }
+  if (value.HasAnyOf(B::kFragmentShader))        { result |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT_KHR; }
+  if (value.HasAnyOf(B::kLateFragmentTests))     { result |= VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT_KHR; }
+  if (value.HasAnyOf(B::kColorAttachmentOutput)) { result |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR; }
+  if (value.HasAnyOf(B::kComputeIndirectInput))  { result |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT_KHR; }
+  if (value.HasAnyOf(B::kComputeShader))         { result |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR; }
+  if (value.HasAnyOf(B::kTransfer))              { result |= VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT_KHR; }
+  return result;
+}
+
+VkAccessFlags2KHR ToVkAccessFlags2(
+  mnexus::ResourceBarrierState state,
+  mnexus::ResourceBarrierStageFlags stage_flags
+) {
+  using B = mnexus::ResourceBarrierStageFlagBits;
+  switch (state) {
+  case mnexus::ResourceBarrierState::kIndirectArgument: return VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT_KHR;
+  case mnexus::ResourceBarrierState::kIndexBuffer:      return VK_ACCESS_2_INDEX_READ_BIT_KHR;
+  case mnexus::ResourceBarrierState::kVertexBuffer:     return VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT_KHR;
+  case mnexus::ResourceBarrierState::kUniformBuffer:    return VK_ACCESS_2_UNIFORM_READ_BIT_KHR;
+  case mnexus::ResourceBarrierState::kReadOnly:         return VK_ACCESS_2_SHADER_READ_BIT_KHR;
+  case mnexus::ResourceBarrierState::kAttachment: {
+    // Attachment access flags split by stage: depth/stencil access requires
+    // EARLY/LATE_FRAGMENT_TESTS, color access requires COLOR_ATTACHMENT_OUTPUT
+    // (per VUID-VkImageMemoryBarrier2-dst{Stage,Access}Mask-*).
+    VkAccessFlags2KHR result = 0;
+    if (stage_flags.HasAnyOf(B::kColorAttachmentOutput)) {
+      result |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT_KHR
+              | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR;
+    }
+    if (stage_flags.HasAnyOf(B::kEarlyFragmentTests) ||
+        stage_flags.HasAnyOf(B::kLateFragmentTests)) {
+      result |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT_KHR
+              | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT_KHR;
+    }
+    return result;
+  }
+  case mnexus::ResourceBarrierState::kUnorderedAccess:  return VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR
+                                                             | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR;
+  case mnexus::ResourceBarrierState::kTransferSrc:      return VK_ACCESS_2_TRANSFER_READ_BIT_KHR;
+  case mnexus::ResourceBarrierState::kTransferDst:      return VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR;
+  }
+  MBASE_LOG_ERROR("Unknown mnexus::ResourceBarrierState value");
+  return 0;
+}
+
+VkImageLayout ToVkImageLayout(mnexus::ResourceBarrierState value) {
+  switch (value) {
+  case mnexus::ResourceBarrierState::kIndirectArgument:
+  case mnexus::ResourceBarrierState::kIndexBuffer:
+  case mnexus::ResourceBarrierState::kVertexBuffer:
+  case mnexus::ResourceBarrierState::kUniformBuffer:
+    // Buffer-only states; the layout value is unused for buffer barriers.
+    return VK_IMAGE_LAYOUT_UNDEFINED;
+  case mnexus::ResourceBarrierState::kReadOnly:        return VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
+  case mnexus::ResourceBarrierState::kAttachment:      return VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR;
+  case mnexus::ResourceBarrierState::kUnorderedAccess: return VK_IMAGE_LAYOUT_GENERAL;
+  case mnexus::ResourceBarrierState::kTransferSrc:     return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  case mnexus::ResourceBarrierState::kTransferDst:     return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  }
+  MBASE_LOG_ERROR("Unknown mnexus::ResourceBarrierState value");
+  return VK_IMAGE_LAYOUT_UNDEFINED;
+}
+
 } // namespace mnexus_backend::vulkan

@@ -789,9 +789,34 @@ public:
   );
 
   //
+  // Pipeline Barriers
+  //
+
+  /// Records a layout / synchronization transition for a texture's
+  /// subresource range. The transition is queued and emitted at the next
+  /// safe sync point (e.g. the start of a render pass).
+  ///
+  /// The user is responsible for calling `TextureBarrier` to put a
+  /// resource into the state required by upcoming operations. Each op's
+  /// doc comment specifies its required state.
+  ///
+  /// Pipeline barriers are not allowed inside a render pass instance, so
+  /// `TextureBarrier` MUST be called outside of a render pass scope.
+  _MNEXUS_VAPI(void, TextureBarrier,
+    TextureHandle texture_handle,
+    TextureSubresourceRange const& subresource_range,
+    ResourceBarrierStageFlags dst_stage_flags,
+    ResourceBarrierState dst_state
+  );
+
+  //
   // Transfer
   //
 
+  /// Clears a texture's subresource range to the given value.
+  ///
+  /// - State: target subresource range MUST be in `ResourceBarrierState::kTransferDst`.
+  /// - Stage: `ResourceBarrierStageFlagBits::kTransfer`.
   _MNEXUS_VAPI(void, ClearTexture,
     TextureHandle texture_handle,
     TextureSubresourceRange const& subresource_range,

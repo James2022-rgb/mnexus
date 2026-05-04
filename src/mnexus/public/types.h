@@ -267,6 +267,41 @@ typedef struct MnTextureSubresourceRange _MN_FINAL {
 } MnTextureSubresourceRange;
 
 // ----------------------------------------------------------------------------------------------------
+// Resource barrier state / stage
+//
+
+typedef uint8_t MnResourceBarrierState;
+enum {
+  MnResourceBarrierStateIndirectArgument = 0,
+  MnResourceBarrierStateIndexBuffer,
+  MnResourceBarrierStateVertexBuffer,
+  MnResourceBarrierStateUniformBuffer,
+  MnResourceBarrierStateReadOnly,
+  MnResourceBarrierStateAttachment,
+  MnResourceBarrierStateUnorderedAccess,
+  MnResourceBarrierStateTransferSrc,
+  MnResourceBarrierStateTransferDst,
+};
+
+typedef enum MnResourceBarrierStageFlagBits {
+  MnResourceBarrierStageFlagBitDrawIndirectInput     = 1 << 0,
+  MnResourceBarrierStageFlagBitVertexInput           = 1 << 1,
+  MnResourceBarrierStageFlagBitVertexShader          = 1 << 2,
+  MnResourceBarrierStageFlagBitEarlyFragmentTests    = 1 << 3,
+  MnResourceBarrierStageFlagBitFragmentShader        = 1 << 4,
+  MnResourceBarrierStageFlagBitLateFragmentTests     = 1 << 5,
+  MnResourceBarrierStageFlagBitColorAttachmentOutput = 1 << 6,
+
+  MnResourceBarrierStageFlagBitComputeIndirectInput  = 1 << 7,
+  MnResourceBarrierStageFlagBitComputeShader         = 1 << 8,
+
+  MnResourceBarrierStageFlagBitTransfer              = 1 << 9,
+
+  MnResourceBarrierStageFlagBitForce32 = 0x7FFFFFFF,
+} MnResourceBarrierStageFlagBits;
+typedef uint32_t MnResourceBarrierStageFlags;
+
+// ----------------------------------------------------------------------------------------------------
 // Format
 //
 
@@ -964,6 +999,61 @@ struct TextureSubresourceRange final {
   [[nodiscard]] static TextureSubresourceRange SingleSubresource(TextureAspectFlags aspect_mask, uint32_t base_mip_level, uint32_t base_array_layer);
 };
 _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(TextureSubresourceRange, MnTextureSubresourceRange);
+
+// ----------------------------------------------------------------------------------------------------
+// Resource barrier state / stage
+//
+
+/// Abstract resource state. Used by `ICommandList::TextureBarrier` to express
+/// the destination state for an upcoming layout transition.
+enum class ResourceBarrierState : uint8_t {
+  kIndirectArgument = MnResourceBarrierStateIndirectArgument,
+  kIndexBuffer      = MnResourceBarrierStateIndexBuffer,
+  kVertexBuffer     = MnResourceBarrierStateVertexBuffer,
+  kUniformBuffer    = MnResourceBarrierStateUniformBuffer,
+  /// Sampled image, read-only storage, or shader read-only buffer.
+  kReadOnly         = MnResourceBarrierStateReadOnly,
+  /// Color or depth-stencil attachment in a render pass.
+  kAttachment       = MnResourceBarrierStateAttachment,
+  /// Storage image or storage buffer with read-write access.
+  kUnorderedAccess  = MnResourceBarrierStateUnorderedAccess,
+  /// Source for copy/blit/clear operations.
+  kTransferSrc      = MnResourceBarrierStateTransferSrc,
+  /// Destination for copy/blit/clear operations.
+  kTransferDst      = MnResourceBarrierStateTransferDst,
+};
+
+/// Pipeline-stage bits used by `ICommandList::TextureBarrier` to specify
+/// the destination scope of an upcoming layout transition.
+enum class ResourceBarrierStageFlagBits : uint32_t {
+  kDrawIndirectInput     = MnResourceBarrierStageFlagBitDrawIndirectInput,
+  kVertexInput           = MnResourceBarrierStageFlagBitVertexInput,
+  kVertexShader          = MnResourceBarrierStageFlagBitVertexShader,
+  kEarlyFragmentTests    = MnResourceBarrierStageFlagBitEarlyFragmentTests,
+  kFragmentShader        = MnResourceBarrierStageFlagBitFragmentShader,
+  kLateFragmentTests     = MnResourceBarrierStageFlagBitLateFragmentTests,
+  kColorAttachmentOutput = MnResourceBarrierStageFlagBitColorAttachmentOutput,
+
+  kComputeIndirectInput  = MnResourceBarrierStageFlagBitComputeIndirectInput,
+  kComputeShader         = MnResourceBarrierStageFlagBitComputeShader,
+
+  kTransfer              = MnResourceBarrierStageFlagBitTransfer,
+
+  kFragmentTestsBits = kEarlyFragmentTests | kLateFragmentTests,
+
+  kGraphicsBits = kDrawIndirectInput
+                | kVertexInput
+                | kVertexShader
+                | kEarlyFragmentTests
+                | kFragmentShader
+                | kLateFragmentTests
+                | kColorAttachmentOutput,
+
+  kComputeBits  = kComputeIndirectInput
+                | kComputeShader,
+};
+MBASE_DEFINE_ENUM_CLASS_BITFLAGS_OPERATORS(ResourceBarrierStageFlagBits);
+using ResourceBarrierStageFlags = mbase::BitFlags<ResourceBarrierStageFlagBits>;
 
 // ----------------------------------------------------------------------------------------------------
 // Format (C++ enum class referencing the C MnFormat values)

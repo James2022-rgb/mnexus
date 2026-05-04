@@ -83,6 +83,17 @@ public:
   IMPL_VAPI(void, PopDebugGroup);
 
   //
+  // Pipeline Barriers
+  //
+
+  IMPL_VAPI(void, TextureBarrier,
+    mnexus::TextureHandle texture_handle,
+    mnexus::TextureSubresourceRange const& subresource_range,
+    mnexus::ResourceBarrierStageFlags dst_stage_flags,
+    mnexus::ResourceBarrierState dst_state
+  );
+
+  //
   // Transfer
   //
 

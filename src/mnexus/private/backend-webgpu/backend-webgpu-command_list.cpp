@@ -72,6 +72,20 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::PopDebugGroup() {
 }
 
 //
+// Pipeline Barriers
+//
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::TextureBarrier(
+  mnexus::TextureHandle /*texture_handle*/,
+  mnexus::TextureSubresourceRange const& /*subresource_range*/,
+  mnexus::ResourceBarrierStageFlags /*dst_stage_flags*/,
+  mnexus::ResourceBarrierState /*dst_state*/
+) {
+  // WebGPU manages resource state and synchronization implicitly; the
+  // mnexus barrier API is a no-op on this backend.
+}
+
+//
 // Transfer
 //
 
