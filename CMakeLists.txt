@@ -605,6 +605,15 @@ target_link_libraries(${TARGET_NAME} PUBLIC
   mbase
 )
 
+# Dear ImGui (optional). If the consuming project provides a `dear_imgui`
+# target, link it transitively and set MNEXUS_HAVE_DEAR_IMGUI=1.
+if(TARGET dear_imgui)
+  target_link_libraries(${TARGET_NAME} PUBLIC dear_imgui)
+  set(_have_dear_imgui 1)
+else()
+  set(_have_dear_imgui 0)
+endif()
+
 target_include_directories(${TARGET_NAME} PRIVATE
   ${_private_root_dir}
 )
@@ -615,6 +624,7 @@ target_include_directories(${TARGET_NAME} PUBLIC
 target_compile_definitions(${TARGET_NAME} PUBLIC
   MNEXUS_ENABLE_BACKEND_WGPU=$<BOOL:${MNEXUS_ENABLE_BACKEND_WGPU}>
   MNEXUS_ENABLE_BACKEND_VULKAN=$<BOOL:${_enable_backend_vulkan}>
+  MNEXUS_HAVE_DEAR_IMGUI=${_have_dear_imgui}
 )
 
 target_compile_definitions(${TARGET_NAME} PRIVATE

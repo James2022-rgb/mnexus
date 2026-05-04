@@ -40,8 +40,13 @@ public:
           vkDestroyDescriptorPool(vk_device, vk_pool, nullptr);
         }
       }
-      per_layout_states_.clear();
+
+      // Mark shutdown BEFORE clearing the map. The clear() chains into
+      // ~VulkanDescriptorSet for each cached set, whose destroy_func
+      // re-enters FreeImpl(); FreeImpl checks `device_` and short-circuits
+      // so we don't modify the map while it is being destroyed.
       device_ = nullptr;
+      per_layout_states_.clear();
     }
 
     delete this;
@@ -76,34 +81,64 @@ public:
     // Build VkWriteDescriptorSet from write_desc and update.
     std::span<DescriptorWriteDesc const> descs = write_desc.GetDenseDescriptorWriteDescs();
 
+    // The buffer/image info storage backs the pBufferInfo / pImageInfo pointers
+    // referenced by the writes; reserve up-front so emplaces don't invalidate them.
     mbase::SmallVector<VkWriteDescriptorSet, 4> writes;
     mbase::SmallVector<VkDescriptorBufferInfo, 4> buffer_infos;
+    mbase::SmallVector<VkDescriptorImageInfo, 4> image_infos;
     writes.reserve(descs.size());
     buffer_infos.reserve(descs.size());
+    image_infos.reserve(descs.size());
 
     for (auto const& desc : descs) {
-      buffer_infos.emplace_back(
-        VkDescriptorBufferInfo {
-          .buffer = desc.value.buffer.buffer,
-          .offset = desc.value.buffer.offset,
-          .range = desc.value.buffer.range,
-        }
-      );
+      VkWriteDescriptorSet write {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .pNext = nullptr,
+        .dstSet = vk_set,
+        .dstBinding = desc.binding,
+        .dstArrayElement = desc.array_element,
+        .descriptorCount = 1,
+        .descriptorType = desc.descriptor_type,
+        .pImageInfo = nullptr,
+        .pBufferInfo = nullptr,
+        .pTexelBufferView = nullptr,
+      };
 
-      writes.emplace_back(
-        VkWriteDescriptorSet {
-          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-          .pNext = nullptr,
-          .dstSet = vk_set,
-          .dstBinding = desc.binding,
-          .dstArrayElement = desc.array_element,
-          .descriptorCount = 1,
-          .descriptorType = desc.descriptor_type,
-          .pImageInfo = nullptr,
-          .pBufferInfo = &buffer_infos.back(),
-          .pTexelBufferView = nullptr,
-        }
-      );
+      switch (desc.descriptor_type) {
+      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+        buffer_infos.emplace_back(
+          VkDescriptorBufferInfo {
+            .buffer = desc.value.buffer.buffer,
+            .offset = desc.value.buffer.offset,
+            .range = desc.value.buffer.range,
+          }
+        );
+        write.pBufferInfo = &buffer_infos.back();
+        break;
+
+      case VK_DESCRIPTOR_TYPE_SAMPLER:
+      case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+      case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+      case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+        image_infos.emplace_back(
+          VkDescriptorImageInfo {
+            .sampler = desc.value.image.sampler,
+            .imageView = desc.value.image.image_view,
+            .imageLayout = desc.value.image.image_layout,
+          }
+        );
+        write.pImageInfo = &image_infos.back();
+        break;
+
+      default:
+        MBASE_LOG_ERROR("Unhandled VkDescriptorType {} in IDescriptorSetAllocator::Allocate", static_cast<int32_t>(desc.descriptor_type));
+        continue;
+      }
+
+      writes.emplace_back(write);
     }
 
     vkUpdateDescriptorSets(
@@ -141,6 +176,12 @@ public:
 private:
   void FreeImpl(VkDescriptorSetLayout layout_handle, VkDescriptorSet set) {
     mbase::LockGuard lock(mutex_);
+
+    // After Shutdown() begins, `device_` is nullptr; the descriptor pools
+    // are destroyed and `per_layout_states_` is mid-clear. Skip cleanly.
+    if (device_ == nullptr) {
+      return;
+    }
 
     auto it = per_layout_states_.find(layout_handle);
     if (it != per_layout_states_.end()) {

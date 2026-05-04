@@ -30,6 +30,11 @@ public:
 
   virtual mnexus::IDevice* GetDevice() = 0;
 
+  // ----------------------------------------------------------------------------------------------
+  // Debug UI
+
+  virtual void ShowDebugUi() = 0;
+
 protected:
   IBackend() = default;
 };

@@ -3,6 +3,7 @@
 
 // c++ headers ------------------------------------------
 #include <array>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -364,18 +365,98 @@ public:
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL BindSampledTexture(
-    mnexus::BindingId const& /*id*/,
-    mnexus::TextureHandle /*texture_handle*/,
-    mnexus::TextureSubresourceRange const& /*subresource_range*/
+    mnexus::BindingId const& id,
+    mnexus::TextureHandle texture_handle,
+    mnexus::TextureSubresourceRange const& subresource_range
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    // Pre-condition: the texture's subresource range MUST already be in
+    // VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR. machina/folgos-style: this
+    // call only writes the descriptor and does not queue a layout
+    // transition (pipeline barriers cannot be issued inside a dynamic
+    // rendering instance). The default layout for SAMPLED textures is
+    // READ_ONLY_OPTIMAL_KHR, so freshly-created textures are fine; for
+    // textures that may be in another layout (e.g. just after a copy)
+    // the caller is responsible via a future explicit barrier API.
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(texture_handle.Get());
+    auto [hot, cold, lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(pool_handle);
+
+    VulkanImage const& vk_image = hot.GetVkImage();
+    VkImage const vk_image_handle = vk_image.handle();
+    mnexus::TextureDesc const& desc = cold.GetTextureDesc();
+    VkFormat const vk_format = ToVkFormat(desc.format);
+    VkImageSubresourceRange const vk_subresource_range = ToVkImageSubresourceRange(subresource_range);
+
+    constexpr VkImageLayout kShaderReadLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
+
+    // Get/create a VkImageView via the cache.
+    auto make_vk_image_view = [this](ImageViewCacheKey const& key) {
+      VkImageViewCreateInfo const create_info{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .image = key.vk_image,
+        .viewType = key.view_type,
+        .format = key.format,
+        .components = VkComponentMapping {
+          .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+          .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+          .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+          .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+        },
+        .subresourceRange = key.subresource_range,
+      };
+
+      VkImageView vk_image_view_handle = VK_NULL_HANDLE;
+      VkResult const result = vkCreateImageView(this->vk_device_->handle(), &create_info, nullptr, &vk_image_view_handle);
+      MBASE_ASSERT(result == VK_SUCCESS);
+
+      return std::make_shared<VulkanImageView>(
+        vk_image_view_handle,
+        [vk_device = this->vk_device_, vk_image_view_handle]() {
+          vkDestroyImageView(vk_device->handle(), vk_image_view_handle, nullptr);
+        },
+        this->vk_device_->GetDeferredDestroyer()
+      );
+    };
+
+    // TODO: Image view type should be derived from the texture's TextureDimension.
+    constexpr VkImageViewType kImageViewType = VK_IMAGE_VIEW_TYPE_2D;
+
+    VulkanImageViewPtr vk_image_view = resource_storage_->image_view_cache.FindOrInsert(
+      ImageViewCacheKey {
+        .vk_image = vk_image_handle,
+        .view_type = kImageViewType,
+        .format = vk_format,
+        .subresource_range = vk_subresource_range,
+      },
+      // SAFETY: Executed immediately.
+      make_vk_image_view
+    );
+
+    encoder_->BindSampledImage(
+      id.group, id.binding, id.array_element,
+      reinterpret_cast<uint64_t>(vk_image_view->handle()),
+      vk_image_view->handle(),
+      kShaderReadLayout
+    );
+
+    referenced_resources_.push_back(pool_handle);
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL BindSampler(
-    mnexus::BindingId const& /*id*/,
-    mnexus::SamplerHandle /*sampler_handle*/
+    mnexus::BindingId const& id,
+    mnexus::SamplerHandle sampler_handle
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(sampler_handle.Get());
+    auto [hot, lock] = resource_storage_->samplers.GetHotConstRefWithSharedLockGuard(pool_handle);
+
+    encoder_->BindSampler(
+      id.group, id.binding, id.array_element,
+      sampler_handle.Get(),
+      hot.vk_sampler.handle()
+    );
+
+    referenced_resources_.push_back(pool_handle);
   }
 
   //
@@ -395,6 +476,11 @@ public:
   MNEXUS_NO_THROW void MNEXUS_CALL BeginRenderPass(
     mnexus::RenderPassDesc const& desc
   ) override {
+    // Flush any pending pipeline barriers before entering the render pass:
+    // vkCmdPipelineBarrier2 is not allowed inside a dynamic rendering instance.
+    image_layout_tracker_.FlushPendingTransitions(pending_pipeline_barrier_);
+    pending_pipeline_barrier_.FlushAndClear(encoder_->vk_cb_handle());
+
     DynamicRenderPassDesc dyn_rp_desc{};
 
     mbase::SmallVector<mnexus::Format, 4> color_formats;
@@ -498,8 +584,23 @@ public:
   MNEXUS_NO_THROW void MNEXUS_CALL BindRenderProgram(
     mnexus::ProgramHandle program_handle
   ) override {
-    referenced_resources_.push_back(resource_pool::ResourceHandle::FromU64(program_handle.Get()));
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(program_handle.Get());
+    referenced_resources_.push_back(pool_handle);
     render_pipeline_state_tracker_.SetProgram(program_handle);
+
+    // Inform the descriptor-set binder of the program's pipeline layout so
+    // that subsequent Bind*Buffer / BindSampledTexture / BindSampler calls
+    // can target the correct layout. The actual VkPipeline is not bound
+    // until Draw flush time (cache lookup).
+    auto [program_hot, program_cold, program_lock] =
+      resource_storage_->programs.GetConstRefWithSharedLockGuard(pool_handle);
+
+    VulkanPipelineLayoutPtr const& pipeline_layout_ref = program_hot.pipeline_layout_ref;
+    encoder_->AssumeRenderPipelineLayout(
+      pipeline_layout_ref->handle(),
+      pipeline_layout_ref->descriptor_set_layouts.data(),
+      static_cast<uint32_t>(pipeline_layout_ref->descriptor_set_layouts.size())
+    );
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL SetVertexInputLayout(
@@ -540,11 +641,16 @@ public:
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL BindIndexBuffer(
-    mnexus::BufferHandle /*buffer_handle*/,
-    uint64_t /*offset*/,
-    mnexus::IndexType /*index_type*/
+    mnexus::BufferHandle buffer_handle,
+    uint64_t offset,
+    mnexus::IndexType index_type
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    bound_index_buffer_ = BoundIndexBuffer {
+      .handle = buffer_handle,
+      .offset = offset,
+      .index_type = index_type,
+    };
+    referenced_resources_.push_back(resource_pool::ResourceHandle::FromU64(buffer_handle.Get()));
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL SetPrimitiveTopology(
@@ -646,10 +752,13 @@ public:
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL DrawIndexed(
-    uint32_t /*index_count*/, uint32_t /*instance_count*/,
-    uint32_t /*first_index*/, int32_t /*vertex_offset*/, uint32_t /*first_instance*/
+    uint32_t index_count, uint32_t instance_count,
+    uint32_t first_index, int32_t vertex_offset, uint32_t first_instance
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    this->FlushRenderPipeline();
+    this->FlushVertexBuffers();
+    this->FlushIndexBuffer();
+    encoder_->CmdDrawIndexed(index_count, instance_count, first_index, vertex_offset, first_instance);
   }
 
   //
@@ -657,22 +766,38 @@ public:
   //
 
   MNEXUS_NO_THROW void MNEXUS_CALL SetViewport(
-    float /*x*/, float /*y*/, float /*width*/, float /*height*/,
-    float /*min_depth*/, float /*max_depth*/
+    float x, float y, float width, float height,
+    float min_depth, float max_depth
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    encoder_->CmdSetViewport(VkViewport {
+      .x = x,
+      .y = y,
+      .width = width,
+      .height = height,
+      .minDepth = min_depth,
+      .maxDepth = max_depth,
+    });
   }
 
   MNEXUS_NO_THROW void MNEXUS_CALL SetScissor(
-    int32_t /*x*/, int32_t /*y*/, uint32_t /*width*/, uint32_t /*height*/
+    int32_t x, int32_t y, uint32_t width, uint32_t height
   ) override {
-    STUB_NOT_IMPLEMENTED();
+    encoder_->CmdSetScissor(VkRect2D {
+      .offset = VkOffset2D { .x = x, .y = y },
+      .extent = VkExtent2D { .width = width, .height = height },
+    });
   }
 
 private:
   struct BoundVertexBuffer {
     mnexus::BufferHandle handle = mnexus::BufferHandle::Invalid();
     uint64_t offset = 0;
+  };
+
+  struct BoundIndexBuffer {
+    mnexus::BufferHandle handle = mnexus::BufferHandle::Invalid();
+    uint64_t offset = 0;
+    mnexus::IndexType index_type = mnexus::IndexType::kUint16;
   };
 
   /// Resolves the dirty render pipeline state to a VkPipeline (via cache),
@@ -730,6 +855,20 @@ private:
     }
   }
 
+  /// Pushes the currently-bound index buffer to the encoder, if any.
+  void FlushIndexBuffer() {
+    if (!bound_index_buffer_.has_value() || !bound_index_buffer_->handle.IsValid()) {
+      return;
+    }
+    auto const buffer_pool_handle = resource_pool::ResourceHandle::FromU64(bound_index_buffer_->handle.Get());
+    auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(buffer_pool_handle);
+    encoder_->CmdBindIndexBuffer(
+      hot.vk_buffer.handle(),
+      bound_index_buffer_->offset,
+      ToVkIndexType(bound_index_buffer_->index_type)
+    );
+  }
+
   IVulkanDevice* vk_device_ = nullptr;
   VulkanCommandPool vk_command_pool_;
   ICommandEncoder* encoder_ = nullptr;
@@ -741,6 +880,7 @@ private:
 
   pipeline::RenderPipelineStateTracker render_pipeline_state_tracker_;
   mbase::SmallVector<BoundVertexBuffer, 4> bound_vertex_buffers_;
+  std::optional<BoundIndexBuffer> bound_index_buffer_;
 };
 
 } // namespace

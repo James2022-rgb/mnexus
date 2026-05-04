@@ -29,13 +29,19 @@ struct DescriptorBufferValue final {
   VkDeviceSize range;
 };
 
+struct DescriptorImageValue final {
+  VkImageView image_view; // VK_NULL_HANDLE for VK_DESCRIPTOR_TYPE_SAMPLER
+  VkSampler sampler;      // VK_NULL_HANDLE for VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE
+  VkImageLayout image_layout;
+};
+
 struct DescriptorWriteDesc final {
   uint32_t binding;
   uint32_t array_element;
   VkDescriptorType descriptor_type;
   union {
     DescriptorBufferValue buffer;
-    // TODO: DescriptorCombinedImageSamplerValue combined_image_sampler;
+    DescriptorImageValue image;
   } value;
 };
 
@@ -74,6 +80,20 @@ public:
     VkDescriptorType descriptor_type,
     uint64_t handle_id,
     VkBuffer vk_buffer, VkDeviceSize offset, VkDeviceSize range
+  );
+
+  /// Writes a SAMPLED_IMAGE descriptor value.
+  ReallocationNeeded SetSampledImageDescriptorValue(
+    uint32_t binding, uint32_t array_element,
+    uint64_t image_view_handle_id,
+    VkImageView vk_image_view, VkImageLayout image_layout
+  );
+
+  /// Writes a SAMPLER descriptor value.
+  ReallocationNeeded SetSamplerDescriptorValue(
+    uint32_t binding, uint32_t array_element,
+    uint64_t sampler_handle_id,
+    VkSampler vk_sampler
   );
 
   // TODO: SetCombinedImageSamplerDescriptorValue

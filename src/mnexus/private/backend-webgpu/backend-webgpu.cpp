@@ -23,6 +23,11 @@
 # include <emscripten/html5.h>
 #endif
 
+// external headers -------------------------------------
+#if MNEXUS_HAVE_DEAR_IMGUI
+# include "imgui.h"
+#endif
+
 // public project headers -------------------------------
 #include "mbase/public/log.h"
 #include "mbase/public/assert.h"
@@ -1021,31 +1026,6 @@ public:
     );
 
     mnexus_device_.OnWgpuSurfaceTextureAcquired(surface_texture.texture);
-
-    return;
-
-    wgpu::RenderPassColorAttachment attachment {
-      .view = surface_texture.texture.CreateView(),
-      .resolveTarget = nullptr,
-      .loadOp = wgpu::LoadOp::Clear,
-      .storeOp = wgpu::StoreOp::Store,
-      .clearValue = { 1.0f, 0.0f, 0.0f, 1.0f },
-    };
-
-    wgpu::RenderPassDescriptor desc {
-        .colorAttachmentCount = 1,
-        .colorAttachments = &attachment,
-        .depthStencilAttachment = nullptr,
-    };
-
-    wgpu::CommandEncoder encoder = device_.CreateCommandEncoder(nullptr);
-    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&desc);
-    pass.End();
-
-    wgpu::CommandBuffer command_buffer = encoder.Finish();
-    device_.GetQueue().Submit(1, &command_buffer);
-
-
   }
 
   void OnPresentEpilogue() override {
@@ -1063,6 +1043,15 @@ public:
 
   mnexus::IDevice* GetDevice() override {
     return &mnexus_device_;
+  }
+
+  // ----------------------------------------------------------------------------------------------
+  // Debug UI.
+
+  void ShowDebugUi() override {
+#if MNEXUS_HAVE_DEAR_IMGUI
+    ImGui::Text("PLACEHOLDER: WebGPU backend debug UI is not implemented yet.");
+#endif
   }
 
 private:

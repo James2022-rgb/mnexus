@@ -101,6 +101,46 @@ void DescriptorSetBinder::SetBuffer(
   set_reallocation_needed_[set] = set_reallocation_needed_[set] || reallocation_needed.value;
 }
 
+void DescriptorSetBinder::SetSampledImage(
+  uint32_t set, uint32_t binding, uint32_t array_element,
+  uint64_t image_view_handle_id,
+  VkImageView vk_image_view, VkImageLayout image_layout
+) {
+  if (set >= kMaxSets) {
+    MBASE_LOG_ERROR(
+      "DescriptorSetBinder: set index {} exceeds max of {}. SetSampledImage(({}, {}, {}), {})",
+      set, kMaxSets - 1, set, binding, array_element, image_view_handle_id
+    );
+    return;
+  }
+
+  set_explicit_flag_[set] = false;
+
+  DescriptorSetWriteDesc::ReallocationNeeded const reallocation_needed =
+    set_write_descs_[set].SetSampledImageDescriptorValue(binding, array_element, image_view_handle_id, vk_image_view, image_layout);
+  set_reallocation_needed_[set] = set_reallocation_needed_[set] || reallocation_needed.value;
+}
+
+void DescriptorSetBinder::SetSampler(
+  uint32_t set, uint32_t binding, uint32_t array_element,
+  uint64_t sampler_handle_id,
+  VkSampler vk_sampler
+) {
+  if (set >= kMaxSets) {
+    MBASE_LOG_ERROR(
+      "DescriptorSetBinder: set index {} exceeds max of {}. SetSampler(({}, {}, {}), {})",
+      set, kMaxSets - 1, set, binding, array_element, sampler_handle_id
+    );
+    return;
+  }
+
+  set_explicit_flag_[set] = false;
+
+  DescriptorSetWriteDesc::ReallocationNeeded const reallocation_needed =
+    set_write_descs_[set].SetSamplerDescriptorValue(binding, array_element, sampler_handle_id, vk_sampler);
+  set_reallocation_needed_[set] = set_reallocation_needed_[set] || reallocation_needed.value;
+}
+
 void DescriptorSetBinder::CmdBindDescriptorSets(
   VkCommandBuffer command_buffer,
   VkPipelineBindPoint bind_point,

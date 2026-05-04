@@ -197,6 +197,11 @@ public:
   ///   `INexus` instance. The caller **MUST NOT** delete the returned pointer.
   _MNEXUS_VAPI(IDevice*, GetDevice);
 
+  // ----------------------------------------------------------------------------------------------
+  // Debug UI
+
+  _MNEXUS_VAPI(void, ShowDebugUi);
+
 protected:
   INexus() = default;
 };

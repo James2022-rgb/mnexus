@@ -319,6 +319,15 @@ public:
     gfx_state_.rp_state = std::monostate{};
   }
 
+  void AssumeRenderPipelineLayout(
+    VkPipelineLayout layout,
+    VulkanDescriptorSetLayout const* descriptor_set_layouts,
+    uint32_t descriptor_set_count
+  ) override {
+    current_pipeline_layout_ = layout;
+    descriptor_set_binder_.AssumePipelineLayout(layout, descriptor_set_layouts, descriptor_set_count);
+  }
+
   void BindRenderPipeline(
     VkPipeline pipeline,
     VkPipelineLayout layout,
@@ -329,6 +338,8 @@ public:
 
     vkCmdBindPipeline(vk_cb_handle_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
+    // Layout was already assumed at BindRenderProgram time; this is a
+    // no-op when the layout matches (binder early-returns).
     descriptor_set_binder_.AssumePipelineLayout(layout, descriptor_set_layouts, descriptor_set_count);
   }
 
@@ -392,6 +403,22 @@ public:
     VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range
   ) override {
     descriptor_set_binder_.SetBuffer(set, binding, array_element, descriptor_type, handle_id, buffer, offset, range);
+  }
+
+  void BindSampledImage(
+    uint32_t set, uint32_t binding, uint32_t array_element,
+    uint64_t image_view_handle_id,
+    VkImageView image_view, VkImageLayout image_layout
+  ) override {
+    descriptor_set_binder_.SetSampledImage(set, binding, array_element, image_view_handle_id, image_view, image_layout);
+  }
+
+  void BindSampler(
+    uint32_t set, uint32_t binding, uint32_t array_element,
+    uint64_t sampler_handle_id,
+    VkSampler sampler
+  ) override {
+    descriptor_set_binder_.SetSampler(set, binding, array_element, sampler_handle_id, sampler);
   }
 
 private:

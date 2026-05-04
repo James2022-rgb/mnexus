@@ -117,6 +117,17 @@ public:
   /// Inside. Ends the current render pass scope.
   virtual void CmdEndRendering() = 0;
 
+  /// Tells the encoder that the upcoming descriptor-set / push-constant
+  /// writes target this pipeline layout. Called when the user binds a
+  /// render program -- before any Bind*Buffer / BindSampledImage /
+  /// BindSampler calls. The actual VkPipeline is bound later via
+  /// `BindRenderPipeline` at draw flush time.
+  virtual void AssumeRenderPipelineLayout(
+    VkPipelineLayout layout,
+    VulkanDescriptorSetLayout const* descriptor_set_layouts,
+    uint32_t descriptor_set_count
+  ) = 0;
+
   /// Binds a graphics pipeline. The descriptor_set_layouts must match the
   /// pipeline layout. Same shape as `BindComputePipeline`.
   virtual void BindRenderPipeline(
@@ -173,6 +184,18 @@ public:
     uint32_t set, uint32_t binding, uint32_t array_element,
     VkDescriptorType descriptor_type, uint64_t handle_id,
     VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range
+  ) = 0;
+
+  virtual void BindSampledImage(
+    uint32_t set, uint32_t binding, uint32_t array_element,
+    uint64_t image_view_handle_id,
+    VkImageView image_view, VkImageLayout image_layout
+  ) = 0;
+
+  virtual void BindSampler(
+    uint32_t set, uint32_t binding, uint32_t array_element,
+    uint64_t sampler_handle_id,
+    VkSampler sampler
   ) = 0;
 
 protected:

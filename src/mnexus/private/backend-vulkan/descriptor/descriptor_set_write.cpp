@@ -73,6 +73,48 @@ DescriptorSetWriteDesc::ReallocationNeeded DescriptorSetWriteDesc::SetBufferDesc
   return this->SetHashedState(descriptor_index, hashed_state);
 }
 
+DescriptorSetWriteDesc::ReallocationNeeded DescriptorSetWriteDesc::SetSampledImageDescriptorValue(
+  uint32_t binding, uint32_t array_element,
+  uint64_t image_view_handle_id,
+  VkImageView vk_image_view, VkImageLayout image_layout
+) {
+  uint32_t const descriptor_index = this->GetBindingDescriptorIndex(binding, array_element);
+
+  DescriptorWriteDesc& write_desc = this->GetDescriptorWriteDesc(descriptor_index);
+  write_desc.binding = binding;
+  write_desc.array_element = array_element;
+  write_desc.descriptor_type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+  write_desc.value.image = { vk_image_view, VK_NULL_HANDLE, image_layout };
+
+  DescriptorHashedState const hashed_state {
+    .value_0 = image_view_handle_id,
+    .value_1 = 0,
+    .value_2 = static_cast<uint64_t>(image_layout),
+  };
+  return this->SetHashedState(descriptor_index, hashed_state);
+}
+
+DescriptorSetWriteDesc::ReallocationNeeded DescriptorSetWriteDesc::SetSamplerDescriptorValue(
+  uint32_t binding, uint32_t array_element,
+  uint64_t sampler_handle_id,
+  VkSampler vk_sampler
+) {
+  uint32_t const descriptor_index = this->GetBindingDescriptorIndex(binding, array_element);
+
+  DescriptorWriteDesc& write_desc = this->GetDescriptorWriteDesc(descriptor_index);
+  write_desc.binding = binding;
+  write_desc.array_element = array_element;
+  write_desc.descriptor_type = VK_DESCRIPTOR_TYPE_SAMPLER;
+  write_desc.value.image = { VK_NULL_HANDLE, vk_sampler, VK_IMAGE_LAYOUT_UNDEFINED };
+
+  DescriptorHashedState const hashed_state {
+    .value_0 = 0,
+    .value_1 = sampler_handle_id,
+    .value_2 = 0,
+  };
+  return this->SetHashedState(descriptor_index, hashed_state);
+}
+
 size_t DescriptorSetWriteDesc::ComputeHash() {
   if (std::exchange(hash_dirty_, false)) {
     mbase::HasherSizeT hasher;

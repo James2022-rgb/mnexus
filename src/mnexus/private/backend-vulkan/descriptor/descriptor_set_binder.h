@@ -46,6 +46,20 @@ public:
     VkBuffer vk_buffer_handle, VkDeviceSize offset, VkDeviceSize range
   );
 
+  /// Set a SAMPLED_IMAGE binding.
+  void SetSampledImage(
+    uint32_t set, uint32_t binding, uint32_t array_element,
+    uint64_t image_view_handle_id,
+    VkImageView vk_image_view, VkImageLayout image_layout
+  );
+
+  /// Set a SAMPLER binding.
+  void SetSampler(
+    uint32_t set, uint32_t binding, uint32_t array_element,
+    uint64_t sampler_handle_id,
+    VkSampler vk_sampler
+  );
+
   /// Resolve dirty sets and emit vkCmdBindDescriptorSets.
   void CmdBindDescriptorSets(
     VkCommandBuffer command_buffer,

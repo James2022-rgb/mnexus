@@ -72,6 +72,13 @@ public:
     return backend_->GetDevice();
   }
 
+  // ----------------------------------------------------------------------------------------------
+  // Debug UI
+
+  MNEXUS_NO_THROW void MNEXUS_CALL ShowDebugUi() override {
+    backend_->ShowDebugUi();
+  }
+
 private:
   std::unique_ptr<mnexus_backend::IBackend> backend_;
   bool headless_ = false;
