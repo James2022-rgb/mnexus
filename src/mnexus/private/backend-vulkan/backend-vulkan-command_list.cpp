@@ -125,7 +125,7 @@ public:
   // mnexus::ICommandList implementation
   //
 
-  MNEXUS_NO_THROW void MNEXUS_CALL End() override {
+  IMPL_VAPI(void, End) {
     // Transition all tracked images back to their default layouts before finalizing.
     image_layout_tracker_.TransitionAllToDefaults();
     this->FlushPipelineBarrier();
@@ -137,7 +137,7 @@ public:
   // Diagnostics
   //
 
-  MNEXUS_NO_THROW mnexus::RenderStateEventLog& MNEXUS_CALL GetStateEventLog() override {
+  IMPL_VAPI(mnexus::RenderStateEventLog&, GetStateEventLog) {
     return render_state_event_log_;
   }
 
@@ -145,9 +145,9 @@ public:
   // Debug Markers
   //
 
-  MNEXUS_NO_THROW void MNEXUS_CALL PushDebugGroup(
+  IMPL_VAPI(void, PushDebugGroup,
     mnexus::container::ArrayProxy<char const> name, float const* color
-  ) override {
+  ) {
     if (vkCmdBeginDebugUtilsLabelEXT != nullptr) {
       // `VkDebugUtilsLabelEXT` expects a null-terminated string, but `name` may not be null-terminated. Create a temporary null-terminated string for this call.
       std::string name_str(name.data(), name.size());
@@ -170,7 +170,7 @@ public:
     }
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL PopDebugGroup() override {
+  IMPL_VAPI(void, PopDebugGroup) {
     if (vkCmdEndDebugUtilsLabelEXT != nullptr) {
       vkCmdEndDebugUtilsLabelEXT(encoder_->vk_cb_handle());
     }
@@ -180,12 +180,12 @@ public:
   // Pipeline Barriers
   //
 
-  MNEXUS_NO_THROW void MNEXUS_CALL TextureBarrier(
+  IMPL_VAPI(void, TextureBarrier,
     mnexus::TextureHandle texture_handle,
     mnexus::TextureSubresourceRange const& subresource_range,
     mnexus::ResourceBarrierStageFlags dst_stage_flags,
     mnexus::ResourceBarrierState dst_state
-  ) override {
+  ) {
     auto const pool_handle = resource_pool::ResourceHandle::FromU64(texture_handle.Get());
     auto [hot, cold, lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(pool_handle);
 
@@ -226,11 +226,11 @@ public:
   // Transfer
   //
 
-  MNEXUS_NO_THROW void MNEXUS_CALL ClearTexture(
+  IMPL_VAPI(void, ClearTexture,
     mnexus::TextureHandle texture_handle,
     mnexus::TextureSubresourceRange const& subresource_range,
     mnexus::ClearValue const& clear_value
-  ) override {
+  ) {
     // The caller is responsible for putting the target subresource into
     // ResourceBarrierState::kTransferDst beforehand via TextureBarrier.
     this->FlushPipelineBarrier();
@@ -243,13 +243,13 @@ public:
     referenced_resources_.push_back(pool_handle);
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL CopyBufferToTexture(
+  IMPL_VAPI(void, CopyBufferToTexture,
     mnexus::BufferHandle src_buffer_handle,
     uint32_t src_buffer_offset,
     mnexus::TextureHandle dst_texture_handle,
     mnexus::TextureSubresourceRange const& dst_subresource_range,
     mnexus::Extent3d const& copy_extent
-  ) override {
+  ) {
     MBASE_ASSERT(dst_subresource_range.mip_level_count == 1);
 
     // The caller is responsible for putting the destination subresource
@@ -274,17 +274,17 @@ public:
     referenced_resources_.push_back(dst_pool_handle);
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL CopyTextureToBuffer(
+  IMPL_VAPI(void, CopyTextureToBuffer,
     mnexus::TextureHandle /*src_texture_handle*/,
     mnexus::TextureSubresourceRange const& /*src_subresource_range*/,
     mnexus::BufferHandle /*dst_buffer_handle*/,
     uint32_t /*dst_buffer_offset*/,
     mnexus::Extent3d const& /*copy_extent*/
-  ) override {
+  ) {
     STUB_NOT_IMPLEMENTED();
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL BlitTexture(
+  IMPL_VAPI(void, BlitTexture,
     mnexus::TextureHandle src_texture_handle,
     mnexus::TextureSubresourceRange const& src_subresource_range,
     mnexus::Offset3d const& src_offset,
@@ -294,7 +294,7 @@ public:
     mnexus::Offset3d const& dst_offset,
     mnexus::Extent3d const& dst_extent,
     mnexus::Filter filter
-  ) override {
+  ) {
     // Caller is required to have transitioned src into kTransferSrc and dst
     // into kTransferDst via TextureBarrier.
     this->FlushPipelineBarrier();
@@ -355,9 +355,9 @@ public:
   // Compute
   //
 
-  MNEXUS_NO_THROW void MNEXUS_CALL BindExplicitComputePipeline(
+  IMPL_VAPI(void, BindExplicitComputePipeline,
     mnexus::ComputePipelineHandle compute_pipeline_handle
-  ) override {
+  ) {
     auto const pool_handle = resource_pool::ResourceHandle::FromU64(compute_pipeline_handle.Get());
     auto [hot, cold, lock] = resource_storage_->compute_pipelines.GetConstRefWithSharedLockGuard(pool_handle);
 
@@ -376,11 +376,11 @@ public:
     referenced_resources_.push_back(resource_pool::ResourceHandle::FromU64(cold.shader_module_handle().Get()));
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL DispatchCompute(
+  IMPL_VAPI(void, DispatchCompute,
     uint32_t workgroup_count_x,
     uint32_t workgroup_count_y,
     uint32_t workgroup_count_z
-  ) override {
+  ) {
     this->FlushPipelineBarrier();
     encoder_->CmdDispatchCompute(workgroup_count_x, workgroup_count_y, workgroup_count_z);
   }
@@ -389,12 +389,12 @@ public:
   // Resource Binding
   //
 
-  MNEXUS_NO_THROW void MNEXUS_CALL BindUniformBuffer(
+  IMPL_VAPI(void, BindUniformBuffer,
     mnexus::BindingId const& id,
     mnexus::BufferHandle buffer_handle,
     uint64_t offset,
     uint64_t size
-  ) override {
+  ) {
     auto const pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
     auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
     encoder_->BindBuffer(
@@ -405,12 +405,12 @@ public:
     referenced_resources_.push_back(pool_handle);
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL BindStorageBuffer(
+  IMPL_VAPI(void, BindStorageBuffer,
     mnexus::BindingId const& id,
     mnexus::BufferHandle buffer_handle,
     uint64_t offset,
     uint64_t size
-  ) override {
+  ) {
     auto const pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
     auto [hot, lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(pool_handle);
     encoder_->BindBuffer(
@@ -421,11 +421,11 @@ public:
     referenced_resources_.push_back(pool_handle);
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL BindSampledTexture(
+  IMPL_VAPI(void, BindSampledTexture,
     mnexus::BindingId const& id,
     mnexus::TextureHandle texture_handle,
     mnexus::TextureSubresourceRange const& subresource_range
-  ) override {
+  ) {
     // Pre-condition: the texture's subresource range MUST already be in
     // VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR. machina/folgos-style: this
     // call only writes the descriptor and does not queue a layout
@@ -500,10 +500,10 @@ public:
     referenced_resources_.push_back(pool_handle);
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL BindSampler(
+  IMPL_VAPI(void, BindSampler,
     mnexus::BindingId const& id,
     mnexus::SamplerHandle sampler_handle
-  ) override {
+  ) {
     auto const pool_handle = resource_pool::ResourceHandle::FromU64(sampler_handle.Get());
     auto [hot, lock] = resource_storage_->samplers.GetHotConstRefWithSharedLockGuard(pool_handle);
 
@@ -520,9 +520,9 @@ public:
   // Explicit Pipeline Binding
   //
 
-  MNEXUS_NO_THROW void MNEXUS_CALL BindExplicitRenderPipeline(
+  IMPL_VAPI(void, BindExplicitRenderPipeline,
     mnexus::RenderPipelineHandle /*render_pipeline_handle*/
-  ) override {
+  ) {
     STUB_NOT_IMPLEMENTED();
   }
 
@@ -530,9 +530,9 @@ public:
   // Render Pass
   //
 
-  MNEXUS_NO_THROW void MNEXUS_CALL BeginRenderPass(
+  IMPL_VAPI(void, BeginRenderPass,
     mnexus::RenderPassDesc const& desc
-  ) override {
+  ) {
     // Flush any pending pipeline barriers before entering the render pass:
     // vkCmdPipelineBarrier2 is not allowed inside a dynamic rendering instance.
     this->FlushPipelineBarrier();
@@ -635,7 +635,7 @@ public:
     }
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL EndRenderPass() override {
+  IMPL_VAPI(void, EndRenderPass) {
     if (render_state_event_log_.IsEnabled()) {
       render_state_event_log_.Record(
         mnexus::RenderStateEventTag::kEndRenderPass,
@@ -648,9 +648,9 @@ public:
   // Render State (auto-generation path)
   //
 
-  MNEXUS_NO_THROW void MNEXUS_CALL BindRenderProgram(
+  IMPL_VAPI(void, BindRenderProgram,
     mnexus::ProgramHandle program_handle
-  ) override {
+  ) {
     auto const pool_handle = resource_pool::ResourceHandle::FromU64(program_handle.Get());
     referenced_resources_.push_back(pool_handle);
     render_pipeline_state_tracker_.SetProgram(program_handle);
@@ -670,10 +670,10 @@ public:
     );
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetVertexInputLayout(
+  IMPL_VAPI(void, SetVertexInputLayout,
     mnexus::container::ArrayProxy<mnexus::VertexInputBindingDesc const> bindings,
     mnexus::container::ArrayProxy<mnexus::VertexInputAttributeDesc const> attributes
-  ) override {
+  ) {
     mbase::SmallVector<mnexus::VertexInputBindingDesc, 4> bindings_vec;
     bindings_vec.reserve(bindings.size());
     for (uint32_t i = 0; i < bindings.size(); ++i) {
@@ -692,11 +692,11 @@ public:
     );
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL BindVertexBuffer(
+  IMPL_VAPI(void, BindVertexBuffer,
     uint32_t binding,
     mnexus::BufferHandle buffer_handle,
     uint64_t offset
-  ) override {
+  ) {
     if (binding >= bound_vertex_buffers_.size()) {
       bound_vertex_buffers_.resize(binding + 1);
     }
@@ -707,11 +707,11 @@ public:
     referenced_resources_.push_back(resource_pool::ResourceHandle::FromU64(buffer_handle.Get()));
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL BindIndexBuffer(
+  IMPL_VAPI(void, BindIndexBuffer,
     mnexus::BufferHandle buffer_handle,
     uint64_t offset,
     mnexus::IndexType index_type
-  ) override {
+  ) {
     bound_index_buffer_ = BoundIndexBuffer {
       .handle = buffer_handle,
       .offset = offset,
@@ -720,88 +720,88 @@ public:
     referenced_resources_.push_back(resource_pool::ResourceHandle::FromU64(buffer_handle.Get()));
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetPrimitiveTopology(
+  IMPL_VAPI(void, SetPrimitiveTopology,
     mnexus::PrimitiveTopology topology
-  ) override {
+  ) {
     render_pipeline_state_tracker_.SetPrimitiveTopology(topology);
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetPolygonMode(
+  IMPL_VAPI(void, SetPolygonMode,
     mnexus::PolygonMode mode
-  ) override {
+  ) {
     render_pipeline_state_tracker_.SetPolygonMode(mode);
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetCullMode(
+  IMPL_VAPI(void, SetCullMode,
     mnexus::CullMode cull_mode
-  ) override {
+  ) {
     render_pipeline_state_tracker_.SetCullMode(cull_mode);
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetFrontFace(
+  IMPL_VAPI(void, SetFrontFace,
     mnexus::FrontFace front_face
-  ) override {
+  ) {
     render_pipeline_state_tracker_.SetFrontFace(front_face);
   }
 
   // Depth
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetDepthTestEnabled(bool enabled) override {
+  IMPL_VAPI(void, SetDepthTestEnabled,bool enabled) {
     render_pipeline_state_tracker_.SetDepthTestEnabled(enabled);
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetDepthWriteEnabled(bool enabled) override {
+  IMPL_VAPI(void, SetDepthWriteEnabled,bool enabled) {
     render_pipeline_state_tracker_.SetDepthWriteEnabled(enabled);
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetDepthCompareOp(
+  IMPL_VAPI(void, SetDepthCompareOp,
     mnexus::CompareOp op
-  ) override {
+  ) {
     render_pipeline_state_tracker_.SetDepthCompareOp(op);
   }
 
   // Stencil
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetStencilTestEnabled(bool enabled) override {
+  IMPL_VAPI(void, SetStencilTestEnabled,bool enabled) {
     render_pipeline_state_tracker_.SetStencilTestEnabled(enabled);
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetStencilFrontOps(
+  IMPL_VAPI(void, SetStencilFrontOps,
     mnexus::StencilOp fail, mnexus::StencilOp pass,
     mnexus::StencilOp depth_fail, mnexus::CompareOp compare
-  ) override {
+  ) {
     render_pipeline_state_tracker_.SetStencilFrontOps(fail, pass, depth_fail, compare);
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetStencilBackOps(
+  IMPL_VAPI(void, SetStencilBackOps,
     mnexus::StencilOp fail, mnexus::StencilOp pass,
     mnexus::StencilOp depth_fail, mnexus::CompareOp compare
-  ) override {
+  ) {
     render_pipeline_state_tracker_.SetStencilBackOps(fail, pass, depth_fail, compare);
   }
 
   // Per-attachment blend
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetBlendEnabled(
+  IMPL_VAPI(void, SetBlendEnabled,
     uint32_t attachment, bool enabled
-  ) override {
+  ) {
     render_pipeline_state_tracker_.SetBlendEnabled(attachment, enabled);
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetBlendFactors(
+  IMPL_VAPI(void, SetBlendFactors,
     uint32_t attachment,
     mnexus::BlendFactor src_color, mnexus::BlendFactor dst_color, mnexus::BlendOp color_op,
     mnexus::BlendFactor src_alpha, mnexus::BlendFactor dst_alpha, mnexus::BlendOp alpha_op
-  ) override {
+  ) {
     render_pipeline_state_tracker_.SetBlendFactors(
       attachment, src_color, dst_color, color_op,
       src_alpha, dst_alpha, alpha_op
     );
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetColorWriteMask(
+  IMPL_VAPI(void, SetColorWriteMask,
     uint32_t attachment, mnexus::ColorWriteMask mask
-  ) override {
+  ) {
     render_pipeline_state_tracker_.SetColorWriteMask(attachment, mask);
   }
 
@@ -809,10 +809,10 @@ public:
   // Draw
   //
 
-  MNEXUS_NO_THROW void MNEXUS_CALL Draw(
+  IMPL_VAPI(void, Draw,
     uint32_t vertex_count, uint32_t instance_count,
     uint32_t first_vertex, uint32_t first_instance
-  ) override {
+  ) {
     this->FlushRenderPipeline();
     this->FlushVertexBuffers();
 
@@ -825,10 +825,10 @@ public:
     encoder_->CmdDraw(vertex_count, instance_count, first_vertex, first_instance);
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL DrawIndexed(
+  IMPL_VAPI(void, DrawIndexed,
     uint32_t index_count, uint32_t instance_count,
     uint32_t first_index, int32_t vertex_offset, uint32_t first_instance
-  ) override {
+  ) {
     this->FlushRenderPipeline();
     this->FlushVertexBuffers();
     this->FlushIndexBuffer();
@@ -846,10 +846,10 @@ public:
   // Viewport / Scissor
   //
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetViewport(
+  IMPL_VAPI(void, SetViewport,
     float x, float y, float width, float height,
     float min_depth, float max_depth
-  ) override {
+  ) {
     encoder_->CmdSetViewport(VkViewport {
       .x = x,
       .y = y,
@@ -860,9 +860,9 @@ public:
     });
   }
 
-  MNEXUS_NO_THROW void MNEXUS_CALL SetScissor(
+  IMPL_VAPI(void, SetScissor,
     int32_t x, int32_t y, uint32_t width, uint32_t height
-  ) override {
+  ) {
     encoder_->CmdSetScissor(VkRect2D {
       .offset = VkOffset2D { .x = x, .y = y },
       .extent = VkExtent2D { .width = width, .height = height },
