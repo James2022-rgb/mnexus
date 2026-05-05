@@ -24,9 +24,9 @@ mnexus is a CMake-based C++23 static library. It is typically built as part of a
 When adding source files to `CMakeLists.txt`, list them in alphabetical order within each `set(...)` block.
 
 Key CMake options:
-- `MNEXUS_ENABLE_BACKEND_WGPU` - Enable WebGPU backend (default: ON)
+- `MNEXUS_ENABLE_BACKEND_WGPU` - Enable WebGPU backend (default: ON, force-disabled on Android since the native WebGPU backend depends on Dawn — see below)
 - `MNEXUS_ENABLE_BACKEND_VULKAN` - Enable Vulkan backend (default: ON, ignored on Emscripten). Requires `VULKAN_SDK` environment variable
-- `MNEXUS_ENABLE_DAWN` - Enable Dawn for WebGPU on native platforms (default: ON, ignored on Emscripten)
+- `MNEXUS_ENABLE_DAWN` - Enable Dawn for WebGPU on native platforms (default: ON, ignored on Emscripten and Android). Cascade: when the WebGPU backend is force-disabled on Android, Dawn (and Tint) follow automatically — Android targets compile only the Vulkan backend
 - `MNEXUS_ENABLE_TINT_ON_WEB` - Enable Tint SPIR-V to WGSL conversion on Emscripten (default: ON)
 - `MNEXUS_BUILD_TESTS` - Build test executables (default: OFF)
 

@@ -125,7 +125,7 @@ public:
       vk_cb_handle_,
       src_vk_buffer.handle(),
       dst_vk_image.handle(),
-      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      kExpectedLayout,
       1,
       &region
     );

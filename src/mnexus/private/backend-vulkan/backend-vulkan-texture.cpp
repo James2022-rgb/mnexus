@@ -151,6 +151,7 @@ std::optional<CreateVulkanImageResult> CreateVulkanImage(
     .pool = VK_NULL_HANDLE,
     .pUserData = nullptr,
     .priority = 0.0f,
+    .minAlignment = 0,
   };
 
   VkImage vk_image_handle = VK_NULL_HANDLE;
@@ -166,10 +167,9 @@ std::optional<CreateVulkanImageResult> CreateVulkanImage(
     return std::nullopt;
   }
 
-  VkDevice vk_device_handle = vk_device.handle();
   VulkanImage vk_image(
     vk_image_handle,
-    [vk_device_handle, vk_image_handle, allocation, vma_allocator] {
+    [vk_image_handle, allocation, vma_allocator] {
       vmaDestroyImage(vma_allocator, vk_image_handle, allocation);
     },
     vk_device.GetDeferredDestroyer(),

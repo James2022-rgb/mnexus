@@ -49,7 +49,6 @@ public:
 
   /// Convenience: transition to TRANSFER_DST_OPTIMAL.
   void TransitionToTransferDst(VkImage vk_image, Subresource const& subresource);
-  void TransitionRangeToTransferDst(VkImage vk_image, Subresource const& base_subresource, uint32_t mip_level_count, uint32_t array_layer_count);
 
   /// Convenience: transition to TRANSFER_SRC_OPTIMAL.
   void TransitionToTransferSrc(VkImage vk_image, Subresource const& subresource);

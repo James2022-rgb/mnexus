@@ -28,6 +28,8 @@ void StagingBufferPool::Shutdown() {
     return;
   }
 
+  mbase::LockGuard lock(mutex_);
+
   VmaAllocator vma = device_->vma_allocator();
   for (StagingBuffer* buf : all_buffers_) {
     vmaDestroyBuffer(vma, buf->vk_buffer, buf->allocation);
@@ -67,7 +69,7 @@ void StagingBufferPool::Release(StagingBuffer* buffer, mnexus::QueueId const& qu
   );
 }
 
-StagingBuffer* StagingBufferPool::CreateStagingBuffer(VkDeviceSize size) {
+StagingBuffer* StagingBufferPool::CreateStagingBuffer(VkDeviceSize size) MBASE_REQUIRES(mutex_) {
   MBASE_ASSERT(device_ != nullptr);
 
   VkBufferCreateInfo buffer_info {
@@ -90,6 +92,7 @@ StagingBuffer* StagingBufferPool::CreateStagingBuffer(VkDeviceSize size) {
     .pool = VK_NULL_HANDLE,
     .pUserData = nullptr,
     .priority = 0.0f,
+    .minAlignment = 0,
   };
 
   VkBuffer vk_buffer = VK_NULL_HANDLE;
@@ -111,6 +114,7 @@ StagingBuffer* StagingBufferPool::CreateStagingBuffer(VkDeviceSize size) {
     .mapped_data = allocation_info.pMappedData,
     .size = size,
   };
+
   all_buffers_.push_back(buf);
   return buf;
 }
@@ -143,6 +147,8 @@ void TransientCommandPool::Shutdown() {
   if (device_ == nullptr) {
     return;
   }
+
+  mbase::LockGuard lock(mutex_);
 
   if (vk_command_pool_ != VK_NULL_HANDLE) {
     vkDestroyCommandPool(device_->handle(), vk_command_pool_, nullptr);

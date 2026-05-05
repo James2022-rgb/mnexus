@@ -50,6 +50,7 @@ std::optional<CreateVulkanBufferResult> CreateVulkanBuffer(
     .pool = VK_NULL_HANDLE,
     .pUserData = nullptr,
     .priority = 0.0f,
+    .minAlignment = 0,
   };
 
   VkBuffer vk_buffer_handle = VK_NULL_HANDLE;
@@ -65,10 +66,9 @@ std::optional<CreateVulkanBufferResult> CreateVulkanBuffer(
     return std::nullopt;
   }
 
-  VkDevice vk_device_handle = vk_device.handle();
   VulkanBuffer vk_buffer(
     vk_buffer_handle,
-    [vk_device_handle, vk_buffer_handle, allocation, vma_allocator] {
+    [vk_buffer_handle, allocation, vma_allocator] {
       vmaDestroyBuffer(vma_allocator, vk_buffer_handle, allocation);
     },
     vk_device.GetDeferredDestroyer()

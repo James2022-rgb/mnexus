@@ -32,7 +32,7 @@ public:
     device_ = device;
   }
 
-  void Shutdown() override {
+  void Shutdown() override MBASE_NO_THREAD_SAFETY_ANALYSIS {
     if (device_ != nullptr) {
       VkDevice vk_device = device_->handle();
       for (auto& [layout_handle, state] : per_layout_states_) {
@@ -197,7 +197,7 @@ private:
     }
   }
 
-  VkDescriptorSet AllocateRawSet(VulkanDescriptorSetLayout const& layout) {
+  VkDescriptorSet AllocateRawSet(VulkanDescriptorSetLayout const& layout) MBASE_REQUIRES(mutex_) {
     PerLayoutState& state = per_layout_states_[layout.handle()];
 
     // Try from free list.

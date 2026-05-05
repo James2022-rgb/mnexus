@@ -50,7 +50,7 @@ SyncScope ImageLayoutTracker::GetDefaultSyncScope(VkImageUsageFlags usage, VkFor
   return {};
 }
 
-VkImageLayout ImageLayoutTracker::GetDefaultLayout(VkImageUsageFlags usage, VkFormat format) {
+VkImageLayout ImageLayoutTracker::GetDefaultLayout(VkImageUsageFlags usage, VkFormat /*format*/) {
   if (usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
     return VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR;
   }
@@ -71,6 +71,7 @@ ImageLayoutTracker::Entry ImageLayoutTracker::MakeDefaultEntry(VkImageUsageFlags
   return Entry {
     .old_layout = GetDefaultLayout(usage, format),
     .src_scope = GetDefaultSyncScope(usage, format),
+    .dst_scope = GetDefaultSyncScope(usage, format),
   };
 }
 
@@ -161,15 +162,6 @@ void ImageLayoutTracker::Transition(
 void ImageLayoutTracker::TransitionToTransferDst(VkImage vk_image, Subresource const& subresource) {
   this->Transition(
     vk_image, subresource,
-    VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR,
-    VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR,
-    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-  );
-}
-
-void ImageLayoutTracker::TransitionRangeToTransferDst(VkImage vk_image, Subresource const& base_subresource, uint32_t mip_level_count, uint32_t array_layer_count) {
-  this->Transition(
-    vk_image, base_subresource,
     VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR,
     VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR,
     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL

@@ -47,7 +47,10 @@ endif()
 #
 
 set(_enable_backend_webgpu OFF)
-if(${MNEXUS_ENABLE_BACKEND_WGPU})
+if(${MNEXUS_ENABLE_BACKEND_WGPU} AND NOT ANDROID)
+  # The WebGPU backend on native targets requires Dawn (see `include_dawn.h`),
+  # and Dawn's Android build pulls in ~78 submodules (including ANGLE / Chromium
+  # infrastructure). Android targets use the Vulkan backend instead.
   set(_enable_backend_webgpu ON)
 endif()
 
@@ -326,8 +329,36 @@ if(${_enable_backend_vulkan})
 endif()
 
 if(${_enable_backend_vulkan})
+  # Fetch volk from GitHub if not already provided by a parent project.
+  # volk is a meta-loader for Vulkan that loads function pointers at runtime;
+  # uses the Vulkan headers from VULKAN_SDK that mnexus already requires.
   if(NOT TARGET volk)
-    # TODO: `add_subdirectory` volk
+    include(FetchContent)
+
+    set(_old_folder "${CMAKE_FOLDER}")
+    set(CMAKE_FOLDER "external/volk")
+    FetchContent_Declare(volk
+      GIT_REPOSITORY https://github.com/zeux/volk.git
+      GIT_TAG        vulkan-sdk-1.4.313.0
+    )
+    FetchContent_MakeAvailable(volk)
+    set(CMAKE_FOLDER "${_old_folder}")
+
+    # Upstream volk doesn't auto-define VK_USE_PLATFORM_*_KHR; without these
+    # the platform-specific surface symbols (vkCreateWin32SurfaceKHR, etc.)
+    # are stripped from volk.c and our WSI code fails to link.
+    if(WIN32)
+      target_compile_definitions(volk PRIVATE VK_USE_PLATFORM_WIN32_KHR=1)
+    endif()
+    if(UNIX AND NOT ANDROID)
+      target_compile_definitions(volk PRIVATE
+        VK_USE_PLATFORM_XLIB_KHR=1
+        VK_USE_PLATFORM_WAYLAND_KHR=1
+      )
+    endif()
+    if(ANDROID)
+      target_compile_definitions(volk PRIVATE VK_USE_PLATFORM_ANDROID_KHR=1)
+    endif()
   endif()
 
   target_link_libraries(${TARGET_NAME} PRIVATE volk)
@@ -631,7 +662,7 @@ target_include_directories(${TARGET_NAME} PUBLIC
 )
 
 target_compile_definitions(${TARGET_NAME} PUBLIC
-  MNEXUS_ENABLE_BACKEND_WGPU=$<BOOL:${MNEXUS_ENABLE_BACKEND_WGPU}>
+  MNEXUS_ENABLE_BACKEND_WGPU=$<BOOL:${_enable_backend_webgpu}>
   MNEXUS_ENABLE_BACKEND_VULKAN=$<BOOL:${_enable_backend_vulkan}>
   MNEXUS_HAVE_DEAR_IMGUI=${_have_dear_imgui}
 )

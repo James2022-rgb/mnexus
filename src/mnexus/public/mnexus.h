@@ -998,8 +998,8 @@ MNEXUS_NO_THROW MnDevice MNEXUS_CALL MnNexusGetDevice(MnNexus nexus);
 
 MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceGetAdapterInfo(
   MnDevice device, MnAdapterInfo* out_info);
-MNEXUS_NO_THROW MnClipSpaceConvention MNEXUS_CALL MnDeviceGetClipSpaceConvention(
-  MnDevice device);
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceGetClipSpaceConvention(
+  MnDevice device, MnClipSpaceConvention* out_convention);
 
 // ----------------------------------------------------------------------------------------------------
 // IDevice: Resource creation / destruction

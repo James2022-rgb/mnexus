@@ -78,7 +78,7 @@ struct SwapchainImage final {
 class WsiSwapchain final {
 public:
   ~WsiSwapchain() = default;
-  MBASE_DISALLOW_COPY_DEFAULT_MOVE(WsiSwapchain);
+  MBASE_DISALLOW_COPY_MOVE(WsiSwapchain);
 
   static WsiSwapchain Create(VulkanInstance const* vk_instance, IVulkanDevice const* vk_device);
 

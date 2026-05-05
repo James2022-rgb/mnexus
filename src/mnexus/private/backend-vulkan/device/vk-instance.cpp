@@ -18,7 +18,7 @@ VkBool32 VKAPI_CALL VulkanDebugUtilsMessengerCallback(
   VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
   VkDebugUtilsMessageTypeFlagsEXT messageType,
   VkDebugUtilsMessengerCallbackDataEXT const* pCallbackData,
-  void* pUserData
+  void* /*pUserData*/
 ) {
   if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
     MBASE_LOG_ERROR("[Vulkan DebugUtils] {}: {}", string_VkDebugUtilsMessageTypeFlagsEXT(messageType), pCallbackData->pMessage);

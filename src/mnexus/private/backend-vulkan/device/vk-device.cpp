@@ -39,7 +39,11 @@ public:
     }
 
     this->ProcessPendingDestroys();
-    MBASE_ASSERT_MSG(pending_destroys_.empty(), "Pending destroys remain after device idle (count: {})", pending_destroys_.size());
+    {
+      mbase::LockGuard lock(pending_destroys_mutex_);
+
+      MBASE_ASSERT_MSG(pending_destroys_.empty(), "Pending destroys remain after device idle (count: {})", pending_destroys_.size());
+    }
 
     if (vma_allocator_ != VK_NULL_HANDLE) {
       vmaDestroyAllocator(vma_allocator_);
@@ -68,7 +72,7 @@ public:
   mnexus::QueueSelection const& queue_selection() const override { return queue_selection_; }
   VmaAllocator vma_allocator() const override { return vma_allocator_; }
 
-  bool IsExtensionEnabled(char const* extension_name) const override {
+  bool IsExtensionEnabled(char const* /*extension_name*/) const override {
     // FIXME: Implement `VulkanDevice::IsExtensionEnabled`.
     return false;
   }
