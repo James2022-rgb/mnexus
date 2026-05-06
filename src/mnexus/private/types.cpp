@@ -121,6 +121,11 @@ uint32_t MnGetFormatSizeInBytes(MnFormat value) {
   case MnFormatASTC_12x12_UNORM_BLOCK:     return 16;
   case MnFormatASTC_12x12_SRGB_BLOCK:      return 16;
 
+  // Multi-planar YCbCr 4:2:0: report bytes per 2x2 chroma block
+  // (Y plane = 4 samples, CbCr plane = 1 paired sample).
+  case MnFormatG8_B8R8_2PLANE_420_UNORM:                  return 6;  // 4*1 + 2*1
+  case MnFormatG10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16: return 12; // 4*2 + 2*2
+
   case MnFormatForce32: break;
   }
   return 0;
@@ -197,9 +202,61 @@ MnExtent3d MnGetFormatTexelBlockExtent(MnFormat value) {
   case MnFormatASTC_12x12_SRGB_BLOCK:
     return { 12, 12, 1 };
 
+  // Multi-planar YCbCr 4:2:0: chroma is subsampled 2x in each direction,
+  // so the smallest addressable block spans 2x2 luma samples.
+  case MnFormatG8_B8R8_2PLANE_420_UNORM:
+  case MnFormatG10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
+    return { 2, 2, 1 };
+
   // All uncompressed formats: 1x1x1.
   default:
     return { 1, 1, 1 };
+  }
+}
+
+// ----------------------------------------------------------------------------------------------------
+// Video coding (C API)
+//
+
+uint8_t MnVideoH265LevelToSpecIdc(MnVideoH265Level level) {
+  switch (level) {
+  case MnVideoH265Level1_0: return 30;
+  case MnVideoH265Level2_0: return 60;
+  case MnVideoH265Level2_1: return 63;
+  case MnVideoH265Level3_0: return 90;
+  case MnVideoH265Level3_1: return 93;
+  case MnVideoH265Level4_0: return 120;
+  case MnVideoH265Level4_1: return 123;
+  case MnVideoH265Level5_0: return 150;
+  case MnVideoH265Level5_1: return 153;
+  case MnVideoH265Level5_2: return 156;
+  case MnVideoH265Level6_0: return 180;
+  case MnVideoH265Level6_1: return 183;
+  case MnVideoH265Level6_2: return 186;
+  case MnVideoH265LevelForce32: break;
+  }
+  return 0;
+}
+
+MnBool32 MnVideoH265LevelFromSpecIdc(uint8_t spec_idc, MnVideoH265Level* out_level) {
+  if (out_level == nullptr) {
+    return MnBoolFalse;
+  }
+  switch (spec_idc) {
+  case 30:  *out_level = MnVideoH265Level1_0; return MnBoolTrue;
+  case 60:  *out_level = MnVideoH265Level2_0; return MnBoolTrue;
+  case 63:  *out_level = MnVideoH265Level2_1; return MnBoolTrue;
+  case 90:  *out_level = MnVideoH265Level3_0; return MnBoolTrue;
+  case 93:  *out_level = MnVideoH265Level3_1; return MnBoolTrue;
+  case 120: *out_level = MnVideoH265Level4_0; return MnBoolTrue;
+  case 123: *out_level = MnVideoH265Level4_1; return MnBoolTrue;
+  case 150: *out_level = MnVideoH265Level5_0; return MnBoolTrue;
+  case 153: *out_level = MnVideoH265Level5_1; return MnBoolTrue;
+  case 156: *out_level = MnVideoH265Level5_2; return MnBoolTrue;
+  case 180: *out_level = MnVideoH265Level6_0; return MnBoolTrue;
+  case 183: *out_level = MnVideoH265Level6_1; return MnBoolTrue;
+  case 186: *out_level = MnVideoH265Level6_2; return MnBoolTrue;
+  default:  return MnBoolFalse;
   }
 }
 
@@ -391,6 +448,8 @@ std::string_view ToString(MnFormat value) {
     MAP(ASTC_12x10_SRGB_BLOCK),
     MAP(ASTC_12x12_UNORM_BLOCK),
     MAP(ASTC_12x12_SRGB_BLOCK),
+    MAP(G8_B8R8_2PLANE_420_UNORM),
+    MAP(G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16),
   };
   #undef MAP
 
@@ -577,6 +636,22 @@ std::string ToString(ColorWriteMask value) {
   if (bool(value & ColorWriteMask::kBlue))  { if (!result.empty()) result += '|'; result += 'B'; }
   if (bool(value & ColorWriteMask::kAlpha)) { if (!result.empty()) result += '|'; result += 'A'; }
   return result.empty() ? "N/A" : result;
+}
+
+//
+// Video coding (C++ API). Thin wrappers over the C entry points.
+//
+
+uint8_t VideoH265LevelToSpecIdc(VideoH265Level level) {
+  return MnVideoH265LevelToSpecIdc(static_cast<MnVideoH265Level>(level));
+}
+
+std::optional<VideoH265Level> VideoH265LevelFromSpecIdc(uint8_t spec_idc) {
+  MnVideoH265Level out;
+  if (MnVideoH265LevelFromSpecIdc(spec_idc, &out) == MnBoolFalse) {
+    return std::nullopt;
+  }
+  return static_cast<VideoH265Level>(out);
 }
 
 } // namespace mnexus

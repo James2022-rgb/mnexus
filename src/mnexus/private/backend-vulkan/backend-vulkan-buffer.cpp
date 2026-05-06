@@ -24,12 +24,32 @@ std::optional<CreateVulkanBufferResult> CreateVulkanBuffer(
 ) {
   bool const mappable = buffer_desc.usage.HasAnyOf(mnexus::BufferUsageFlagBits::kMappable);
 
+  // Vulkan Video usage flags require the corresponding KHR_video_* extensions
+  // to have been enabled at device creation. Reject up-front with a clear log
+  // instead of letting the driver surface a confusing usage validation error.
+  bool const wants_video_decode = buffer_desc.usage.HasAnyOf(mnexus::BufferUsageFlagBits::kVideoDecodeSrc);
+  bool const wants_video_encode = buffer_desc.usage.HasAnyOf(mnexus::BufferUsageFlagBits::kVideoEncodeDst);
+  if (wants_video_decode && !vk_device.IsExtensionEnabled(VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME)) {
+    MBASE_LOG_ERROR("BufferUsageFlagBits::kVideoDecodeSrc requires VK_KHR_video_decode_queue, which is not enabled on this device.");
+    return std::nullopt;
+  }
+  if (wants_video_encode && !vk_device.IsExtensionEnabled(VK_KHR_VIDEO_ENCODE_QUEUE_EXTENSION_NAME)) {
+    MBASE_LOG_ERROR("BufferUsageFlagBits::kVideoEncodeDst requires VK_KHR_video_encode_queue, which is not enabled on this device.");
+    return std::nullopt;
+  }
+
   VkBufferUsageFlags const vk_usage_flags = ToVkBufferUsageFlags(buffer_desc.usage) | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+  // For video-bitstream buffers, decouple from any specific VkVideoProfileInfoKHR
+  // by setting VIDEO_PROFILE_INDEPENDENT (added by VK_KHR_video_maintenance1).
+  VkBufferCreateFlags const vk_create_flags = (wants_video_decode || wants_video_encode)
+    ? VK_BUFFER_CREATE_VIDEO_PROFILE_INDEPENDENT_BIT_KHR
+    : 0;
 
   VkBufferCreateInfo create_info {
     .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
     .pNext = nullptr,
-    .flags = 0,
+    .flags = vk_create_flags,
     .size = buffer_desc.size_in_bytes,
     .usage = vk_usage_flags,
     .sharingMode = VK_SHARING_MODE_EXCLUSIVE,

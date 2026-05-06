@@ -20,6 +20,10 @@ option(MNEXUS_ENABLE_BACKEND_WGPU "Enable WebGPU backend support" ON)
 option(MNEXUS_ENABLE_BACKEND_VULKAN "Enable Vulkan backend support" ON)
 option(MNEXUS_ENABLE_DAWN "Enable Dawn backend support for the WebGPU backend" ON)
 option(MNEXUS_ENABLE_TINT_ON_WEB "Enable Tint SPIR-V to WGSL conversion for Emscripten" ON)
+# Vulkan Video decode support. Pulls in vidsynt (Rust H.265 NAL parser) as a
+# PUBLIC dependency. Disabled by default since Vulkan Video is desktop-only
+# (no Web / Android / Apple) and requires cargo on the build host.
+option(MNEXUS_ENABLE_VIDEO_CODING "Enable Vulkan Video coding (decode); requires vidsynt + cargo" OFF)
 
 set(CMAKE_CXX_STANDARD 23 CACHE STRING "C++ standard" FORCE)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -57,6 +61,14 @@ endif()
 set(_enable_backend_vulkan OFF)
 if(${MNEXUS_ENABLE_BACKEND_VULKAN} AND NOT EMSCRIPTEN)
   set(_enable_backend_vulkan ON)
+endif()
+
+# Video coding requires the Vulkan backend and a desktop platform on which
+# vidsynt (Rust crate) can be built. Currently restricted to Windows; extend
+# the platform check when adding Linux / macOS support.
+set(_enable_video_coding OFF)
+if(${MNEXUS_ENABLE_VIDEO_CODING} AND ${_enable_backend_vulkan} AND WIN32)
+  set(_enable_video_coding ON)
 endif()
 
 set(_enable_dawn OFF)
@@ -365,6 +377,58 @@ if(${_enable_backend_vulkan})
 endif()
 
 #
+# vidsynt (Rust H.265 / H.264 NAL parser, used by the Vulkan Video code path)
+#
+# Built via cargo with the `ffi` feature; consumed as an IMPORTED static library
+# through vidsynt-sys/include/vidsynt.h. Linked PUBLICLY so that downstream
+# users can call `vidsynt_*` directly when they want to (re-)parse NAL units
+# they hand to mnexus.
+#
+
+if(${_enable_video_coding})
+  if(NOT TARGET vidsynt)
+    include(FetchContent)
+
+    find_program(CARGO_EXECUTABLE cargo REQUIRED)
+
+    FetchContent_Declare(vidsynt
+      GIT_REPOSITORY https://github.com/James2022-rgb/vidsynt.git
+      GIT_TAG        feature/capi
+    )
+    FetchContent_GetProperties(vidsynt)
+    if(NOT vidsynt_POPULATED)
+      FetchContent_Populate(vidsynt)
+    endif()
+
+    set(_vidsynt_dir "${vidsynt_SOURCE_DIR}")
+    # Always build the Rust side as release; cargo's incremental cache makes
+    # this cheap and avoids debug/release CRT-mixing concerns.
+    set(_vidsynt_lib "${_vidsynt_dir}/target/release/vidsynt.lib")
+
+    add_custom_command(
+      OUTPUT  ${_vidsynt_lib}
+      COMMAND ${CARGO_EXECUTABLE} build --release --features ffi
+      WORKING_DIRECTORY ${_vidsynt_dir}
+      COMMENT "Building vidsynt (cargo build --release --features ffi)"
+      VERBATIM
+    )
+    add_custom_target(vidsynt_build DEPENDS ${_vidsynt_lib})
+    set_target_properties(vidsynt_build PROPERTIES FOLDER "external/vidsynt")
+
+    add_library(vidsynt STATIC IMPORTED GLOBAL)
+    set_target_properties(vidsynt PROPERTIES
+      IMPORTED_LOCATION             "${_vidsynt_lib}"
+      INTERFACE_INCLUDE_DIRECTORIES "${_vidsynt_dir}/vidsynt-sys/include"
+      # System libraries the Rust standard library / runtime depend on.
+      INTERFACE_LINK_LIBRARIES      "ws2_32;userenv;bcrypt;ntdll"
+    )
+    add_dependencies(vidsynt vidsynt_build)
+  endif()
+
+  target_link_libraries(${TARGET_NAME} PUBLIC vidsynt)
+endif()
+
+#
 # SPIRV-Reflect
 #
 
@@ -666,6 +730,7 @@ target_include_directories(${TARGET_NAME} PUBLIC
 target_compile_definitions(${TARGET_NAME} PUBLIC
   MNEXUS_ENABLE_BACKEND_WGPU=$<BOOL:${_enable_backend_webgpu}>
   MNEXUS_ENABLE_BACKEND_VULKAN=$<BOOL:${_enable_backend_vulkan}>
+  MNEXUS_ENABLE_VIDEO_CODING=$<BOOL:${_enable_video_coding}>
   MNEXUS_HAVE_DEAR_IMGUI=${_have_dear_imgui}
 )
 

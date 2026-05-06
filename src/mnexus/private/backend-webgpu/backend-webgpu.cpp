@@ -622,6 +622,19 @@ public:
   }
 
   //
+  // Video coding (not supported by the WebGPU backend)
+  //
+
+  IMPL_VAPI(MnBool32, QueryVideoDecodeH265Capabilities,
+    mnexus::VideoH265Profile /*profile*/,
+    mnexus::VideoBitDepth    /*bit_depth*/,
+    mnexus::VideoDecodeH265Capabilities& /*out_caps*/
+  ) {
+    // WebGPU has no Vulkan Video equivalent.
+    return MnBoolFalse;
+  }
+
+  //
   // Diagnostics
   //
 

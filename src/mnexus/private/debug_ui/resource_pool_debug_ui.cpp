@@ -29,13 +29,15 @@ std::string BufferUsageString(mnexus::BufferUsageFlags usage) {
     if (!out.empty()) out += '|';
     out += token;
   };
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kUniform))     append("Uniform");
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kStorage))     append("Storage");
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kIndex))       append("Index");
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kVertex))      append("Vertex");
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kIndirect))    append("Indirect");
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kTransferSrc)) append("TransferSrc");
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kTransferDst)) append("TransferDst");
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kUniform))        append("Uniform");
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kStorage))        append("Storage");
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kIndex))          append("Index");
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kVertex))         append("Vertex");
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kIndirect))       append("Indirect");
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kTransferSrc))    append("TransferSrc");
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kTransferDst))    append("TransferDst");
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kVideoDecodeSrc)) append("VideoDecodeSrc");
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kVideoEncodeDst)) append("VideoEncodeDst");
   if (out.empty()) out = "-";
   return out;
 }

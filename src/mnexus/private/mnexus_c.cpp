@@ -71,6 +71,19 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceGetClipSpaceConvention(MnDevice device,
   out_convention->depth_range = static_cast<MnClipSpaceDepthRange>(conv.depth_range);
 }
 
+MNEXUS_NO_THROW MnBool32 MNEXUS_CALL MnDeviceQueryVideoDecodeH265Capabilities(
+  MnDevice device,
+  MnVideoH265Profile profile,
+  MnVideoBitDepth bit_depth,
+  MnVideoDecodeH265Capabilities* out_caps
+) {
+  return ToDevice(device)->QueryVideoDecodeH265Capabilities(
+    static_cast<mnexus::VideoH265Profile>(profile),
+    static_cast<mnexus::VideoBitDepth>(bit_depth),
+    *reinterpret_cast<mnexus::VideoDecodeH265Capabilities*>(out_caps)
+  );
+}
+
 // ----------------------------------------------------------------------------------------------------
 // IDevice: Resource creation / destruction
 //

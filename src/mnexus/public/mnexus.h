@@ -577,6 +577,25 @@ public:
   _MNEXUS_VAPI(void, GetAdapterInfo, AdapterInfo& out_info);
 
   //
+  // Video coding
+  //
+
+  /// Queries H.265 decode capabilities for a (profile x bit_depth) combination.
+  ///
+  /// - `profile` / `bit_depth`: which H.265 configuration to probe
+  ///   (e.g. Main+8bit, Main10+10bit).
+  /// - `out_caps`: populated with capability info on success.
+  /// - Returns: `MnBoolTrue` if the combination is supported, `MnBoolFalse`
+  ///   otherwise. Always returns `MnBoolFalse` when mnexus was built with
+  ///   `MNEXUS_ENABLE_VIDEO_CODING=0`, or for backends that do not support
+  ///   Vulkan Video (e.g. WebGPU).
+  _MNEXUS_VAPI(MnBool32, QueryVideoDecodeH265Capabilities,
+    VideoH265Profile profile,
+    VideoBitDepth    bit_depth,
+    VideoDecodeH265Capabilities& out_caps
+  );
+
+  //
   // Diagnostics
   //
 
@@ -1000,6 +1019,12 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceGetAdapterInfo(
   MnDevice device, MnAdapterInfo* out_info);
 MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceGetClipSpaceConvention(
   MnDevice device, MnClipSpaceConvention* out_convention);
+
+MNEXUS_NO_THROW MnBool32 MNEXUS_CALL MnDeviceQueryVideoDecodeH265Capabilities(
+  MnDevice device,
+  MnVideoH265Profile profile,
+  MnVideoBitDepth bit_depth,
+  MnVideoDecodeH265Capabilities* out_caps);
 
 // ----------------------------------------------------------------------------------------------------
 // IDevice: Resource creation / destruction

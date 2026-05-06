@@ -215,6 +215,9 @@ wgpu::TextureFormat ToWgpuTextureFormat(MnFormat value) {
   case MnFormatA2B10G10R10_SSCALED_PACK32:
   case MnFormatA2B10G10R10_UINT_PACK32:
   case MnFormatA2B10G10R10_SINT_PACK32:
+  // Multi-planar YCbCr formats: WebGPU has no equivalent (no `wgpu::TextureFormat::NV12`-style enum).
+  case MnFormatG8_B8R8_2PLANE_420_UNORM:
+  case MnFormatG10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
     MBASE_LOG_ERROR("MnFormat value {} is not supported in WebGPU backend", mnexus::ToString(value));
     return wgpu::TextureFormat::Undefined;
 

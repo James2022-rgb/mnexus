@@ -16,13 +16,15 @@ namespace mnexus_backend::vulkan {
 VkBufferUsageFlags ToVkBufferUsageFlags(mnexus::BufferUsageFlags usage) {
   VkBufferUsageFlags result = 0;
 
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kUniform))     { result |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT; }
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kStorage))     { result |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT; }
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kIndex))       { result |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT; }
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kVertex))      { result |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; }
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kIndirect))    { result |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT; }
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kTransferSrc)) { result |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT; }
-  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kTransferDst)) { result |= VK_BUFFER_USAGE_TRANSFER_DST_BIT; }
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kUniform))        { result |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT; }
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kStorage))        { result |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT; }
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kIndex))          { result |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT; }
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kVertex))         { result |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; }
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kIndirect))       { result |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT; }
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kTransferSrc))    { result |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT; }
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kTransferDst))    { result |= VK_BUFFER_USAGE_TRANSFER_DST_BIT; }
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kVideoDecodeSrc)) { result |= VK_BUFFER_USAGE_VIDEO_DECODE_SRC_BIT_KHR; }
+  if (usage.HasAnyOf(mnexus::BufferUsageFlagBits::kVideoEncodeDst)) { result |= VK_BUFFER_USAGE_VIDEO_ENCODE_DST_BIT_KHR; }
 
   return result;
 }
@@ -158,6 +160,9 @@ VkFormat ToVkFormat(mnexus::Format value) {
   case mnexus::Format::kASTC_12x10_SRGB_BLOCK:  return VK_FORMAT_ASTC_12x10_SRGB_BLOCK;
   case mnexus::Format::kASTC_12x12_UNORM_BLOCK: return VK_FORMAT_ASTC_12x12_UNORM_BLOCK;
   case mnexus::Format::kASTC_12x12_SRGB_BLOCK:  return VK_FORMAT_ASTC_12x12_SRGB_BLOCK;
+
+  case mnexus::Format::kG8_B8R8_2PLANE_420_UNORM:                  return VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
+  case mnexus::Format::kG10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16: return VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16;
   }
   MBASE_LOG_ERROR("Unknown mnexus::Format value");
   return VK_FORMAT_UNDEFINED;
@@ -262,6 +267,9 @@ mnexus::Format FromVkFormat(VkFormat value) {
   case VK_FORMAT_ASTC_12x10_SRGB_BLOCK:      return mnexus::Format::kASTC_12x10_SRGB_BLOCK;
   case VK_FORMAT_ASTC_12x12_UNORM_BLOCK:     return mnexus::Format::kASTC_12x12_UNORM_BLOCK;
   case VK_FORMAT_ASTC_12x12_SRGB_BLOCK:      return mnexus::Format::kASTC_12x12_SRGB_BLOCK;
+
+  case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:                  return mnexus::Format::kG8_B8R8_2PLANE_420_UNORM;
+  case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16: return mnexus::Format::kG10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16;
 
   default:
     MBASE_LOG_ERROR("Unknown VkFormat value");

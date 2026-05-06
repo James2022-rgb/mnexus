@@ -101,6 +101,11 @@ typedef struct MnAdapterInfo {
 // ----------------------------------------------------------------------------------------------------
 // Geometry
 
+typedef struct MnExtent2d _MN_FINAL {
+  uint32_t width _MN_INIT(0);
+  uint32_t height _MN_INIT(0);
+} MnExtent2d;
+
 typedef struct MnExtent3d _MN_FINAL {
   uint32_t width _MN_INIT(0);
   uint32_t height _MN_INIT(0);
@@ -189,6 +194,14 @@ typedef enum MnBufferUsageFlagBits {
   MnBufferUsageFlagBitTransferDst     = 1 << 5,
   MnBufferUsageFlagBitIndirect        = 1 << 6,
   MnBufferUsageFlagBitMappable        = 1 << 7,
+  /// Vulkan Video bitstream source (e.g. AnnexB H.264/H.265 stream fed to
+  /// vkCmdDecodeVideoKHR). Requires the Vulkan Video extensions to have
+  /// been enabled on the device; rejected by backends without video support
+  /// (e.g. WebGPU).
+  MnBufferUsageFlagBitVideoDecodeSrc  = 1 << 8,
+  /// Vulkan Video encoded bitstream destination. Same prerequisites as
+  /// `MnBufferUsageFlagBitVideoDecodeSrc`.
+  MnBufferUsageFlagBitVideoEncodeDst  = 1 << 9,
   MnBufferUsageFlagForce32            = 0x7FFFFFFF,
 } MnBufferUsageFlagBits;
 typedef uint32_t MnBufferUsageFlags;
@@ -409,6 +422,11 @@ typedef enum MnFormat {
   MnFormatASTC_12x12_UNORM_BLOCK,
   MnFormatASTC_12x12_SRGB_BLOCK,
 
+  // Multi-planar YCbCr 4:2:0 formats (mainly for Vulkan Video decode output).
+  // Plane 0: luma; Plane 1: interleaved CbCr at half resolution in X and Y.
+  MnFormatG8_B8R8_2PLANE_420_UNORM,                  // 8-bit (NV12)
+  MnFormatG10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16, // 10-bit in 16-bit container (P010-like)
+
   MnFormatForce32 = 0x7FFFFFFF,
 } MnFormat;
 
@@ -438,6 +456,90 @@ uint32_t MnGetFormatSizeInBytes(MnFormat value);
 /// For block-compressed formats (BC, ETC2, ASTC), returns the block dimensions.
 #if defined(__cplusplus)
 MnExtent3d MnGetFormatTexelBlockExtent(MnFormat value);
+#endif
+
+// ----------------------------------------------------------------------------------------------------
+// Video Coding
+//
+// All types are declared regardless of `MNEXUS_ENABLE_VIDEO_CODING`. Implementation
+// of the runtime APIs (`MnDeviceQueryVideoDecodeH265Capabilities` etc.) returns
+// failure when video coding was disabled at mnexus build time.
+//
+
+typedef enum MnVideoH265Profile {
+  MnVideoH265ProfileMain    = 0,
+  MnVideoH265ProfileMain10  = 1,
+  MnVideoH265ProfileForce32 = 0x7FFFFFFF,
+} MnVideoH265Profile;
+
+typedef enum MnVideoBitDepth {
+  MnVideoBitDepth8       = 0,
+  MnVideoBitDepth10      = 1,
+  MnVideoBitDepthForce32 = 0x7FFFFFFF,
+} MnVideoBitDepth;
+
+/// H.265 conformance level. Independent of both the H.265 spec's
+/// `general_level_idc` (uint8 = level x 30, e.g. 5.1 -> 153) and Vulkan's
+/// `StdVideoH265LevelIdc` (sequential ordinal). Convert via
+/// `MnVideoH265LevelToSpecIdc` / `MnVideoH265LevelFromSpecIdc`.
+typedef enum MnVideoH265Level {
+  MnVideoH265Level1_0     = 0,
+  MnVideoH265Level2_0     = 1,
+  MnVideoH265Level2_1     = 2,
+  MnVideoH265Level3_0     = 3,
+  MnVideoH265Level3_1     = 4,
+  MnVideoH265Level4_0     = 5,
+  MnVideoH265Level4_1     = 6,
+  MnVideoH265Level5_0     = 7,
+  MnVideoH265Level5_1     = 8,
+  MnVideoH265Level5_2     = 9,
+  MnVideoH265Level6_0     = 10,
+  MnVideoH265Level6_1     = 11,
+  MnVideoH265Level6_2     = 12,
+  MnVideoH265LevelForce32 = 0x7FFFFFFF,
+} MnVideoH265Level;
+
+/// Coding-shared (operation-agnostic) capabilities. Mirrors VkVideoCapabilitiesKHR
+/// minus the Vulkan-only fields (sType / pNext / stdHeaderVersion).
+typedef struct MnVideoCommonCapabilities _MN_FINAL {
+  MnExtent2d picture_access_granularity;
+  MnExtent2d min_coded_extent;
+  MnExtent2d max_coded_extent;
+  uint64_t   min_bitstream_buffer_offset_alignment _MN_INIT(0);
+  uint64_t   min_bitstream_buffer_size_alignment _MN_INIT(0);
+  uint32_t   max_dpb_slots _MN_INIT(0);
+  uint32_t   max_active_reference_pictures _MN_INIT(0);
+
+  // From VkVideoCapabilityFlagsKHR.
+  MnBool32   protected_content _MN_INIT(MnBoolFalse);
+  MnBool32   separate_reference_images _MN_INIT(MnBoolFalse);
+} MnVideoCommonCapabilities;
+
+/// Decode-shared capabilities. Mirrors VkVideoDecodeCapabilitiesKHR::flags.
+typedef struct MnVideoDecodeCommonCapabilities _MN_FINAL {
+  MnBool32 dpb_and_output_coincide _MN_INIT(MnBoolFalse);
+  MnBool32 dpb_and_output_distinct _MN_INIT(MnBoolFalse);
+} MnVideoDecodeCommonCapabilities;
+
+/// H.265 decode capabilities. Composition of (coding common + decode common +
+/// codec-specific).
+typedef struct MnVideoDecodeH265Capabilities _MN_FINAL {
+  MnVideoCommonCapabilities       common;
+  MnVideoDecodeCommonCapabilities decode_common;
+  MnVideoH265Level                max_level _MN_INIT(MnVideoH265Level1_0);
+  /// e.g. `MnFormatG8_B8R8_2PLANE_420_UNORM` for 8-bit, P010-equivalent for 10-bit.
+  MnFormat                        picture_format _MN_INIT(MnFormatUndefined);
+} MnVideoDecodeH265Capabilities;
+
+/// Convert an `MnVideoH265Level` to the H.265 spec's `general_level_idc`
+/// (NAL unit raw value, = level x 30; e.g. `MnVideoH265Level5_1` -> 153).
+#if defined(__cplusplus)
+uint8_t MnVideoH265LevelToSpecIdc(MnVideoH265Level level);
+
+/// Inverse of `MnVideoH265LevelToSpecIdc`. Returns `MnBoolTrue` and writes
+/// `*out_level` on success; returns `MnBoolFalse` (and leaves `*out_level`
+/// untouched) for unrecognized spec idc values.
+MnBool32 MnVideoH265LevelFromSpecIdc(uint8_t spec_idc, MnVideoH265Level* out_level);
 #endif
 
 // ----------------------------------------------------------------------------------------------------
@@ -751,6 +853,12 @@ namespace mnexus {
     "ABI mismatch between " #cxx_type " and " #c_type                                           \
   );
 
+struct Extent2d final {
+  uint32_t width = 0;
+  uint32_t height = 0;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(Extent2d, MnExtent2d);
+
 struct Extent3d final {
   uint32_t width = 0;
   uint32_t height = 0;
@@ -914,14 +1022,16 @@ _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(CommandListDesc, MnCommandListDesc);
 //
 
 enum class BufferUsageFlagBits : uint32_t {
-  kVertex        = MnBufferUsageFlagBitVertex,
-  kIndex         = MnBufferUsageFlagBitIndex,
-  kUniform       = MnBufferUsageFlagBitUniform,
-  kStorage       = MnBufferUsageFlagBitStorage,
-  kTransferSrc   = MnBufferUsageFlagBitTransferSrc,
-  kTransferDst   = MnBufferUsageFlagBitTransferDst,
-  kIndirect      = MnBufferUsageFlagBitIndirect,
-  kMappable      = MnBufferUsageFlagBitMappable,
+  kVertex         = MnBufferUsageFlagBitVertex,
+  kIndex          = MnBufferUsageFlagBitIndex,
+  kUniform        = MnBufferUsageFlagBitUniform,
+  kStorage        = MnBufferUsageFlagBitStorage,
+  kTransferSrc    = MnBufferUsageFlagBitTransferSrc,
+  kTransferDst    = MnBufferUsageFlagBitTransferDst,
+  kIndirect       = MnBufferUsageFlagBitIndirect,
+  kMappable       = MnBufferUsageFlagBitMappable,
+  kVideoDecodeSrc = MnBufferUsageFlagBitVideoDecodeSrc,
+  kVideoEncodeDst = MnBufferUsageFlagBitVideoEncodeDst,
 };
 MBASE_DEFINE_ENUM_CLASS_BITFLAGS_OPERATORS(BufferUsageFlagBits);
 using BufferUsageFlags = mbase::BitFlags<BufferUsageFlagBits>;
@@ -1157,6 +1267,9 @@ enum class Format : uint32_t {
   kASTC_12x10_SRGB_BLOCK = MnFormatASTC_12x10_SRGB_BLOCK,
   kASTC_12x12_UNORM_BLOCK = MnFormatASTC_12x12_UNORM_BLOCK,
   kASTC_12x12_SRGB_BLOCK = MnFormatASTC_12x12_SRGB_BLOCK,
+
+  kG8_B8R8_2PLANE_420_UNORM                  = MnFormatG8_B8R8_2PLANE_420_UNORM,
+  kG10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16 = MnFormatG10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16,
 };
 
 struct TextureDesc final {
@@ -1170,6 +1283,67 @@ struct TextureDesc final {
   uint32_t array_layer_count = 1;
 };
 _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(TextureDesc, MnTextureDesc);
+
+// ----------------------------------------------------------------------------------------------------
+// Video Coding
+//
+
+enum class VideoH265Profile : uint32_t {
+  kMain   = MnVideoH265ProfileMain,
+  kMain10 = MnVideoH265ProfileMain10,
+};
+
+enum class VideoBitDepth : uint32_t {
+  k8  = MnVideoBitDepth8,
+  k10 = MnVideoBitDepth10,
+};
+
+enum class VideoH265Level : uint32_t {
+  k1_0 = MnVideoH265Level1_0,
+  k2_0 = MnVideoH265Level2_0,
+  k2_1 = MnVideoH265Level2_1,
+  k3_0 = MnVideoH265Level3_0,
+  k3_1 = MnVideoH265Level3_1,
+  k4_0 = MnVideoH265Level4_0,
+  k4_1 = MnVideoH265Level4_1,
+  k5_0 = MnVideoH265Level5_0,
+  k5_1 = MnVideoH265Level5_1,
+  k5_2 = MnVideoH265Level5_2,
+  k6_0 = MnVideoH265Level6_0,
+  k6_1 = MnVideoH265Level6_1,
+  k6_2 = MnVideoH265Level6_2,
+};
+
+struct VideoCommonCapabilities final {
+  Extent2d picture_access_granularity;
+  Extent2d min_coded_extent;
+  Extent2d max_coded_extent;
+  uint64_t min_bitstream_buffer_offset_alignment = 0;
+  uint64_t min_bitstream_buffer_size_alignment = 0;
+  uint32_t max_dpb_slots = 0;
+  uint32_t max_active_reference_pictures = 0;
+  MnBool32 protected_content = MnBoolFalse;
+  MnBool32 separate_reference_images = MnBoolFalse;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(VideoCommonCapabilities, MnVideoCommonCapabilities);
+
+struct VideoDecodeCommonCapabilities final {
+  MnBool32 dpb_and_output_coincide = MnBoolFalse;
+  MnBool32 dpb_and_output_distinct = MnBoolFalse;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(VideoDecodeCommonCapabilities, MnVideoDecodeCommonCapabilities);
+
+struct VideoDecodeH265Capabilities final {
+  VideoCommonCapabilities       common;
+  VideoDecodeCommonCapabilities decode_common;
+  VideoH265Level                max_level = VideoH265Level::k1_0;
+  Format                        picture_format = Format::kUndefined;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(VideoDecodeH265Capabilities, MnVideoDecodeH265Capabilities);
+
+/// `VideoH265Level` <-> H.265 spec `general_level_idc` (uint8 = level x 30).
+uint8_t                       VideoH265LevelToSpecIdc(VideoH265Level level);
+std::optional<VideoH265Level> VideoH265LevelFromSpecIdc(uint8_t spec_idc);
 
 // ----------------------------------------------------------------------------------------------------
 // Shader

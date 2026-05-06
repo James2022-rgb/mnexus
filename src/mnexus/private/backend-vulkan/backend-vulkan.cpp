@@ -40,8 +40,92 @@
 #include "backend-vulkan/wsi/vk-wsi_surface.h"
 #include "backend-vulkan/depend/vulkan_vma.h"
 #include "backend-vulkan/resource/resource_storage.h"
+#include "backend-vulkan/resource/types_bridge.h"
 
 namespace mnexus_backend::vulkan {
+
+namespace {
+
+#if MNEXUS_ENABLE_VIDEO_CODING
+/// Translate the backend-internal `VideoDecodeH265Properties` into the
+/// public `mnexus::VideoDecodeH265Capabilities` shape.
+mnexus::VideoDecodeH265Capabilities ToPublicVideoDecodeH265Capabilities(
+  VideoDecodeH265Properties const& props
+) {
+  mnexus::VideoDecodeH265Capabilities out {};
+
+  // VkVideoCapabilitiesKHR -> VideoCommonCapabilities
+  out.common.picture_access_granularity = mnexus::Extent2d {
+    .width  = props.coding_capabilities.pictureAccessGranularity.width,
+    .height = props.coding_capabilities.pictureAccessGranularity.height,
+  };
+  out.common.min_coded_extent = mnexus::Extent2d {
+    .width  = props.coding_capabilities.minCodedExtent.width,
+    .height = props.coding_capabilities.minCodedExtent.height,
+  };
+  out.common.max_coded_extent = mnexus::Extent2d {
+    .width  = props.coding_capabilities.maxCodedExtent.width,
+    .height = props.coding_capabilities.maxCodedExtent.height,
+  };
+  out.common.min_bitstream_buffer_offset_alignment = props.coding_capabilities.minBitstreamBufferOffsetAlignment;
+  out.common.min_bitstream_buffer_size_alignment   = props.coding_capabilities.minBitstreamBufferSizeAlignment;
+  out.common.max_dpb_slots                         = props.coding_capabilities.maxDpbSlots;
+  out.common.max_active_reference_pictures         = props.coding_capabilities.maxActiveReferencePictures;
+  out.common.protected_content =
+    (props.coding_capabilities.flags & VK_VIDEO_CAPABILITY_PROTECTED_CONTENT_BIT_KHR) != 0
+      ? MnBoolTrue : MnBoolFalse;
+  out.common.separate_reference_images =
+    (props.coding_capabilities.flags & VK_VIDEO_CAPABILITY_SEPARATE_REFERENCE_IMAGES_BIT_KHR) != 0
+      ? MnBoolTrue : MnBoolFalse;
+
+  // VkVideoDecodeCapabilityFlagsKHR -> VideoDecodeCommonCapabilities
+  out.decode_common.dpb_and_output_coincide =
+    (props.decode_flags & VK_VIDEO_DECODE_CAPABILITY_DPB_AND_OUTPUT_COINCIDE_BIT_KHR) != 0
+      ? MnBoolTrue : MnBoolFalse;
+  out.decode_common.dpb_and_output_distinct =
+    (props.decode_flags & VK_VIDEO_DECODE_CAPABILITY_DPB_AND_OUTPUT_DISTINCT_BIT_KHR) != 0
+      ? MnBoolTrue : MnBoolFalse;
+
+  // StdVideoH265LevelIdc -> mnexus::VideoH265Level. Both are sequential
+  // ordinals starting at 0 with identical entries, but cast explicitly to
+  // make the assumption auditable.
+  static_assert(
+    static_cast<uint32_t>(mnexus::VideoH265Level::k1_0) == STD_VIDEO_H265_LEVEL_IDC_1_0 &&
+    static_cast<uint32_t>(mnexus::VideoH265Level::k6_2) == STD_VIDEO_H265_LEVEL_IDC_6_2,
+    "VideoH265Level enum values must match StdVideoH265LevelIdc"
+  );
+  out.max_level = static_cast<mnexus::VideoH265Level>(props.max_level_idc);
+
+  // VkFormat -> mnexus::Format
+  out.picture_format = FromVkFormat(props.format_properties.format);
+
+  return out;
+}
+
+/// Pick which internal slot corresponds to the requested (profile, bit_depth).
+/// Returns nullptr if the combination is unsupported (e.g. Main + 10-bit;
+/// Main is always 8-bit per spec) or not probed by this device.
+VideoDecodeH265Properties const* SelectDecodeH265Slot(
+  VideoDecodeH265Capabilities const& caps,
+  mnexus::VideoH265Profile profile,
+  mnexus::VideoBitDepth bit_depth
+) {
+  if (profile == mnexus::VideoH265Profile::kMain && bit_depth == mnexus::VideoBitDepth::k8) {
+    return caps.main.has_value() ? &*caps.main : nullptr;
+  }
+  if (profile == mnexus::VideoH265Profile::kMain10 && bit_depth == mnexus::VideoBitDepth::k8) {
+    return caps.main10_8bit.has_value() ? &*caps.main10_8bit : nullptr;
+  }
+  if (profile == mnexus::VideoH265Profile::kMain10 && bit_depth == mnexus::VideoBitDepth::k10) {
+    return caps.main10_10bit.has_value() ? &*caps.main10_10bit : nullptr;
+  }
+  // (kMain, k10) is never valid: the Main profile is 8-bit only.
+  return nullptr;
+}
+#endif // MNEXUS_ENABLE_VIDEO_CODING
+
+} // anonymous namespace
+
 
 
 // ==================================================================================================
@@ -480,6 +564,35 @@ public:
   IMPL_VAPI(void, GetAdapterInfo, mnexus::AdapterInfo& out_info) {
     STUB_NOT_IMPLEMENTED();
     out_info = {};
+  }
+
+  // ----------------------------------------------------------------------------------------------
+  // Video coding
+  //
+
+  IMPL_VAPI(MnBool32, QueryVideoDecodeH265Capabilities,
+    mnexus::VideoH265Profile profile,
+    mnexus::VideoBitDepth    bit_depth,
+    mnexus::VideoDecodeH265Capabilities& out_caps
+  ) {
+#if MNEXUS_ENABLE_VIDEO_CODING
+    auto const& opt_caps = vk_device_->physical_device_desc().video_coding_capabilities();
+    if (!opt_caps.has_value()) {
+      return MnBoolFalse;
+    }
+
+    VideoDecodeH265Properties const* slot = SelectDecodeH265Slot(opt_caps->decode_h265, profile, bit_depth);
+    if (slot == nullptr) {
+      return MnBoolFalse;
+    }
+
+    out_caps = ToPublicVideoDecodeH265Capabilities(*slot);
+    return MnBoolTrue;
+#else
+    (void)profile; (void)bit_depth; (void)out_caps;
+    MBASE_LOG_ERROR("QueryVideoDecodeH265Capabilities called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
+    return MnBoolFalse;
+#endif
   }
 
   // ----------------------------------------------------------------------------------------------

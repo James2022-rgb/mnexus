@@ -18,6 +18,17 @@ wgpu::Buffer CreateWgpuBuffer(
     return nullptr;
   }
 
+  // Vulkan Video bitstream usage has no WebGPU equivalent; reject up-front
+  // rather than silently dropping the flag.
+  if (buffer_desc.usage.HasAnyOf(mnexus::BufferUsageFlagBits::kVideoDecodeSrc)) {
+    MBASE_LOG_ERROR("BufferUsageFlagBits::kVideoDecodeSrc is not supported by the WebGPU backend.");
+    return nullptr;
+  }
+  if (buffer_desc.usage.HasAnyOf(mnexus::BufferUsageFlagBits::kVideoEncodeDst)) {
+    MBASE_LOG_ERROR("BufferUsageFlagBits::kVideoEncodeDst is not supported by the WebGPU backend.");
+    return nullptr;
+  }
+
   wgpu::BufferDescriptor wgpu_buffer_desc {};
   wgpu_buffer_desc.size = buffer_desc.size_in_bytes;
   wgpu_buffer_desc.usage = ToWgpuBufferUsage(buffer_desc.usage);
