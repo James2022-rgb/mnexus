@@ -542,6 +542,31 @@ uint8_t MnVideoH265LevelToSpecIdc(MnVideoH265Level level);
 MnBool32 MnVideoH265LevelFromSpecIdc(uint8_t spec_idc, MnVideoH265Level* out_level);
 #endif
 
+/// Descriptor for H.265 decode `VideoSession` creation. Mirrors the operation-
+/// specific fields of `VkVideoSessionCreateInfoKHR`.
+typedef struct MnVideoSessionDecodeH265Desc _MN_FINAL {
+  MnVideoH265Profile profile _MN_INIT(MnVideoH265ProfileMain);
+  MnVideoBitDepth    bit_depth _MN_INIT(MnVideoBitDepth8);
+  MnFormat           picture_format _MN_INIT(MnFormatUndefined);
+  MnFormat           reference_picture_format _MN_INIT(MnFormatUndefined);
+  MnExtent2d         max_coded_extent;
+  uint32_t           max_dpb_slots _MN_INIT(0);
+  uint32_t           max_active_reference_pictures _MN_INIT(0);
+} MnVideoSessionDecodeH265Desc;
+
+/// Descriptor for H.265 decode `VideoSessionParameters` creation. Carries
+/// raw NAL byte arrays for VPS / SPS / PPS (start code excluded; NAL header
+/// included). mnexus parses these internally via vidsynt.
+typedef struct MnVideoSessionParametersDecodeH265Desc _MN_FINAL {
+  MnResourceHandle session _MN_INIT(MnInvalidResourceHandle);
+  uint8_t const* vps_data _MN_INIT(_MN_NULL);
+  uint32_t       vps_size _MN_INIT(0);
+  uint8_t const* sps_data _MN_INIT(_MN_NULL);
+  uint32_t       sps_size _MN_INIT(0);
+  uint8_t const* pps_data _MN_INIT(_MN_NULL);
+  uint32_t       pps_size _MN_INIT(0);
+} MnVideoSessionParametersDecodeH265Desc;
+
 // ----------------------------------------------------------------------------------------------------
 // Shader
 //
@@ -932,17 +957,21 @@ _MNEXUS_DEFINE_TYPESAFE_HANDLE(ProgramHandle);
 _MNEXUS_DEFINE_TYPESAFE_HANDLE(ComputePipelineHandle);
 _MNEXUS_DEFINE_TYPESAFE_HANDLE(RenderPipelineHandle);
 _MNEXUS_DEFINE_TYPESAFE_HANDLE(SamplerHandle);
+_MNEXUS_DEFINE_TYPESAFE_HANDLE(VideoSessionHandle);
+_MNEXUS_DEFINE_TYPESAFE_HANDLE(VideoSessionParametersHandle);
 
 // Resource type tags embedded in bits 59-63 of the handle's u64 representation.
 // Type 0 is reserved for null/invalid handles.
-inline constexpr uint8_t kResourceTypeInvalid         = 0;
-inline constexpr uint8_t kResourceTypeBuffer          = 1;
-inline constexpr uint8_t kResourceTypeTexture         = 2;
-inline constexpr uint8_t kResourceTypeShaderModule    = 3;
-inline constexpr uint8_t kResourceTypeProgram         = 4;
-inline constexpr uint8_t kResourceTypeComputePipeline = 5;
-inline constexpr uint8_t kResourceTypeRenderPipeline  = 6;
-inline constexpr uint8_t kResourceTypeSampler         = 7;
+inline constexpr uint8_t kResourceTypeInvalid                 = 0;
+inline constexpr uint8_t kResourceTypeBuffer                  = 1;
+inline constexpr uint8_t kResourceTypeTexture                 = 2;
+inline constexpr uint8_t kResourceTypeShaderModule            = 3;
+inline constexpr uint8_t kResourceTypeProgram                 = 4;
+inline constexpr uint8_t kResourceTypeComputePipeline         = 5;
+inline constexpr uint8_t kResourceTypeRenderPipeline          = 6;
+inline constexpr uint8_t kResourceTypeSampler                 = 7;
+inline constexpr uint8_t kResourceTypeVideoSession            = 8;
+inline constexpr uint8_t kResourceTypeVideoSessionParameters  = 9;
 
 // ----------------------------------------------------------------------------------------------------
 // Queue
@@ -1344,6 +1373,28 @@ _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(VideoDecodeH265Capabilities, MnVideoDecode
 /// `VideoH265Level` <-> H.265 spec `general_level_idc` (uint8 = level x 30).
 uint8_t                       VideoH265LevelToSpecIdc(VideoH265Level level);
 std::optional<VideoH265Level> VideoH265LevelFromSpecIdc(uint8_t spec_idc);
+
+struct VideoSessionDecodeH265Desc final {
+  VideoH265Profile profile = VideoH265Profile::kMain;
+  VideoBitDepth    bit_depth = VideoBitDepth::k8;
+  Format           picture_format = Format::kUndefined;
+  Format           reference_picture_format = Format::kUndefined;
+  Extent2d         max_coded_extent;
+  uint32_t         max_dpb_slots = 0;
+  uint32_t         max_active_reference_pictures = 0;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(VideoSessionDecodeH265Desc, MnVideoSessionDecodeH265Desc);
+
+struct VideoSessionParametersDecodeH265Desc final {
+  VideoSessionHandle session;
+  uint8_t const*     vps_data = nullptr;
+  uint32_t           vps_size = 0;
+  uint8_t const*     sps_data = nullptr;
+  uint32_t           sps_size = 0;
+  uint8_t const*     pps_data = nullptr;
+  uint32_t           pps_size = 0;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(VideoSessionParametersDecodeH265Desc, MnVideoSessionParametersDecodeH265Desc);
 
 // ----------------------------------------------------------------------------------------------------
 // Shader

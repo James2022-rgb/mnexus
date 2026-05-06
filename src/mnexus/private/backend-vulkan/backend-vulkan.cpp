@@ -595,6 +595,43 @@ public:
 #endif
   }
 
+  IMPL_VAPI(mnexus::VideoSessionHandle, CreateVideoSessionDecodeH265,
+    mnexus::VideoSessionDecodeH265Desc const& /*desc*/
+  ) {
+#if MNEXUS_ENABLE_VIDEO_CODING
+    // TODO: Create VkVideoSessionKHR + bind memory (folgos `VideoSessionFacade` reference).
+    MBASE_LOG_ERROR("CreateVideoSessionDecodeH265 not yet implemented in the Vulkan backend.");
+    return mnexus::VideoSessionHandle{};
+#else
+    MBASE_LOG_ERROR("CreateVideoSessionDecodeH265 called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
+    return mnexus::VideoSessionHandle{};
+#endif
+  }
+
+  IMPL_VAPI(void, DestroyVideoSession, mnexus::VideoSessionHandle session) {
+    // No-op: Create currently always returns invalid.
+    (void)session;
+  }
+
+  IMPL_VAPI(mnexus::VideoSessionParametersHandle, CreateVideoSessionParametersDecodeH265,
+    mnexus::VideoSessionParametersDecodeH265Desc const& /*desc*/
+  ) {
+#if MNEXUS_ENABLE_VIDEO_CODING
+    // TODO: Parse VPS/SPS/PPS NAL via vidsynt, build StdVideoH265* structs,
+    // call vkCreateVideoSessionParametersKHR.
+    MBASE_LOG_ERROR("CreateVideoSessionParametersDecodeH265 not yet implemented in the Vulkan backend.");
+    return mnexus::VideoSessionParametersHandle{};
+#else
+    MBASE_LOG_ERROR("CreateVideoSessionParametersDecodeH265 called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
+    return mnexus::VideoSessionParametersHandle{};
+#endif
+  }
+
+  IMPL_VAPI(void, DestroyVideoSessionParameters, mnexus::VideoSessionParametersHandle params) {
+    // No-op: Create currently always returns invalid.
+    (void)params;
+  }
+
   // ----------------------------------------------------------------------------------------------
   // Diagnostics
   //

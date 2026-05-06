@@ -84,6 +84,28 @@ MNEXUS_NO_THROW MnBool32 MNEXUS_CALL MnDeviceQueryVideoDecodeH265Capabilities(
   );
 }
 
+MNEXUS_NO_THROW MnResourceHandle MNEXUS_CALL MnDeviceCreateVideoSessionDecodeH265(
+  MnDevice device, MnVideoSessionDecodeH265Desc const* desc
+) {
+  return ToDevice(device)->CreateVideoSessionDecodeH265(
+    *reinterpret_cast<mnexus::VideoSessionDecodeH265Desc const*>(desc)).Get();
+}
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceDestroyVideoSession(MnDevice device, MnResourceHandle session) {
+  ToDevice(device)->DestroyVideoSession(mnexus::VideoSessionHandle(session));
+}
+
+MNEXUS_NO_THROW MnResourceHandle MNEXUS_CALL MnDeviceCreateVideoSessionParametersDecodeH265(
+  MnDevice device, MnVideoSessionParametersDecodeH265Desc const* desc
+) {
+  return ToDevice(device)->CreateVideoSessionParametersDecodeH265(
+    *reinterpret_cast<mnexus::VideoSessionParametersDecodeH265Desc const*>(desc)).Get();
+}
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceDestroyVideoSessionParameters(MnDevice device, MnResourceHandle params) {
+  ToDevice(device)->DestroyVideoSessionParameters(mnexus::VideoSessionParametersHandle(params));
+}
+
 // ----------------------------------------------------------------------------------------------------
 // IDevice: Resource creation / destruction
 //

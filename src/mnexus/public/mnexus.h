@@ -595,6 +595,28 @@ public:
     VideoDecodeH265Capabilities& out_caps
   );
 
+  /// Creates an H.265 decode `VideoSession` (analogous to `VkVideoSessionKHR`).
+  ///
+  /// - Returns: a valid `VideoSessionHandle`, or an invalid handle on failure
+  ///   (e.g. video coding disabled at build time, capability mismatch, OOM).
+  /// - Always returns invalid on backends without Vulkan Video support.
+  _MNEXUS_VAPI(VideoSessionHandle, CreateVideoSessionDecodeH265,
+    VideoSessionDecodeH265Desc const& desc
+  );
+  _MNEXUS_VAPI(void, DestroyVideoSession, VideoSessionHandle session);
+
+  /// Creates an H.265 decode `VideoSessionParameters` (analogous to
+  /// `VkVideoSessionParametersKHR`). VPS / SPS / PPS NAL units are parsed
+  /// internally via vidsynt and packed into the std header structs.
+  ///
+  /// - Returns: a valid `VideoSessionParametersHandle`, or an invalid handle
+  ///   on failure.
+  /// - Always returns invalid on backends without Vulkan Video support.
+  _MNEXUS_VAPI(VideoSessionParametersHandle, CreateVideoSessionParametersDecodeH265,
+    VideoSessionParametersDecodeH265Desc const& desc
+  );
+  _MNEXUS_VAPI(void, DestroyVideoSessionParameters, VideoSessionParametersHandle params);
+
   //
   // Diagnostics
   //
@@ -1025,6 +1047,16 @@ MNEXUS_NO_THROW MnBool32 MNEXUS_CALL MnDeviceQueryVideoDecodeH265Capabilities(
   MnVideoH265Profile profile,
   MnVideoBitDepth bit_depth,
   MnVideoDecodeH265Capabilities* out_caps);
+
+MNEXUS_NO_THROW MnResourceHandle MNEXUS_CALL MnDeviceCreateVideoSessionDecodeH265(
+  MnDevice device, MnVideoSessionDecodeH265Desc const* desc);
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceDestroyVideoSession(
+  MnDevice device, MnResourceHandle session);
+
+MNEXUS_NO_THROW MnResourceHandle MNEXUS_CALL MnDeviceCreateVideoSessionParametersDecodeH265(
+  MnDevice device, MnVideoSessionParametersDecodeH265Desc const* desc);
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceDestroyVideoSessionParameters(
+  MnDevice device, MnResourceHandle params);
 
 // ----------------------------------------------------------------------------------------------------
 // IDevice: Resource creation / destruction

@@ -634,6 +634,28 @@ public:
     return MnBoolFalse;
   }
 
+  IMPL_VAPI(mnexus::VideoSessionHandle, CreateVideoSessionDecodeH265,
+    mnexus::VideoSessionDecodeH265Desc const& /*desc*/
+  ) {
+    MBASE_LOG_ERROR("CreateVideoSessionDecodeH265 is not supported by the WebGPU backend.");
+    return mnexus::VideoSessionHandle{};
+  }
+
+  IMPL_VAPI(void, DestroyVideoSession, mnexus::VideoSessionHandle /*session*/) {
+    // No-op: Create always returns invalid.
+  }
+
+  IMPL_VAPI(mnexus::VideoSessionParametersHandle, CreateVideoSessionParametersDecodeH265,
+    mnexus::VideoSessionParametersDecodeH265Desc const& /*desc*/
+  ) {
+    MBASE_LOG_ERROR("CreateVideoSessionParametersDecodeH265 is not supported by the WebGPU backend.");
+    return mnexus::VideoSessionParametersHandle{};
+  }
+
+  IMPL_VAPI(void, DestroyVideoSessionParameters, mnexus::VideoSessionParametersHandle /*params*/) {
+    // No-op: Create always returns invalid.
+  }
+
   //
   // Diagnostics
   //
