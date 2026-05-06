@@ -81,23 +81,22 @@ void ShowVideoDecodeH265PropertiesUi(VideoDecodeH265Properties const& props) {
 }
 
 void ShowVideoDecodeH265CapabilitiesUi(VideoDecodeH265Capabilities const& caps) {
-  if (caps.main.has_value()) {
-    if (ImGui::TreeNode("Main")) {
-      ShowVideoDecodeH265PropertiesUi(*caps.main);
-      ImGui::TreePop();
+  auto show = [](char const* label, std::optional<VideoDecodeH265Properties> const& props) {
+    if (props.has_value()) {
+      if (ImGui::TreeNode(label)) {
+        ShowVideoDecodeH265PropertiesUi(*props);
+        ImGui::TreePop();
+      }
+    } else {
+      ImGui::Text("%s:", label);
+      ImGui::SameLine();
+      ImGui::TextDisabled("not supported");
     }
-  } else {
-    ImGui::TextDisabled("Main: not supported");
-  }
+  };
 
-  if (caps.main10.has_value()) {
-    if (ImGui::TreeNode("Main 10")) {
-      ShowVideoDecodeH265PropertiesUi(*caps.main10);
-      ImGui::TreePop();
-    }
-  } else {
-    ImGui::TextDisabled("Main 10: not supported");
-  }
+  show("Main (8-bit)", caps.main);
+  show("Main 10 (8-bit)", caps.main10_8bit);
+  show("Main 10 (10-bit)", caps.main10_10bit);
 }
 
 void ShowVideoCodingCapabilitiesUi(VideoCodingCapabilities const& caps) {

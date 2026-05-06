@@ -67,8 +67,12 @@ struct VideoDecodeH265Properties final {
 };
 
 struct VideoDecodeH265Capabilities final {
+  /// Main profile (8-bit, 4:2:0).
   std::optional<VideoDecodeH265Properties> main;
-  std::optional<VideoDecodeH265Properties> main10;
+  /// Main 10 profile decoding 8-bit content.
+  std::optional<VideoDecodeH265Properties> main10_8bit;
+  /// Main 10 profile decoding 10-bit content.
+  std::optional<VideoDecodeH265Properties> main10_10bit;
 };
 
 struct VideoCodingCapabilities final {

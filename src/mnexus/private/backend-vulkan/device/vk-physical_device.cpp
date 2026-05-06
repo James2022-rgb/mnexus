@@ -221,14 +221,17 @@ PhysicalDeviceDesc PhysicalDeviceDesc::Query(VulkanInstance const& instance, VkP
       if (result.QueryExtensionSupport(VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME)) {
         constexpr VkImageUsageFlags kRequiredDecodeImageUsage = VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR | VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR | VK_IMAGE_USAGE_SAMPLED_BIT;
 
-        auto query_video_decode_h265_support = [vk_physical_device](StdVideoH265ProfileIdc std_profile_idc) -> std::optional<VideoDecodeH265Properties> {
+        auto query_video_decode_h265_support = [vk_physical_device](
+          StdVideoH265ProfileIdc std_profile_idc,
+          VkVideoComponentBitDepthFlagsKHR bit_depth
+        ) -> std::optional<VideoDecodeH265Properties> {
           VkVideoProfileInfoKHR profile_info {
             .sType = VK_STRUCTURE_TYPE_VIDEO_PROFILE_INFO_KHR,
             .pNext = nullptr,
             .videoCodecOperation = VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR,
             .chromaSubsampling = VK_VIDEO_CHROMA_SUBSAMPLING_420_BIT_KHR,
-            .lumaBitDepth = VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR,
-            .chromaBitDepth = VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR,
+            .lumaBitDepth = bit_depth,
+            .chromaBitDepth = bit_depth,
           };
 
           VkVideoDecodeH265ProfileInfoKHR decode_h265_profile_info{};
@@ -302,13 +305,18 @@ PhysicalDeviceDesc PhysicalDeviceDesc::Query(VulkanInstance const& instance, VkP
           };
         };
 
-        std::optional<VideoDecodeH265Properties> decode_h265_main = query_video_decode_h265_support(STD_VIDEO_H265_PROFILE_IDC_MAIN);
-        std::optional<VideoDecodeH265Properties> decode_h265_main10 = query_video_decode_h265_support(STD_VIDEO_H265_PROFILE_IDC_MAIN_10);
+        std::optional<VideoDecodeH265Properties> decode_h265_main =
+          query_video_decode_h265_support(STD_VIDEO_H265_PROFILE_IDC_MAIN, VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR);
+        std::optional<VideoDecodeH265Properties> decode_h265_main10_8bit =
+          query_video_decode_h265_support(STD_VIDEO_H265_PROFILE_IDC_MAIN_10, VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR);
+        std::optional<VideoDecodeH265Properties> decode_h265_main10_10bit =
+          query_video_decode_h265_support(STD_VIDEO_H265_PROFILE_IDC_MAIN_10, VK_VIDEO_COMPONENT_BIT_DEPTH_10_BIT_KHR);
 
-        if (decode_h265_main.has_value() || decode_h265_main10.has_value()) {
+        if (decode_h265_main.has_value() || decode_h265_main10_8bit.has_value() || decode_h265_main10_10bit.has_value()) {
           VideoCodingCapabilities video_coding_capabilities {};
           video_coding_capabilities.decode_h265.main = std::move(decode_h265_main);
-          video_coding_capabilities.decode_h265.main10 = std::move(decode_h265_main10);
+          video_coding_capabilities.decode_h265.main10_8bit = std::move(decode_h265_main10_8bit);
+          video_coding_capabilities.decode_h265.main10_10bit = std::move(decode_h265_main10_10bit);
           result.video_coding_capabilities_ = std::move(video_coding_capabilities);
         }
       }

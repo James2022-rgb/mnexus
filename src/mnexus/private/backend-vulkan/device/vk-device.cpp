@@ -282,7 +282,9 @@ std::unique_ptr<IVulkanDevice> IVulkanDevice::Create(
       device_extensions.push_back(VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME);
 
       auto const& caps = desc.physical_device_desc->video_coding_capabilities().value();
-      if (caps.decode_h265.main.has_value() || caps.decode_h265.main10.has_value()) {
+      if (caps.decode_h265.main.has_value()
+        || caps.decode_h265.main10_8bit.has_value()
+        || caps.decode_h265.main10_10bit.has_value()) {
         device_extensions.push_back(VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME);
       }
     }
