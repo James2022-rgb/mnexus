@@ -64,6 +64,13 @@ public:
   /// not part of this device's QueueSelection.
   [[nodiscard]] virtual IVulkanQueue* GetQueue(mnexus::QueueId const& queue_id) = 0;
 
+  // ----------------------------------------------------------------------------------------------
+  // Debug UI.
+
+  /// Renders Dear ImGui content describing this logical device (queue
+  /// selection, etc.). No-op when `MNEXUS_HAVE_DEAR_IMGUI` is not defined.
+  virtual void ShowDebugUi() const = 0;
+
 protected:
   IVulkanDevice() = default;
 };

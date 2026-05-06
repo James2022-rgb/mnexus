@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,10 @@
 #include "backend-vulkan/device/vk-queue.h"
 
 #include "backend-vulkan/device/vk-device_helper.h"
+
+#if MNEXUS_HAVE_DEAR_IMGUI
+#  include "imgui.h"
+#endif
 
 namespace mnexus_backend::vulkan {
 
@@ -88,6 +93,52 @@ public:
   }
 
   IVulkanDeferredDestroyer* GetDeferredDestroyer() const override { return &deferred_destroyer_; }
+
+  void ShowDebugUi() const override {
+#if MNEXUS_HAVE_DEAR_IMGUI
+    auto const& queue_families = physical_device_desc_->queue_families();
+
+    auto family_flags_str = [&](uint32_t family_index) -> std::string {
+      if (family_index >= queue_families.size()) {
+        return "(invalid)";
+      }
+      return string_VkQueueFlags(queue_families[family_index].properties.queueFlags);
+    };
+
+    auto row = [&](char const* role, std::optional<mnexus::QueueId> const& qid) {
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn(); ImGui::TextUnformatted(role);
+      if (qid.has_value()) {
+        ImGui::TableNextColumn(); ImGui::Text("%u", qid->queue_family_index);
+        ImGui::TableNextColumn(); ImGui::Text("%u", qid->queue_index);
+        ImGui::TableNextColumn(); ImGui::TextUnformatted(family_flags_str(qid->queue_family_index).c_str());
+      } else {
+        ImGui::TableNextColumn(); ImGui::TextDisabled("-");
+        ImGui::TableNextColumn(); ImGui::TextDisabled("-");
+        ImGui::TableNextColumn(); ImGui::TextDisabled("none");
+      }
+    };
+
+    if (ImGui::CollapsingHeader("Queue Selection", ImGuiTreeNodeFlags_DefaultOpen)) {
+      if (ImGui::BeginTable("QueueSelection", 4,
+          ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Role");
+        ImGui::TableSetupColumn("Family");
+        ImGui::TableSetupColumn("Queue");
+        ImGui::TableSetupColumn("Family flags");
+        ImGui::TableHeadersRow();
+
+        row("Present-capable",       std::optional { queue_selection_.present_capable });
+        row("Dedicated compute",     queue_selection_.dedicated_compute);
+        row("Dedicated transfer",    queue_selection_.dedicated_transfer);
+        row("Dedicated video decode", queue_selection_.dedicated_video_decode);
+        row("Dedicated video encode", queue_selection_.dedicated_video_encode);
+
+        ImGui::EndTable();
+      }
+    }
+#endif
+  }
 
   IVulkanQueue* GetQueue(mnexus::QueueId const& queue_id) override {
     std::optional<uint32_t> opt_index = queue_index_map_.Find(queue_id);

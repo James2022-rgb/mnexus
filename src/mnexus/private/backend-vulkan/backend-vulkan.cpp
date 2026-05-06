@@ -779,6 +779,9 @@ public:
     if (ImGui::CollapsingHeader("Physical Device")) {
       vk_device_->physical_device_desc().ShowDebugUi();
     }
+    if (ImGui::CollapsingHeader("Logical Device")) {
+      vk_device_->ShowDebugUi();
+    }
     if (ImGui::CollapsingHeader("Resource Storage")) {
       resource_storage_.ShowDebugUi();
     }

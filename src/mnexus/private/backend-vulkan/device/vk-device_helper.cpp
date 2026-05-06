@@ -25,8 +25,11 @@ mnexus::QueueSelection SelectQueueFamilies(
   using mnexus::QueueId;
 
   auto const queue_families = physical_device_desc.queue_families();
-  bool const has_video_queue =
-    physical_device_desc.QueryExtensionSupport(VK_KHR_VIDEO_QUEUE_EXTENSION_NAME) != nullptr;
+  // Mirror the gate used in IVulkanDevice::Create(): only pick video queues when
+  // the H.265 capability probe in PhysicalDeviceDesc::Query() succeeded, since
+  // that's the precondition for actually enabling VK_KHR_video_queue. Otherwise
+  // we'd allocate a queue that the device wouldn't have the extension to use.
+  bool const has_video_queue = physical_device_desc.video_coding_capabilities().has_value();
 
   // Build all potential (family_index, queue_index) pairs.
   std::vector<QueueId> potential_queue_ids;
