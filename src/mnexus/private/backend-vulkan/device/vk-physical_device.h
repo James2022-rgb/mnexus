@@ -57,6 +57,24 @@ struct PhysicalDeviceRayQueryDesc final {
   VkPhysicalDeviceRayQueryFeaturesKHR features {};
 };
 
+struct VideoDecodeH265Properties final {
+  VkVideoCapabilitiesKHR coding_capabilities {}; // pNext is nullptr in this struct.
+  VkVideoDecodeCapabilityFlagsKHR decode_flags {};
+
+  StdVideoH265LevelIdc max_level_idc {};
+
+  VkVideoFormatPropertiesKHR format_properties {};
+};
+
+struct VideoDecodeH265Capabilities final {
+  std::optional<VideoDecodeH265Properties> main;
+  std::optional<VideoDecodeH265Properties> main10;
+};
+
+struct VideoCodingCapabilities final {
+  VideoDecodeH265Capabilities decode_h265;
+};
+
 struct QueueFamilyProperties final {
   VkQueueFamilyProperties properties {};
   VkQueueFamilyVideoPropertiesKHR video_properties {};
@@ -86,12 +104,18 @@ public:
   MBASE_ACCESSOR_GETCR_OPTIONAL(PhysicalDeviceAccelerationStructureDesc, acceleration_structure_desc);
   MBASE_ACCESSOR_GETCR_OPTIONAL(PhysicalDeviceRayTracingPipelineDesc, ray_tracing_pipeline_desc);
   MBASE_ACCESSOR_GETCR_OPTIONAL(PhysicalDeviceRayQueryDesc, ray_query_desc);
+  MBASE_ACCESSOR_GETCR_OPTIONAL(VideoCodingCapabilities, video_coding_capabilities);
 
   MBASE_ACCESSOR_ARRAY_PROXY(VkExtensionProperties, extensions);
   MBASE_ACCESSOR_ARRAY_PROXY(QueueFamilyProperties, queue_families);
 
   [[nodiscard]] bool QuerySurfaceSupport(uint32_t queue_family_index, VkSurfaceKHR surface) const;
   [[nodiscard]] VkExtensionProperties const* QueryExtensionSupport(std::string_view extension_name) const;
+
+  /// Renders a Dear ImGui inline view of this physical device. No-op when
+  /// `MNEXUS_HAVE_DEAR_IMGUI` is not defined. The caller is responsible for
+  /// wrapping in a `CollapsingHeader` / `Begin` if desired.
+  void ShowDebugUi() const;
 private:
   VkInstance instance_ = VK_NULL_HANDLE;
 
@@ -112,6 +136,7 @@ private:
   std::optional<PhysicalDeviceAccelerationStructureDesc> acceleration_structure_desc_;
   std::optional<PhysicalDeviceRayTracingPipelineDesc> ray_tracing_pipeline_desc_;
   std::optional<PhysicalDeviceRayQueryDesc> ray_query_desc_;
+  std::optional<VideoCodingCapabilities> video_coding_capabilities_;
 
   std::vector<QueueFamilyProperties> queue_families_;
 };

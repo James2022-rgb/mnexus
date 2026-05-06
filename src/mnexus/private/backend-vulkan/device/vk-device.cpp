@@ -2,9 +2,12 @@
 #include "backend-vulkan/device/vk-device.h"
 
 // c++ headers ------------------------------------------
+#include <cstring>
+
 #include <algorithm>
 #include <functional>
 #include <mutex>
+#include <string>
 #include <vector>
 
 // public project headers -------------------------------
@@ -72,8 +75,15 @@ public:
   mnexus::QueueSelection const& queue_selection() const override { return queue_selection_; }
   VmaAllocator vma_allocator() const override { return vma_allocator_; }
 
-  bool IsExtensionEnabled(char const* /*extension_name*/) const override {
-    // FIXME: Implement `VulkanDevice::IsExtensionEnabled`.
+  bool IsExtensionEnabled(char const* extension_name) const override {
+    if (extension_name == nullptr) {
+      return false;
+    }
+    for (auto const& enabled : enabled_extensions_) {
+      if (std::strcmp(enabled.c_str(), extension_name) == 0) {
+        return true;
+      }
+    }
     return false;
   }
 
@@ -96,14 +106,16 @@ private:
     VkDevice handle,
     mnexus::QueueSelection queue_selection,
     QueueIndexMap queue_index_map,
-    VmaAllocator vma_allocator
+    VmaAllocator vma_allocator,
+    std::vector<std::string> enabled_extensions
   ) :
     instance_(std::move(instance)),
     physical_device_desc_(std::make_unique<PhysicalDeviceDesc>(physical_device_desc)),
     handle_(handle),
     queue_selection_(queue_selection),
     queue_index_map_(queue_index_map),
-    vma_allocator_(vma_allocator)
+    vma_allocator_(vma_allocator),
+    enabled_extensions_(std::move(enabled_extensions))
   {}
 
   VulkanInstance instance_;
@@ -113,6 +125,7 @@ private:
   QueueIndexMap queue_index_map_;
   std::unique_ptr<IVulkanQueue> queues_[kMaxQueues] {};
   VmaAllocator vma_allocator_ = VK_NULL_HANDLE;
+  std::vector<std::string> enabled_extensions_;
 
   // --- Deferred destruction (composition, not inheritance) ---
 
@@ -235,37 +248,44 @@ std::unique_ptr<IVulkanDevice> IVulkanDevice::Create(
 
   // Device extensions.
   std::vector<char const*> device_extensions;
-  if (!desc.headless) {
-    device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-  }
+  {
+    if (!desc.headless) {
+      device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    }
 
-  // VK_KHR_timeline_semaphore is mandatory for the mnexus Vulkan backend.
-  if (desc.physical_device_desc->QueryExtensionSupport(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME) == nullptr) {
-    MBASE_LOG_ERROR("VK_KHR_timeline_semaphore is not supported by the physical device.");
-    return nullptr;
-  }
-  device_extensions.push_back(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+    //
+    // Mandatory extensions.
+    //
 
-  // VK_KHR_synchronization2 is mandatory for the mnexus Vulkan backend.
-  if (desc.physical_device_desc->QueryExtensionSupport(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME) == nullptr) {
-    MBASE_LOG_ERROR("VK_KHR_synchronization2 is not supported by the physical device.");
-    return nullptr;
-  }
-  device_extensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+#define MNEXUS_REQUIRE_DEVICE_EXTENSION(extension_name)                                  \
+  do {                                                                                   \
+    if (desc.physical_device_desc->QueryExtensionSupport(extension_name) == nullptr) {   \
+      MBASE_LOG_ERROR("{} is not supported by the physical device.", (extension_name)); \
+      return nullptr;                                                                    \
+    }                                                                                    \
+    device_extensions.push_back(extension_name);                                         \
+  } while (0)
 
-  bool has_create_renderpass2 = desc.physical_device_desc->QueryExtensionSupport(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME) != nullptr;
-  if (has_create_renderpass2) {
-    device_extensions.push_back(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
-  }
+    MNEXUS_REQUIRE_DEVICE_EXTENSION(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+    MNEXUS_REQUIRE_DEVICE_EXTENSION(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
 
-  bool has_depth_stencil_resolve = desc.physical_device_desc->QueryExtensionSupport(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME) != nullptr;
-  if (has_depth_stencil_resolve) {
-    device_extensions.push_back(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME);
-  }
+    MNEXUS_REQUIRE_DEVICE_EXTENSION(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    MNEXUS_REQUIRE_DEVICE_EXTENSION(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME);
+    MNEXUS_REQUIRE_DEVICE_EXTENSION(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
 
-  bool has_dynamic_rendering = desc.physical_device_desc->QueryExtensionSupport(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME) != nullptr;
-  if (has_dynamic_rendering) {
-    device_extensions.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+#undef MNEXUS_REQUIRE_DEVICE_EXTENSION
+
+    // Vulkan Video extensions. PhysicalDeviceDesc::Query() has already probed
+    // capability and format support; we just consult the cached result here.
+    if (desc.physical_device_desc->video_coding_capabilities().has_value()) {
+      device_extensions.push_back(VK_KHR_VIDEO_QUEUE_EXTENSION_NAME);
+      device_extensions.push_back(VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME);
+
+      auto const& caps = desc.physical_device_desc->video_coding_capabilities().value();
+      if (caps.decode_h265.main.has_value() || caps.decode_h265.main10.has_value()) {
+        device_extensions.push_back(VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME);
+      }
+    }
   }
 
   // De-duplicate device extension names.
@@ -297,12 +317,10 @@ std::unique_ptr<IVulkanDevice> IVulkanDevice::Create(
   pp_next = &device_features_11.pNext;
 
   VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features{};
-  if (has_dynamic_rendering) {
-    dynamic_rendering_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
-    dynamic_rendering_features.dynamicRendering = VK_TRUE;
-    *pp_next = &dynamic_rendering_features;
-    pp_next = &dynamic_rendering_features.pNext;
-  }
+  dynamic_rendering_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
+  dynamic_rendering_features.dynamicRendering = VK_TRUE;
+  *pp_next = &dynamic_rendering_features;
+  pp_next = &dynamic_rendering_features.pNext;
 
   VkDeviceCreateInfo info {};
   info.sType                = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -352,13 +370,20 @@ std::unique_ptr<IVulkanDevice> IVulkanDevice::Create(
     }
   }
 
+  std::vector<std::string> enabled_extensions;
+  enabled_extensions.reserve(device_extensions.size());
+  for (char const* ext : device_extensions) {
+    enabled_extensions.emplace_back(ext);
+  }
+
   auto device = std::unique_ptr<VulkanDevice>(new VulkanDevice(
     std::move(instance),
     *desc.physical_device_desc,
     vk_device,
     selection,
     queue_index_map,
-    vma_allocator
+    vma_allocator,
+    std::move(enabled_extensions)
   ));
 
   // Retrieve VkQueues, create timeline semaphores, and construct IVulkanQueue

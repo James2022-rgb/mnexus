@@ -776,6 +776,9 @@ public:
 
   void ShowDebugUi() override {
 #if MNEXUS_HAVE_DEAR_IMGUI
+    if (ImGui::CollapsingHeader("Physical Device")) {
+      vk_device_->physical_device_desc().ShowDebugUi();
+    }
     if (ImGui::CollapsingHeader("Resource Storage")) {
       resource_storage_.ShowDebugUi();
     }

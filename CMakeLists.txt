@@ -484,6 +484,8 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/device/vk-instance.h
     ${_private_backend_vulkan_dir}/device/vk-physical_device.cpp
     ${_private_backend_vulkan_dir}/device/vk-physical_device.h
+    ${_private_backend_vulkan_dir}/device/vk-physical_device-debug_ui.cpp
+    ${_private_backend_vulkan_dir}/device/vk-physical_device-debug_ui.h
     ${_private_backend_vulkan_dir}/device/vk-device.cpp
     ${_private_backend_vulkan_dir}/device/vk-device.h
     ${_private_backend_vulkan_dir}/device/vk-device_helper.cpp
