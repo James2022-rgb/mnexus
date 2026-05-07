@@ -360,6 +360,14 @@ public:
   IMPL_VAPI(mnexus::TextureHandle, CreateTexture,
     mnexus::TextureDesc const& desc
   ) {
+    // Vulkan Video usage has no WebGPU equivalent; reject up-front rather
+    // than silently dropping the flag.
+    if (desc.usage.HasAnyOf(mnexus::TextureUsageFlagBits::kVideoDecodeDst)
+     || desc.usage.HasAnyOf(mnexus::TextureUsageFlagBits::kVideoDecodeDpb)) {
+      MBASE_LOG_ERROR("TextureUsageFlagBits::kVideoDecode* is not supported by the WebGPU backend.");
+      return mnexus::TextureHandle{};
+    }
+
     wgpu::TextureUsage const usage = ToWgpuTextureUsage(desc.usage) | wgpu::TextureUsage::CopyDst;
 
     wgpu::TextureDescriptor wgpu_texture_desc {

@@ -224,6 +224,14 @@ typedef enum MnTextureUsageFlagBits {
   MnTextureUsageFlagBitUnorderedAccess = 1 << 3,
   MnTextureUsageFlagBitTransferSrc     = 1 << 4,
   MnTextureUsageFlagBitTransferDst     = 1 << 5,
+  /// Vulkan Video decode output (reconstructed picture target for
+  /// `vkCmdDecodeVideoKHR`). Requires the Vulkan Video extensions to have
+  /// been enabled on the device; rejected on backends without video support.
+  MnTextureUsageFlagBitVideoDecodeDst  = 1 << 6,
+  /// Vulkan Video DPB (reference picture buffer). Same prerequisites as
+  /// `MnTextureUsageFlagBitVideoDecodeDst`. For DPB+output coincide
+  /// configurations, set both bits on the same texture.
+  MnTextureUsageFlagBitVideoDecodeDpb  = 1 << 7,
   MnTextureUsageFlagForce32            = 0x7FFFFFFF,
 } MnTextureUsageFlagBits;
 typedef uint32_t MnTextureUsageFlags;
@@ -244,6 +252,9 @@ typedef enum MnTextureDimension {
   MnTextureDimension2D = 1,
   MnTextureDimension3D = 2,
   MnTextureDimensionCube = 3,
+  /// 2D array. Same image-type as `2D` on Vulkan, but distinguished here so the
+  /// view-type and user intent are explicit (e.g. Vulkan Video DPB array).
+  MnTextureDimension2DArray = 4,
   MnTextureDimensionForce32 = 0x7FFFFFFF,
 } MnTextureDimension;
 
@@ -1082,6 +1093,8 @@ enum class TextureUsageFlagBits : uint32_t {
   kUnorderedAccess  = MnTextureUsageFlagBitUnorderedAccess,
   kTransferSrc      = MnTextureUsageFlagBitTransferSrc,
   kTransferDst      = MnTextureUsageFlagBitTransferDst,
+  kVideoDecodeDst   = MnTextureUsageFlagBitVideoDecodeDst,
+  kVideoDecodeDpb   = MnTextureUsageFlagBitVideoDecodeDpb,
 };
 MBASE_DEFINE_ENUM_CLASS_BITFLAGS_OPERATORS(TextureUsageFlagBits);
 using TextureUsageFlags = mbase::BitFlags<TextureUsageFlagBits>;
@@ -1099,10 +1112,11 @@ MBASE_DEFINE_ENUM_CLASS_BITFLAGS_OPERATORS(TextureAspectFlagBits);
 using TextureAspectFlags = mbase::BitFlags<TextureAspectFlagBits>;
 
 enum class TextureDimension : uint32_t {
-  k1D    = MnTextureDimension1D,
-  k2D    = MnTextureDimension2D,
-  k3D    = MnTextureDimension3D,
-  kCube  = MnTextureDimensionCube,
+  k1D      = MnTextureDimension1D,
+  k2D      = MnTextureDimension2D,
+  k3D      = MnTextureDimension3D,
+  kCube    = MnTextureDimensionCube,
+  k2DArray = MnTextureDimension2DArray,
 };
 
 enum class Filter : uint32_t {

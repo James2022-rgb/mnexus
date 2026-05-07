@@ -44,10 +44,11 @@ std::string BufferUsageString(mnexus::BufferUsageFlags usage) {
 
 char const* DimensionToCStr(mnexus::TextureDimension d) {
   switch (d) {
-  case mnexus::TextureDimension::k1D:   return "1D";
-  case mnexus::TextureDimension::k2D:   return "2D";
-  case mnexus::TextureDimension::k3D:   return "3D";
-  case mnexus::TextureDimension::kCube: return "Cube";
+  case mnexus::TextureDimension::k1D:      return "1D";
+  case mnexus::TextureDimension::k2D:      return "2D";
+  case mnexus::TextureDimension::k3D:      return "3D";
+  case mnexus::TextureDimension::kCube:    return "Cube";
+  case mnexus::TextureDimension::k2DArray: return "2DArray";
   }
   return "?";
 }

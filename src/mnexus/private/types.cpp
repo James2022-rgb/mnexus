@@ -492,6 +492,8 @@ std::string ToString(TextureUsageFlags value) {
     MAP(UnorderedAccess),
     MAP(TransferSrc),
     MAP(TransferDst),
+    MAP(VideoDecodeDst),
+    MAP(VideoDecodeDpb),
   };
   #undef MAP
 

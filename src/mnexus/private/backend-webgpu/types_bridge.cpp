@@ -107,11 +107,14 @@ mnexus::TextureUsageFlags FromWgpuTextureUsage(wgpu::TextureUsage usage) {
 }
 
 wgpu::TextureDimension ToWgpuTextureDimension(mnexus::TextureDimension value) {
+  // Note: WebGPU has no separate "2DArray" dimension; arrays are expressed at
+  // view-type level. Both `kCube` and `k2DArray` map to `e2D` here.
   switch (value) {
-  case mnexus::TextureDimension::k1D: return wgpu::TextureDimension::e1D;
-  case mnexus::TextureDimension::k2D: return wgpu::TextureDimension::e2D;
-  case mnexus::TextureDimension::k3D: return wgpu::TextureDimension::e3D;
-  case mnexus::TextureDimension::kCube: return wgpu::TextureDimension::e2D; // WebGPU does not have a cube dimension; cubes are represented as 2D arrays.
+  case mnexus::TextureDimension::k1D:      return wgpu::TextureDimension::e1D;
+  case mnexus::TextureDimension::k2D:      return wgpu::TextureDimension::e2D;
+  case mnexus::TextureDimension::k3D:      return wgpu::TextureDimension::e3D;
+  case mnexus::TextureDimension::kCube:    return wgpu::TextureDimension::e2D; // WebGPU does not have a cube dimension; cubes are represented as 2D arrays.
+  case mnexus::TextureDimension::k2DArray: return wgpu::TextureDimension::e2D;
   default:
     MBASE_LOG_ERROR("Unknown mnexus::TextureDimension value.");
     return wgpu::TextureDimension::e2D;

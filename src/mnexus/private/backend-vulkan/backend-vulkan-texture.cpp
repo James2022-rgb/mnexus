@@ -113,9 +113,26 @@ std::optional<CreateVulkanImageResult> CreateVulkanImage(
 
   VkImageType const vk_image_type = ToVkImageType(texture_desc.dimension);
 
+  // Vulkan Video usage flags require the corresponding KHR_video_* extensions
+  // to have been enabled at device creation. Reject up-front with a clear log
+  // instead of letting the driver surface a confusing usage validation error.
+  bool const wants_video_decode =
+       texture_desc.usage.HasAnyOf(mnexus::TextureUsageFlagBits::kVideoDecodeDst)
+    || texture_desc.usage.HasAnyOf(mnexus::TextureUsageFlagBits::kVideoDecodeDpb);
+  if (wants_video_decode && !vk_device.IsExtensionEnabled(VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME)) {
+    MBASE_LOG_ERROR("TextureUsageFlagBits::kVideoDecode* requires VK_KHR_video_decode_queue, which is not enabled on this device.");
+    return std::nullopt;
+  }
+
   VkImageCreateFlags flags = 0;
   if (texture_desc.dimension == mnexus::TextureDimension::kCube) {
     flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+  }
+  // Decouple the image from any specific VkVideoProfileInfoKHR; pairs with
+  // VK_KHR_video_maintenance1 (enabled in vk-device.cpp when video coding
+  // capability probe succeeded). Symmetric with the buffer side.
+  if (wants_video_decode) {
+    flags |= VK_IMAGE_CREATE_VIDEO_PROFILE_INDEPENDENT_BIT_KHR;
   }
 
   VkImageCreateInfo create_info {

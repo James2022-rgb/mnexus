@@ -31,10 +31,11 @@ VkBufferUsageFlags ToVkBufferUsageFlags(mnexus::BufferUsageFlags usage) {
 
 VkImageType ToVkImageType(mnexus::TextureDimension value) {
   switch (value) {
-  case mnexus::TextureDimension::k1D:   return VK_IMAGE_TYPE_1D;
-  case mnexus::TextureDimension::k2D:   return VK_IMAGE_TYPE_2D;
-  case mnexus::TextureDimension::k3D:   return VK_IMAGE_TYPE_3D;
-  case mnexus::TextureDimension::kCube: return VK_IMAGE_TYPE_2D; // 2D + 6 array layers + CUBE_COMPATIBLE flag.
+  case mnexus::TextureDimension::k1D:      return VK_IMAGE_TYPE_1D;
+  case mnexus::TextureDimension::k2D:      return VK_IMAGE_TYPE_2D;
+  case mnexus::TextureDimension::k3D:      return VK_IMAGE_TYPE_3D;
+  case mnexus::TextureDimension::kCube:    return VK_IMAGE_TYPE_2D; // 2D + 6 array layers + CUBE_COMPATIBLE flag.
+  case mnexus::TextureDimension::k2DArray: return VK_IMAGE_TYPE_2D; // 2D + arrayLayers > 1; view-type encodes the array-ness.
   }
   MBASE_LOG_ERROR("Unknown mnexus::TextureDimension value");
   return VK_IMAGE_TYPE_2D;
@@ -53,6 +54,8 @@ VkImageUsageFlags ToVkImageUsageFlags(mnexus::TextureUsageFlags usage, VkFormat 
   if (usage.HasAnyOf(mnexus::TextureUsageFlagBits::kUnorderedAccess)) { result |= VK_IMAGE_USAGE_STORAGE_BIT; }
   if (usage.HasAnyOf(mnexus::TextureUsageFlagBits::kTransferSrc))     { result |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT; }
   if (usage.HasAnyOf(mnexus::TextureUsageFlagBits::kTransferDst))     { result |= VK_IMAGE_USAGE_TRANSFER_DST_BIT; }
+  if (usage.HasAnyOf(mnexus::TextureUsageFlagBits::kVideoDecodeDst))  { result |= VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR; }
+  if (usage.HasAnyOf(mnexus::TextureUsageFlagBits::kVideoDecodeDpb))  { result |= VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR; }
 
   return result;
 }
