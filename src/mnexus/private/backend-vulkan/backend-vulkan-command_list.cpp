@@ -329,6 +329,34 @@ public:
       resource_storage_->video_sessions.GetConstRefWithSharedLockGuard(session_pool_handle);
     VkVideoSessionKHR const vk_session = session_hot.vk_video_session.handle();
 
+    // Diagnostic: if a previous DecodeVideoH265 has a pending result_status
+    // query, read it back (synchronously waits for prior decode submission
+    // to complete) and log it before resetting the pool for this frame.
+    // The reset itself is recorded into the command buffer; it MUST happen
+    // outside the video coding scope, so we issue it before
+    // vkCmdBeginVideoCodingKHR below.
+    if (session_hot.result_status_query_pool != VK_NULL_HANDLE) {
+      if (session_hot.result_status_pending) {
+        VkQueryResultStatusKHR status = VK_QUERY_RESULT_STATUS_NOT_READY_KHR;
+        VkResult const r = vkGetQueryPoolResults(
+          this->vk_device_->handle(),
+          session_hot.result_status_query_pool,
+          0, 1,
+          sizeof(status),
+          &status,
+          sizeof(status),
+          VK_QUERY_RESULT_WITH_STATUS_BIT_KHR | VK_QUERY_RESULT_WAIT_BIT
+        );
+        if (r == VK_SUCCESS) {
+          MBASE_LOG_INFO("Decode result_status: {} (raw)", static_cast<int32_t>(status));
+        } else {
+          MBASE_LOG_ERROR("vkGetQueryPoolResults (decode result_status) failed: {}", string_VkResult(r));
+        }
+        session_hot.result_status_pending = false;
+      }
+      vkCmdResetQueryPool(encoder_->vk_cb_handle(), session_hot.result_status_query_pool, 0, 1);
+    }
+
     // Resolve parameters.
     auto const params_pool_handle = resource_pool::ResourceHandle::FromU64(desc.parameters.Get());
     auto [params_hot, params_cold, params_lock] =
@@ -535,9 +563,18 @@ public:
     }
 
     // ----- Parse the picture's slice header via vidsynt -----
-    if (vidsynt_hevc_context_set_active_sps(vidsynt_ctx, sps) != VidsyntResult::Success
-     || vidsynt_hevc_context_set_active_pps(vidsynt_ctx, pps) != VidsyntResult::Success) {
-      MBASE_LOG_ERROR("DecodeVideoH265: failed to set active SPS/PPS on vidsynt context.");
+    MBASE_LOG_INFO(
+      "DecodeVideoH265: looking up sps_id={}, pps_id={} on session vidsynt ctx={}",
+      static_cast<int>(sps->sps_seq_parameter_set_id),
+      static_cast<int>(pps->pps_pic_parameter_set_id),
+      static_cast<void const*>(vidsynt_ctx)
+    );
+    if (VidsyntResult const r = vidsynt_hevc_context_set_active_sps(vidsynt_ctx, sps); r != VidsyntResult::Success) {
+      MBASE_LOG_ERROR("DecodeVideoH265: vidsynt_hevc_context_set_active_sps failed: {}", static_cast<int>(r));
+      return;
+    }
+    if (VidsyntResult const r = vidsynt_hevc_context_set_active_pps(vidsynt_ctx, pps); r != VidsyntResult::Success) {
+      MBASE_LOG_ERROR("DecodeVideoH265: vidsynt_hevc_context_set_active_pps failed: {}", static_cast<int>(r));
       return;
     }
     if (desc.picture_nalu_data == nullptr || desc.picture_nalu_size == 0) {
@@ -555,6 +592,15 @@ public:
       MBASE_LOG_ERROR("DecodeVideoH265: vidsynt failed to extract slice header from picture NAL.");
       return;
     }
+    MBASE_LOG_INFO(
+      "DecodeVideoH265: slice header parsed by vidsynt: nal_unit_type={}, first_slice_in_pic={}, slice_pic_parameter_set_id={}, dependent_slice_segment_flag={}, slice_segment_address={}, slice_pic_order_cnt_lsb={}",
+      static_cast<int>(slice_header->nal_unit_type),
+      static_cast<int>(slice_header->first_slice_segment_in_pic_flag),
+      static_cast<int>(slice_header->slice_pic_parameter_set_id),
+      static_cast<int>(slice_header->dependent_slice_segment_flag),
+      static_cast<unsigned>(slice_header->slice_segment_address),
+      static_cast<unsigned>(slice_header->slice_pic_order_cnt_lsb)
+    );
 
     // ----- POC: reset on IDR, then compute -----
     VidsyntHevcNaluType const nal_type = vidsynt_hevc_nalu_get_type(picture_nalu);
@@ -797,6 +843,12 @@ public:
       .pSliceSegmentOffsets = slice_segment_offsets_u32.empty() ? nullptr : slice_segment_offsets_u32.data(),
     };
 
+    // pSetupReferenceSlot is optional. Per VUID-VkVideoDecodeInfoKHR-
+    // pSetupReferenceSlot-07168, if it is non-NULL its slotIndex MUST be
+    // >= 0. Callers express "decode but do not register the reconstructed
+    // picture in a DPB slot" by passing setup_reference.slot_index < 0;
+    // the destination image is still written via dstPictureResource.
+    bool const has_dpb_setup = desc.setup_reference.slot_index >= 0;
     VkVideoDecodeInfoKHR const decode_info{
       .sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_INFO_KHR,
       .pNext = &h265_picture_info,
@@ -805,12 +857,24 @@ public:
       .srcBufferOffset = desc.src_buffer_offset,
       .srcBufferRange = desc.src_buffer_range,
       .dstPictureResource = setup_picture_resource,
-      .pSetupReferenceSlot = &setup_slot_info,
+      .pSetupReferenceSlot = has_dpb_setup ? &setup_slot_info : nullptr,
       .referenceSlotCount = static_cast<uint32_t>(ref_slot_infos.size()),
       .pReferenceSlots = ref_slot_infos.empty() ? nullptr : ref_slot_infos.data(),
     };
 
+    // Wrap the decode in a result_status query so the next BeginVideoCoding
+    // can read back and log the per-decode status (diagnostic only). The
+    // pool was reset in BeginVideoCoding above, before the coding scope.
+    if (session_hot.result_status_query_pool != VK_NULL_HANDLE) {
+      vkCmdBeginQuery(encoder_->vk_cb_handle(), session_hot.result_status_query_pool, 0, 0);
+    }
+
     vkCmdDecodeVideoKHR(encoder_->vk_cb_handle(), &decode_info);
+
+    if (session_hot.result_status_query_pool != VK_NULL_HANDLE) {
+      vkCmdEndQuery(encoder_->vk_cb_handle(), session_hot.result_status_query_pool, 0);
+      session_hot.result_status_pending = true;
+    }
 #else
     (void)desc;
     MBASE_LOG_ERROR("DecodeVideoH265 called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
@@ -870,13 +934,34 @@ public:
   }
 
   IMPL_VAPI(void, CopyTextureToBuffer,
-    mnexus::TextureHandle /*src_texture_handle*/,
-    mnexus::TextureSubresourceRange const& /*src_subresource_range*/,
-    mnexus::BufferHandle /*dst_buffer_handle*/,
-    uint32_t /*dst_buffer_offset*/,
-    mnexus::Extent3d const& /*copy_extent*/
+    mnexus::TextureHandle src_texture_handle,
+    mnexus::TextureSubresourceRange const& src_subresource_range,
+    mnexus::BufferHandle dst_buffer_handle,
+    uint32_t dst_buffer_offset,
+    mnexus::Extent3d const& copy_extent
   ) {
-    STUB_NOT_IMPLEMENTED();
+    MBASE_ASSERT(src_subresource_range.mip_level_count == 1);
+
+    // Caller is responsible for transitioning the source subresource into
+    // ResourceBarrierState::kTransferSrc beforehand via TextureBarrier.
+    this->FlushPipelineBarrier();
+
+    auto const src_pool_handle = resource_pool::ResourceHandle::FromU64(src_texture_handle.Get());
+    auto [src_hot, src_cold, src_lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(src_pool_handle);
+
+    auto const dst_pool_handle = resource_pool::ResourceHandle::FromU64(dst_buffer_handle.Get());
+    auto [dst_hot, dst_lock] = resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(dst_pool_handle);
+
+    encoder_->CmdCopyImageSubresourceToBuffer(
+      src_hot.GetVkImage(),
+      src_subresource_range,
+      dst_hot.vk_buffer,
+      dst_buffer_offset,
+      copy_extent
+    );
+
+    referenced_resources_.push_back(src_pool_handle);
+    referenced_resources_.push_back(dst_pool_handle);
   }
 
   IMPL_VAPI(void, BlitTexture,

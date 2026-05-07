@@ -98,6 +98,21 @@ public:
     mnexus::Extent3d const& copy_extent
   ) = 0;
 
+  /// Copies data from a subresource range of the given image to a buffer.
+  ///
+  /// ## Render Pass Scope
+  /// Outside.
+  ///
+  /// ## Resource State
+  /// The source subresource range MUST be in `VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL` layout.
+  virtual void CmdCopyImageSubresourceToBuffer(
+    VulkanImage const& src_vk_image,
+    mnexus::TextureSubresourceRange const& src_subresource_range,
+    VulkanBuffer const& dst_vk_buffer,
+    uint32_t dst_buffer_offset,
+    mnexus::Extent3d const& copy_extent
+  ) = 0;
+
   // ----------------------------------------------------------------------------------------------
   // Graphics Pipeline
   //

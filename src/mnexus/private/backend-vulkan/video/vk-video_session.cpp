@@ -236,11 +236,35 @@ resource_pool::ResourceHandle EmplaceVideoSessionResourcePoolDecodeH265(
     return resource_pool::ResourceHandle::Null();
   }
 
+  // Create a `RESULT_STATUS_ONLY_KHR` query pool with the same video
+  // profile chain so each `vkCmdDecodeVideoKHR` can be wrapped in
+  // `vkCmdBeginQuery`/`vkCmdEndQuery` and the per-decode result status
+  // can be read back diagnostically. Single slot is enough because the
+  // test bed waits on each decode submission before issuing the next one.
+  VkQueryPool result_status_query_pool = VK_NULL_HANDLE;
+  {
+    VkQueryPoolCreateInfo const query_pool_create_info {
+      .sType              = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+      .pNext              = &profile_info,  // chain VkVideoProfileInfoKHR
+      .flags              = 0,
+      .queryType          = VK_QUERY_TYPE_RESULT_STATUS_ONLY_KHR,
+      .queryCount         = 1,
+      .pipelineStatistics = 0,
+    };
+    VkResult const r = vkCreateQueryPool(vk_device_handle, &query_pool_create_info, nullptr, &result_status_query_pool);
+    if (r != VK_SUCCESS) {
+      MBASE_LOG_ERROR("CreateVideoSessionDecodeH265: vkCreateQueryPool (RESULT_STATUS_ONLY_KHR) failed: {}", string_VkResult(r));
+      cleanup_on_failure();
+      return resource_pool::ResourceHandle::Null();
+    }
+  }
+
   // Wrap with deferred destruction. The destroy lambda owns the allocations
   // and runs once the GPU is done with the session.
   VulkanVideoSession vk_video_session(
     vk_session,
-    [vk_device_handle, vk_session, allocated = std::move(allocated_memories)] {
+    [vk_device_handle, vk_session, allocated = std::move(allocated_memories), result_status_query_pool] {
+      vkDestroyQueryPool(vk_device_handle, result_status_query_pool, nullptr);
       for (VkDeviceMemory mem : allocated) {
         vkFreeMemory(vk_device_handle, mem, nullptr);
       }
@@ -267,9 +291,10 @@ resource_pool::ResourceHandle EmplaceVideoSessionResourcePoolDecodeH265(
   }
 
   VideoSessionHot hot {
-    .vk_video_session = std::move(vk_video_session),
-    .vidsynt_ctx      = std::move(vidsynt_ctx),
-    .poc_computer     = poc_computer,
+    .vk_video_session         = std::move(vk_video_session),
+    .vidsynt_ctx              = std::move(vidsynt_ctx),
+    .poc_computer             = poc_computer,
+    .result_status_query_pool = result_status_query_pool,
   };
   VideoSessionCold cold { .desc = desc };
 
