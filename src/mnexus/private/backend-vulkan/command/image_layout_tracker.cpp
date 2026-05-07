@@ -16,34 +16,40 @@ namespace mnexus_backend::vulkan {
 //
 
 SyncScope ImageLayoutTracker::GetDefaultSyncScope(VkImageUsageFlags usage, VkFormat format) {
+  // Access bits use the wildcard VK_ACCESS_2_MEMORY_READ/WRITE_BIT pair so the
+  // default scope is valid regardless of the queue family the command list
+  // runs on. Specific bits like VK_ACCESS_2_SHADER_READ_BIT have stage
+  // compatibility constraints (e.g. VUID-VkImageMemoryBarrier2-srcAccessMask-07454)
+  // that fail when ALL_COMMANDS expands to stages like VIDEO_DECODE that
+  // do not support SHADER_READ; MEMORY_READ/WRITE have no such restriction.
   if (usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
     if (vkuFormatIsDepthOrStencil(format)) {
       return {
         VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT_KHR | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT_KHR,
-        VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT_KHR | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT_KHR
+        VK_ACCESS_2_MEMORY_READ_BIT_KHR | VK_ACCESS_2_MEMORY_WRITE_BIT_KHR
       };
     }
     return {
       VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR,
-      VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT_KHR | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR
+      VK_ACCESS_2_MEMORY_READ_BIT_KHR | VK_ACCESS_2_MEMORY_WRITE_BIT_KHR
     };
   }
   if (usage & VK_IMAGE_USAGE_STORAGE_BIT) {
     return {
       VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR,
-      VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR
+      VK_ACCESS_2_MEMORY_READ_BIT_KHR | VK_ACCESS_2_MEMORY_WRITE_BIT_KHR
     };
   }
   if (usage & VK_IMAGE_USAGE_SAMPLED_BIT) {
     return {
       VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR,
-      VK_ACCESS_2_SHADER_READ_BIT_KHR
+      VK_ACCESS_2_MEMORY_READ_BIT_KHR
     };
   }
   if (usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) {
     return {
       VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR,
-      VK_ACCESS_2_TRANSFER_READ_BIT_KHR
+      VK_ACCESS_2_MEMORY_READ_BIT_KHR
     };
   }
   MBASE_LOG_ERROR("ImageLayoutTracker: cannot determine default sync scope for usage {}", usage);
@@ -64,6 +70,7 @@ VkImageLayout ImageLayoutTracker::GetDefaultLayout(VkImageUsageFlags usage, VkFo
     return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
   }
   MBASE_LOG_ERROR("ImageLayoutTracker: cannot determine default layout for usage {}", usage);
+  mbase::Trap();
   return VK_IMAGE_LAYOUT_UNDEFINED;
 }
 
@@ -96,7 +103,14 @@ VkImageAspectFlags ImageLayoutTracker::GetAspectMaskFromFormat(VkFormat format) 
   if (vkuFormatIsDepthOrStencil(format)) {
     return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
   }
-  return VK_IMAGE_ASPECT_COLOR_BIT;
+  if (vkuFormatIsColor(format)) {
+    return VK_IMAGE_ASPECT_COLOR_BIT;
+  }
+  if (vkuFormatPlaneCount(format) == 2) {
+    return VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT;
+  }
+  MBASE_LOG_ERROR("ImageLayoutTracker: cannot determine aspect mask for format {}", string_VkFormat(format));
+  return 0;
 }
 
 // ====================================================================================================

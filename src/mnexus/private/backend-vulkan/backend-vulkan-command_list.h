@@ -28,7 +28,8 @@ public:
   static IMnexusCommandListVulkan* Create(
     IVulkanDevice* vk_device,
     IDescriptorSetAllocator* ds_allocator,
-    ResourceStorage* resource_storage
+    ResourceStorage* resource_storage,
+    uint32_t queue_family_index
   );
 
   /// Clean up internal state and delete this object. The owned per-list

@@ -71,6 +71,33 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceGetClipSpaceConvention(MnDevice device,
   out_convention->depth_range = static_cast<MnClipSpaceDepthRange>(conv.depth_range);
 }
 
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceGetQueueSelection(MnDevice device, MnQueueSelection* out) {
+  mnexus::QueueSelection sel{};
+  ToDevice(device)->GetQueueSelection(sel);
+
+  auto to_mn = [](mnexus::QueueId const& q) {
+    return MnQueueId { .queue_family_index = q.queue_family_index, .queue_index = q.queue_index };
+  };
+  *out = {};
+  out->present_capable = to_mn(sel.present_capable);
+  if (sel.dedicated_compute.has_value()) {
+    out->has_dedicated_compute = MnBoolTrue;
+    out->dedicated_compute     = to_mn(*sel.dedicated_compute);
+  }
+  if (sel.dedicated_transfer.has_value()) {
+    out->has_dedicated_transfer = MnBoolTrue;
+    out->dedicated_transfer     = to_mn(*sel.dedicated_transfer);
+  }
+  if (sel.dedicated_video_decode.has_value()) {
+    out->has_dedicated_video_decode = MnBoolTrue;
+    out->dedicated_video_decode     = to_mn(*sel.dedicated_video_decode);
+  }
+  if (sel.dedicated_video_encode.has_value()) {
+    out->has_dedicated_video_encode = MnBoolTrue;
+    out->dedicated_video_encode     = to_mn(*sel.dedicated_video_encode);
+  }
+}
+
 MNEXUS_NO_THROW MnBool32 MNEXUS_CALL MnDeviceQueryVideoDecodeH265Capabilities(
   MnDevice device,
   MnVideoH265Profile profile,

@@ -305,6 +305,14 @@ enum {
   MnResourceBarrierStateUnorderedAccess,
   MnResourceBarrierStateTransferSrc,
   MnResourceBarrierStateTransferDst,
+  /// VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR (decode reconstructed picture).
+  MnResourceBarrierStateVideoDecodeDst,
+  /// VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR (DPB read/write). Can also be used
+  /// for the DPB-and-output-coincide configuration since the layout supports
+  /// both reading reference pictures and writing the reconstructed picture.
+  MnResourceBarrierStateVideoDecodeDpb,
+  /// VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR (decode bitstream source image).
+  MnResourceBarrierStateVideoDecodeSrc,
 };
 
 typedef enum MnResourceBarrierStageFlagBits {
@@ -320,6 +328,11 @@ typedef enum MnResourceBarrierStageFlagBits {
   MnResourceBarrierStageFlagBitComputeShader         = 1 << 8,
 
   MnResourceBarrierStageFlagBitTransfer              = 1 << 9,
+
+  /// VK_PIPELINE_STAGE_2_VIDEO_DECODE_BIT_KHR. Used by both the source
+  /// (release) and destination (acquire) sides of barriers around
+  /// `vkCmdDecodeVideoKHR`.
+  MnResourceBarrierStageFlagBitVideoDecode           = 1 << 10,
 
   MnResourceBarrierStageFlagBitForce32 = 0x7FFFFFFF,
 } MnResourceBarrierStageFlagBits;
@@ -1174,6 +1187,13 @@ enum class ResourceBarrierState : uint8_t {
   kTransferSrc      = MnResourceBarrierStateTransferSrc,
   /// Destination for copy/blit/clear operations.
   kTransferDst      = MnResourceBarrierStateTransferDst,
+  /// Vulkan Video decode reconstructed-picture target.
+  kVideoDecodeDst   = MnResourceBarrierStateVideoDecodeDst,
+  /// Vulkan Video decoded picture buffer (read/write). Use this for
+  /// DPB+output coincide configurations.
+  kVideoDecodeDpb   = MnResourceBarrierStateVideoDecodeDpb,
+  /// Vulkan Video bitstream source image (rare; bitstream is usually a buffer).
+  kVideoDecodeSrc   = MnResourceBarrierStateVideoDecodeSrc,
 };
 
 /// Pipeline-stage bits used by `ICommandList::TextureBarrier` to specify
@@ -1191,6 +1211,8 @@ enum class ResourceBarrierStageFlagBits : uint32_t {
   kComputeShader         = MnResourceBarrierStageFlagBitComputeShader,
 
   kTransfer              = MnResourceBarrierStageFlagBitTransfer,
+
+  kVideoDecode           = MnResourceBarrierStageFlagBitVideoDecode,
 
   kFragmentTestsBits = kEarlyFragmentTests | kLateFragmentTests,
 

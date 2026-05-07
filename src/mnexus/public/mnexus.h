@@ -255,6 +255,16 @@ public:
     QueueFamilyDesc& out_desc
   );
 
+  /// Returns the device's queue selection: which `(queue_family_index,
+  /// queue_index)` pair corresponds to which role (present-capable,
+  /// dedicated compute / transfer / video decode / video encode).
+  ///
+  /// - `out`: populated with the selection on success.
+  ///
+  /// On WebGPU this populates `present_capable` only; the dedicated slots
+  /// remain unset.
+  _MNEXUS_VAPI(void, GetQueueSelection, QueueSelection& out);
+
   /// Submits a recorded command list to the specified queue for execution.
   ///
   /// Ownership of `command_list` transfers to the queue. The caller
@@ -1041,6 +1051,9 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceGetAdapterInfo(
   MnDevice device, MnAdapterInfo* out_info);
 MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceGetClipSpaceConvention(
   MnDevice device, MnClipSpaceConvention* out_convention);
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnDeviceGetQueueSelection(
+  MnDevice device, MnQueueSelection* out);
 
 MNEXUS_NO_THROW MnBool32 MNEXUS_CALL MnDeviceQueryVideoDecodeH265Capabilities(
   MnDevice device,

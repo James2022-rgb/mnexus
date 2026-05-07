@@ -586,6 +586,7 @@ VkPipelineStageFlags2KHR ToVkPipelineStageFlags2(mnexus::ResourceBarrierStageFla
   if (value.HasAnyOf(B::kComputeIndirectInput))  { result |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT_KHR; }
   if (value.HasAnyOf(B::kComputeShader))         { result |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR; }
   if (value.HasAnyOf(B::kTransfer))              { result |= VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT_KHR; }
+  if (value.HasAnyOf(B::kVideoDecode))           { result |= VK_PIPELINE_STAGE_2_VIDEO_DECODE_BIT_KHR; }
   return result;
 }
 
@@ -620,6 +621,13 @@ VkAccessFlags2KHR ToVkAccessFlags2(
                                                              | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR;
   case mnexus::ResourceBarrierState::kTransferSrc:      return VK_ACCESS_2_TRANSFER_READ_BIT_KHR;
   case mnexus::ResourceBarrierState::kTransferDst:      return VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR;
+  case mnexus::ResourceBarrierState::kVideoDecodeDst:   return VK_ACCESS_2_VIDEO_DECODE_WRITE_BIT_KHR;
+  // DPB layout serves both reads (reference picture sampling by the decoder)
+  // and writes (reconstructed picture). Set both access bits so transitions
+  // into kVideoDecodeDpb cover the DPB+output coincide path.
+  case mnexus::ResourceBarrierState::kVideoDecodeDpb:   return VK_ACCESS_2_VIDEO_DECODE_READ_BIT_KHR
+                                                             | VK_ACCESS_2_VIDEO_DECODE_WRITE_BIT_KHR;
+  case mnexus::ResourceBarrierState::kVideoDecodeSrc:   return VK_ACCESS_2_VIDEO_DECODE_READ_BIT_KHR;
   }
   MBASE_LOG_ERROR("Unknown mnexus::ResourceBarrierState value");
   return 0;
@@ -638,6 +646,9 @@ VkImageLayout ToVkImageLayout(mnexus::ResourceBarrierState value) {
   case mnexus::ResourceBarrierState::kUnorderedAccess: return VK_IMAGE_LAYOUT_GENERAL;
   case mnexus::ResourceBarrierState::kTransferSrc:     return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
   case mnexus::ResourceBarrierState::kTransferDst:     return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  case mnexus::ResourceBarrierState::kVideoDecodeDst:  return VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR;
+  case mnexus::ResourceBarrierState::kVideoDecodeDpb:  return VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR;
+  case mnexus::ResourceBarrierState::kVideoDecodeSrc:  return VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR;
   }
   MBASE_LOG_ERROR("Unknown mnexus::ResourceBarrierState value");
   return VK_IMAGE_LAYOUT_UNDEFINED;

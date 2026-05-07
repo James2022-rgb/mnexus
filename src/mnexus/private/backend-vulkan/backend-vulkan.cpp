@@ -330,9 +330,12 @@ public:
   //
 
   IMPL_VAPI(mnexus::ICommandList*, CreateCommandList,
-    mnexus::CommandListDesc const& /*desc*/
+    mnexus::CommandListDesc const& desc
   ) {
-    return IMnexusCommandListVulkan::Create(vk_device_, descriptor_set_allocator_, resource_storage_);
+    return IMnexusCommandListVulkan::Create(
+      vk_device_, descriptor_set_allocator_, resource_storage_,
+      desc.queue_family_index
+    );
   }
 
   IMPL_VAPI(void, DiscardCommandList,
@@ -564,6 +567,10 @@ public:
       .y_direction = mnexus::ClipSpaceYDirection::kDown,
       .depth_range = mnexus::ClipSpaceDepthRange::kZeroToOne,
     };
+  }
+
+  IMPL_VAPI(void, GetQueueSelection, mnexus::QueueSelection& out) {
+    out = vk_device_->queue_selection();
   }
 
   IMPL_VAPI(void, GetAdapterInfo, mnexus::AdapterInfo& out_info) {

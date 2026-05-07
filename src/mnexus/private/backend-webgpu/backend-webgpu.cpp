@@ -625,6 +625,14 @@ public:
     };
   }
 
+  IMPL_VAPI(void, GetQueueSelection, mnexus::QueueSelection& out) {
+    // WebGPU exposes a single device queue; map it to `present_capable` and
+    // leave the dedicated slots unset.
+    out = mnexus::QueueSelection {
+      .present_capable = mnexus::QueueId(0, 0),
+    };
+  }
+
   IMPL_VAPI(void, GetAdapterInfo, mnexus::AdapterInfo& out_info) {
     out_info = adapter_info_;
   }

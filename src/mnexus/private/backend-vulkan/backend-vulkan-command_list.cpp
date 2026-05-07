@@ -31,8 +31,7 @@ namespace mnexus_backend::vulkan {
 
 namespace {
 
-VkCommandPool CreateCommandPool(IVulkanDevice* vk_device) {
-  uint32_t const queue_family_index = vk_device->queue_selection().present_capable.queue_family_index;
+VkCommandPool CreateCommandPool(IVulkanDevice* vk_device, uint32_t queue_family_index) {
   VkCommandPoolCreateInfo pool_info {
     .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
     .pNext = nullptr,
@@ -89,10 +88,11 @@ public:
   MnexusCommandListVulkan(
     IVulkanDevice* vk_device,
     IDescriptorSetAllocator* ds_allocator,
-    ResourceStorage* resource_storage
+    ResourceStorage* resource_storage,
+    uint32_t queue_family_index
   ) :
     vk_device_(vk_device),
-    vk_command_pool_(MakeVulkanCommandPool(vk_device, CreateCommandPool(vk_device))),
+    vk_command_pool_(MakeVulkanCommandPool(vk_device, CreateCommandPool(vk_device, queue_family_index))),
     encoder_(ICommandEncoder::Create(CommandEncoderDesc {
       .vk_cb_handle = AllocateAndBeginCommandBuffer(vk_device, vk_command_pool_.handle()),
       .vk_device = vk_device,
@@ -989,9 +989,10 @@ private:
 IMnexusCommandListVulkan* IMnexusCommandListVulkan::Create(
   IVulkanDevice* vk_device,
   IDescriptorSetAllocator* ds_allocator,
-  ResourceStorage* resource_storage
+  ResourceStorage* resource_storage,
+  uint32_t queue_family_index
 ) {
-  return new MnexusCommandListVulkan(vk_device, ds_allocator, resource_storage);
+  return new MnexusCommandListVulkan(vk_device, ds_allocator, resource_storage, queue_family_index);
 }
 
 } // namespace mnexus_backend::vulkan
