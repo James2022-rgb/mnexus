@@ -603,6 +603,14 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/backend-vulkan-texture.cpp
     ${_private_backend_vulkan_dir}/backend-vulkan-texture.h
   )
+  # Video Coding sources (gated on MNEXUS_ENABLE_VIDEO_CODING via _enable_video_coding).
+  if(${_enable_video_coding})
+    list(APPEND _sources_private_backend_vulkan
+      # video/
+      ${_private_backend_vulkan_dir}/video/vk-video_session.cpp
+      ${_private_backend_vulkan_dir}/video/vk-video_session.h
+    )
+  endif()
 endif()
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/${_private_backend_vulkan_dir}" PREFIX "Private/Backend-Vulkan" FILES ${_sources_private_backend_vulkan})
 

@@ -17,6 +17,10 @@
 #include "backend-vulkan/object/vk-object-render_pipeline.h"
 #include "backend-vulkan/resource/image_view_cache.h"
 
+#if MNEXUS_ENABLE_VIDEO_CODING
+#  include "backend-vulkan/video/vk-video_session.h"
+#endif
+
 namespace mnexus_backend::vulkan {
 
 struct ResourceStorage final {
@@ -26,6 +30,9 @@ struct ResourceStorage final {
   ProgramResourcePool programs;
   ComputePipelineResourcePool compute_pipelines;
   SamplerResourcePool samplers;
+#if MNEXUS_ENABLE_VIDEO_CODING
+  VideoSessionResourcePool video_sessions;
+#endif
 
   pipeline::TPipelineLayoutCache<VulkanPipelineLayoutPtr> pipeline_layout_cache;
   pipeline::TRenderPipelineCache<VulkanRenderPipelinePtr> render_pipeline_cache;

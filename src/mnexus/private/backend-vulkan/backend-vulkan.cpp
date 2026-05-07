@@ -42,6 +42,10 @@
 #include "backend-vulkan/resource/resource_storage.h"
 #include "backend-vulkan/resource/types_bridge.h"
 
+#if MNEXUS_ENABLE_VIDEO_CODING
+#  include "backend-vulkan/video/vk-video_session.h"
+#endif
+
 namespace mnexus_backend::vulkan {
 
 namespace {
@@ -596,21 +600,34 @@ public:
   }
 
   IMPL_VAPI(mnexus::VideoSessionHandle, CreateVideoSessionDecodeH265,
-    mnexus::VideoSessionDecodeH265Desc const& /*desc*/
+    mnexus::VideoSessionDecodeH265Desc const& desc
   ) {
 #if MNEXUS_ENABLE_VIDEO_CODING
-    // TODO: Create VkVideoSessionKHR + bind memory (folgos `VideoSessionFacade` reference).
-    MBASE_LOG_ERROR("CreateVideoSessionDecodeH265 not yet implemented in the Vulkan backend.");
-    return mnexus::VideoSessionHandle{};
+    resource_pool::ResourceHandle const pool_handle = EmplaceVideoSessionResourcePoolDecodeH265(
+      resource_storage_->video_sessions,
+      *vk_device_,
+      desc
+    );
+    if (pool_handle.IsNull()) {
+      return mnexus::VideoSessionHandle::Invalid();
+    }
+    return mnexus::VideoSessionHandle { pool_handle.AsU64() };
 #else
+    (void)desc;
     MBASE_LOG_ERROR("CreateVideoSessionDecodeH265 called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
-    return mnexus::VideoSessionHandle{};
+    return mnexus::VideoSessionHandle::Invalid();
 #endif
   }
 
   IMPL_VAPI(void, DestroyVideoSession, mnexus::VideoSessionHandle session) {
-    // No-op: Create currently always returns invalid.
+#if MNEXUS_ENABLE_VIDEO_CODING
+    // FIXME: Should defer destruction until the GPU is done using this session
+    // (matches the existing FIXME in DestroyBuffer / DestroyTexture).
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(session.Get());
+    resource_storage_->video_sessions.Erase(pool_handle);
+#else
     (void)session;
+#endif
   }
 
   IMPL_VAPI(mnexus::VideoSessionParametersHandle, CreateVideoSessionParametersDecodeH265,
@@ -620,10 +637,10 @@ public:
     // TODO: Parse VPS/SPS/PPS NAL via vidsynt, build StdVideoH265* structs,
     // call vkCreateVideoSessionParametersKHR.
     MBASE_LOG_ERROR("CreateVideoSessionParametersDecodeH265 not yet implemented in the Vulkan backend.");
-    return mnexus::VideoSessionParametersHandle{};
+    return mnexus::VideoSessionParametersHandle::Invalid();
 #else
     MBASE_LOG_ERROR("CreateVideoSessionParametersDecodeH265 called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
-    return mnexus::VideoSessionParametersHandle{};
+    return mnexus::VideoSessionParametersHandle::Invalid();
 #endif
   }
 

@@ -51,6 +51,14 @@ void ResourceStorage::StampResourceUse(resource_pool::ResourceHandle handle, uin
     samplers.UnlockShared();
     break;
   }
+#if MNEXUS_ENABLE_VIDEO_CODING
+  case mnexus::kResourceTypeVideoSession: {
+    auto& hot = video_sessions.LockSharedAndGetRefHot(handle);
+    hot.Stamp(queue_compact_index, serial);
+    video_sessions.UnlockShared();
+    break;
+  }
+#endif
   default:
     MBASE_ASSERT_MSG(false, "StampResourceUse: unhandled resource type {}", handle.resource_type());
     break;

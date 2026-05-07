@@ -11,6 +11,8 @@
     <DisplayString Condition="((value_ &gt;&gt; 59) &amp; 0x1F) == 5">ComputePipeline #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
     <DisplayString Condition="((value_ &gt;&gt; 59) &amp; 0x1F) == 6">RenderPipeline #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
     <DisplayString Condition="((value_ &gt;&gt; 59) &amp; 0x1F) == 7">Sampler #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <DisplayString Condition="((value_ &gt;&gt; 59) &amp; 0x1F) == 8">VideoSession #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <DisplayString Condition="((value_ &gt;&gt; 59) &amp; 0x1F) == 9">VideoSessionParameters #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
     <DisplayString>type={((value_ &gt;&gt; 59) &amp; 0x1F)} #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
     <Expand>
       <Item Name="[index]">(unsigned)(value_ &amp; 0xFFFFFFFF)</Item>
@@ -79,6 +81,24 @@
   <Type Name="mbase::TypesafeHandle&lt;mnexus::SamplerHandleTag,*&gt;">
     <DisplayString Condition="value_ == 0x00000000FFFFFFFF">null</DisplayString>
     <DisplayString>Sampler #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <Expand>
+      <Item Name="[index]">(unsigned)(value_ &amp; 0xFFFFFFFF)</Item>
+      <Item Name="[generation]">(unsigned)((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)</Item>
+      <Item Name="[raw]">value_</Item>
+    </Expand>
+  </Type>
+  <Type Name="mbase::TypesafeHandle&lt;mnexus::VideoSessionHandleTag,*&gt;">
+    <DisplayString Condition="value_ == 0x00000000FFFFFFFF">null</DisplayString>
+    <DisplayString>VideoSession #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
+    <Expand>
+      <Item Name="[index]">(unsigned)(value_ &amp; 0xFFFFFFFF)</Item>
+      <Item Name="[generation]">(unsigned)((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)</Item>
+      <Item Name="[raw]">value_</Item>
+    </Expand>
+  </Type>
+  <Type Name="mbase::TypesafeHandle&lt;mnexus::VideoSessionParametersHandleTag,*&gt;">
+    <DisplayString Condition="value_ == 0x00000000FFFFFFFF">null</DisplayString>
+    <DisplayString>VideoSessionParameters #{(unsigned)(value_ &amp; 0xFFFFFFFF)} gen={((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)}</DisplayString>
     <Expand>
       <Item Name="[index]">(unsigned)(value_ &amp; 0xFFFFFFFF)</Item>
       <Item Name="[generation]">(unsigned)((value_ &gt;&gt; 32) &amp; 0x07FFFFFF)</Item>

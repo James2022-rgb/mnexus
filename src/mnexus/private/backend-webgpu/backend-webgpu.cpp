@@ -646,7 +646,7 @@ public:
     mnexus::VideoSessionDecodeH265Desc const& /*desc*/
   ) {
     MBASE_LOG_ERROR("CreateVideoSessionDecodeH265 is not supported by the WebGPU backend.");
-    return mnexus::VideoSessionHandle{};
+    return mnexus::VideoSessionHandle::Invalid();
   }
 
   IMPL_VAPI(void, DestroyVideoSession, mnexus::VideoSessionHandle /*session*/) {
@@ -657,7 +657,7 @@ public:
     mnexus::VideoSessionParametersDecodeH265Desc const& /*desc*/
   ) {
     MBASE_LOG_ERROR("CreateVideoSessionParametersDecodeH265 is not supported by the WebGPU backend.");
-    return mnexus::VideoSessionParametersHandle{};
+    return mnexus::VideoSessionParametersHandle::Invalid();
   }
 
   IMPL_VAPI(void, DestroyVideoSessionParameters, mnexus::VideoSessionParametersHandle /*params*/) {
