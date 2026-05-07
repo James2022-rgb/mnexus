@@ -8,7 +8,13 @@
 
 #include "backend-vulkan/depend/vulkan.h"
 #include "backend-vulkan/object/vk-object.h"
-#include "backend-vulkan/video/vk-video_session.h"  // for VideoSessionResourcePool
+#include "backend-vulkan/video/vk-video_session.h"  // for VideoSessionResourcePool, VidsyntHevcContextPtr
+
+// vidsynt forward decls (defs in <vidsynt.h>, included only in .cpp).
+extern "C" {
+struct VidsyntHevcSequenceParameterSet;
+struct VidsyntHevcPictureParameterSet;
+}
 
 namespace mnexus_backend::vulkan {
 
@@ -47,6 +53,20 @@ struct VideoSessionParametersHot final {
 struct VideoSessionParametersCold final {
   /// Originating session handle, kept for diagnostic / lifetime traceability.
   resource_pool::ResourceHandle session_handle = resource_pool::ResourceHandle::Null();
+
+  /// vidsynt context that owns the parsed `parsed_sps` / `parsed_pps`
+  /// pointers (and the parsed VPS, slice headers, etc. that may be added
+  /// during decode). Persisted here so the parsed structs stay alive for
+  /// the lifetime of this `VideoSessionParameters` and can be looked up
+  /// at `DecodeVideoH265` time.
+  VidsyntHevcContextPtr vidsynt_ctx;
+
+  /// Borrowed pointers into `vidsynt_ctx`'s arena. Used at decode time to
+  /// (1) call `vidsynt_hevc_context_set_active_sps/pps` on the session's
+  /// vidsynt context before parsing the picture's slice header, and
+  /// (2) feed `vidsynt_hevc_poc_compute`.
+  VidsyntHevcSequenceParameterSet const* parsed_sps = nullptr;
+  VidsyntHevcPictureParameterSet const*  parsed_pps = nullptr;
 };
 
 using VideoSessionParametersResourcePool = resource_pool::TResourceGenerationalPool<

@@ -14,7 +14,16 @@
 #include "backend-vulkan/device/vk-physical_device.h"
 #include "backend-vulkan/resource/types_bridge.h"
 
+// external headers -------------------------------------
+#include "vidsynt.h"
+
 namespace mnexus_backend::vulkan {
+
+void VidsyntHevcContextDeleter::operator()(VidsyntHevcContext* p) const noexcept {
+  if (p != nullptr) {
+    vidsynt_hevc_context_free(p);
+  }
+}
 
 namespace {
 
@@ -240,7 +249,28 @@ resource_pool::ResourceHandle EmplaceVideoSessionResourcePoolDecodeH265(
     vk_device.GetDeferredDestroyer()
   );
 
-  VideoSessionHot hot { .vk_video_session = std::move(vk_video_session) };
+  // Create a long-lived vidsynt context + POC computer for slice header
+  // parsing and POC computation during decode. The POC computer is allocated
+  // through the context, so freeing the context (via the unique_ptr deleter)
+  // also frees the POC computer; we don't need a separate handle for it.
+  VidsyntHevcContextPtr vidsynt_ctx{ vidsynt_hevc_context_new() };
+  if (vidsynt_ctx == nullptr) {
+    MBASE_LOG_ERROR("CreateVideoSessionDecodeH265: vidsynt_hevc_context_new returned null.");
+    cleanup_on_failure();
+    return resource_pool::ResourceHandle::Null();
+  }
+  VidsyntHevcPocComputer* poc_computer = vidsynt_hevc_poc_computer_new(vidsynt_ctx.get());
+  if (poc_computer == nullptr) {
+    MBASE_LOG_ERROR("CreateVideoSessionDecodeH265: vidsynt_hevc_poc_computer_new returned null.");
+    cleanup_on_failure();
+    return resource_pool::ResourceHandle::Null();
+  }
+
+  VideoSessionHot hot {
+    .vk_video_session = std::move(vk_video_session),
+    .vidsynt_ctx      = std::move(vidsynt_ctx),
+    .poc_computer     = poc_computer,
+  };
   VideoSessionCold cold { .desc = desc };
 
   return out_pool.Emplace(

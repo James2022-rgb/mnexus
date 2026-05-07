@@ -378,13 +378,8 @@ void FillPps(ParsedPps& out, VidsyntHevcPictureParameterSet const& src) {
 }
 
 // ----------------------------------------------------------------------------------------------------
-// vidsynt parse helpers (RAII for context).
+// vidsynt parse helpers.
 //
-
-struct VidsyntCtx {
-  VidsyntHevcContext* p = nullptr;
-  ~VidsyntCtx() { if (p != nullptr) vidsynt_hevc_context_free(p); }
-};
 
 bool ParseNalu(VidsyntHevcContext* ctx, uint8_t const* data, uint32_t size, VidsyntHevcNalu const** out_nalu) {
   if (data == nullptr || size == 0) {
@@ -421,10 +416,12 @@ resource_pool::ResourceHandle EmplaceVideoSessionParametersResourcePoolDecodeH26
     return resource_pool::ResourceHandle::Null();
   }
 
-  // vidsynt: parse VPS / SPS / PPS NAL units.
-  VidsyntCtx ctx;
-  ctx.p = vidsynt_hevc_context_new();
-  if (ctx.p == nullptr) {
+  // vidsynt: parse VPS / SPS / PPS NAL units. The context (and the parsed
+  // structs that hang off it) is moved into the parameters' Cold storage at
+  // the end so the parsed_sps / parsed_pps pointers stay valid for the
+  // lifetime of the parameters object (DecodeVideoH265 needs them).
+  VidsyntHevcContextPtr ctx{ vidsynt_hevc_context_new() };
+  if (ctx == nullptr) {
     MBASE_LOG_ERROR("vidsynt_hevc_context_new returned null.");
     return resource_pool::ResourceHandle::Null();
   }
@@ -432,22 +429,22 @@ resource_pool::ResourceHandle EmplaceVideoSessionParametersResourcePoolDecodeH26
   VidsyntHevcNalu const* vps_nalu = nullptr;
   VidsyntHevcNalu const* sps_nalu = nullptr;
   VidsyntHevcNalu const* pps_nalu = nullptr;
-  if (!ParseNalu(ctx.p, desc.vps_data, desc.vps_size, &vps_nalu)) return resource_pool::ResourceHandle::Null();
-  if (!ParseNalu(ctx.p, desc.sps_data, desc.sps_size, &sps_nalu)) return resource_pool::ResourceHandle::Null();
-  if (!ParseNalu(ctx.p, desc.pps_data, desc.pps_size, &pps_nalu)) return resource_pool::ResourceHandle::Null();
+  if (!ParseNalu(ctx.get(), desc.vps_data, desc.vps_size, &vps_nalu)) return resource_pool::ResourceHandle::Null();
+  if (!ParseNalu(ctx.get(), desc.sps_data, desc.sps_size, &sps_nalu)) return resource_pool::ResourceHandle::Null();
+  if (!ParseNalu(ctx.get(), desc.pps_data, desc.pps_size, &pps_nalu)) return resource_pool::ResourceHandle::Null();
 
   VidsyntHevcVideoParameterSet const* vps_in = nullptr;
   VidsyntHevcSequenceParameterSet const* sps_in = nullptr;
   VidsyntHevcPictureParameterSet const* pps_in = nullptr;
-  if (vidsynt_hevc_nalu_get_vps(ctx.p, vps_nalu, &vps_in) != VidsyntResult::Success) {
+  if (vidsynt_hevc_nalu_get_vps(ctx.get(), vps_nalu, &vps_in) != VidsyntResult::Success) {
     MBASE_LOG_ERROR("vidsynt_hevc_nalu_get_vps failed.");
     return resource_pool::ResourceHandle::Null();
   }
-  if (vidsynt_hevc_nalu_get_sps(ctx.p, sps_nalu, &sps_in) != VidsyntResult::Success) {
+  if (vidsynt_hevc_nalu_get_sps(ctx.get(), sps_nalu, &sps_in) != VidsyntResult::Success) {
     MBASE_LOG_ERROR("vidsynt_hevc_nalu_get_sps failed.");
     return resource_pool::ResourceHandle::Null();
   }
-  if (vidsynt_hevc_nalu_get_pps(ctx.p, pps_nalu, &pps_in) != VidsyntResult::Success) {
+  if (vidsynt_hevc_nalu_get_pps(ctx.get(), pps_nalu, &pps_in) != VidsyntResult::Success) {
     MBASE_LOG_ERROR("vidsynt_hevc_nalu_get_pps failed.");
     return resource_pool::ResourceHandle::Null();
   }
@@ -507,7 +504,12 @@ resource_pool::ResourceHandle EmplaceVideoSessionParametersResourcePoolDecodeH26
   );
 
   VideoSessionParametersHot hot{ .vk_video_session_parameters = std::move(vk_video_params) };
-  VideoSessionParametersCold cold{ .session_handle = session_pool_handle };
+  VideoSessionParametersCold cold{
+    .session_handle = session_pool_handle,
+    .vidsynt_ctx    = std::move(ctx),
+    .parsed_sps     = sps_in,
+    .parsed_pps     = pps_in,
+  };
 
   return out_pool.Emplace(
     std::forward_as_tuple(std::move(hot)),

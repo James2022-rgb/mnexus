@@ -30,6 +30,7 @@
 #if MNEXUS_ENABLE_VIDEO_CODING
 #  include "backend-vulkan/video/vk-video_session.h"
 #  include "backend-vulkan/video/vk-video_session_parameters.h"
+#  include "vidsynt.h"
 #endif
 
 namespace mnexus_backend::vulkan {
@@ -465,6 +466,11 @@ public:
 
     referenced_resources_.push_back(session_pool_handle);
     referenced_resources_.push_back(params_pool_handle);
+
+    // Remember the active scope so DecodeVideoH265 can look up the session's
+    // POC computer / vidsynt context and the parameters' parsed SPS/PPS.
+    current_video_session_pool_handle_            = session_pool_handle;
+    current_video_session_parameters_pool_handle_ = params_pool_handle;
 #else
     (void)desc;
     MBASE_LOG_ERROR("BeginVideoCoding called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
@@ -479,6 +485,9 @@ public:
       .flags = 0,
     };
     vkCmdEndVideoCodingKHR(encoder_->vk_cb_handle(), &end_info);
+
+    current_video_session_pool_handle_            = resource_pool::ResourceHandle::Null();
+    current_video_session_parameters_pool_handle_ = resource_pool::ResourceHandle::Null();
 #else
     MBASE_LOG_ERROR("EndVideoCoding called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
 #endif
@@ -499,13 +508,309 @@ public:
 
   IMPL_VAPI(void, DecodeVideoH265, mnexus::DecodeVideoH265Desc const& desc) {
 #if MNEXUS_ENABLE_VIDEO_CODING
-    // TODO: Build VkVideoDecodeInfoKHR + VkVideoDecodeH265PictureInfoKHR via
-    // vidsynt slice header parsing, then issue vkCmdDecodeVideoKHR. The picture
-    // info construction (POC, RefPicSet slot indices, flags) is the same
-    // shape of work as VideoSessionParameters' Std-struct conversion and is
-    // split into a follow-up commit to keep this change reviewable.
-    (void)desc;
-    MBASE_LOG_ERROR("DecodeVideoH265 not yet implemented in the Vulkan backend.");
+    if (current_video_session_pool_handle_.IsNull()
+     || current_video_session_parameters_pool_handle_.IsNull()) {
+      MBASE_LOG_ERROR("DecodeVideoH265 must be called inside a BeginVideoCoding / EndVideoCoding scope.");
+      return;
+    }
+
+    // ----- Resolve session (POC computer + slice-parsing vidsynt context) ----
+    auto [session_hot, session_cold, session_lock] =
+      resource_storage_->video_sessions.GetConstRefWithSharedLockGuard(current_video_session_pool_handle_);
+    VidsyntHevcContext*     const vidsynt_ctx  = session_hot.vidsynt_ctx.get();
+    VidsyntHevcPocComputer* const poc_computer = session_hot.poc_computer;
+    if (vidsynt_ctx == nullptr || poc_computer == nullptr) {
+      MBASE_LOG_ERROR("DecodeVideoH265: session is missing vidsynt context or POC computer.");
+      return;
+    }
+
+    // ----- Resolve parameters (parsed SPS/PPS) -----
+    auto [params_hot, params_cold, params_lock] =
+      resource_storage_->video_session_parameters.GetConstRefWithSharedLockGuard(current_video_session_parameters_pool_handle_);
+    VidsyntHevcSequenceParameterSet const* const sps = params_cold.parsed_sps;
+    VidsyntHevcPictureParameterSet  const* const pps = params_cold.parsed_pps;
+    if (sps == nullptr || pps == nullptr) {
+      MBASE_LOG_ERROR("DecodeVideoH265: parameters object has no parsed SPS/PPS.");
+      return;
+    }
+
+    // ----- Parse the picture's slice header via vidsynt -----
+    if (vidsynt_hevc_context_set_active_sps(vidsynt_ctx, sps) != VidsyntResult::Success
+     || vidsynt_hevc_context_set_active_pps(vidsynt_ctx, pps) != VidsyntResult::Success) {
+      MBASE_LOG_ERROR("DecodeVideoH265: failed to set active SPS/PPS on vidsynt context.");
+      return;
+    }
+    if (desc.picture_nalu_data == nullptr || desc.picture_nalu_size == 0) {
+      MBASE_LOG_ERROR("DecodeVideoH265: picture_nalu_data / size are empty.");
+      return;
+    }
+    VidsyntHevcNalu const* picture_nalu = nullptr;
+    if (vidsynt_hevc_parse_nalu_from_bytes(vidsynt_ctx, desc.picture_nalu_data, desc.picture_nalu_size, &picture_nalu)
+        != VidsyntResult::Success) {
+      MBASE_LOG_ERROR("DecodeVideoH265: vidsynt failed to parse picture NAL unit.");
+      return;
+    }
+    VidsyntHevcSliceSegmentHeader const* slice_header = nullptr;
+    if (vidsynt_hevc_nalu_get_slice_header(vidsynt_ctx, picture_nalu, &slice_header) != VidsyntResult::Success) {
+      MBASE_LOG_ERROR("DecodeVideoH265: vidsynt failed to extract slice header from picture NAL.");
+      return;
+    }
+
+    // ----- POC: reset on IDR, then compute -----
+    VidsyntHevcNaluType const nal_type = vidsynt_hevc_nalu_get_type(picture_nalu);
+    bool const is_idr  = vidsynt_hevc_nalu_type_is_idr(nal_type) != 0;
+    bool const is_irap = vidsynt_hevc_nalu_type_is_irap(nal_type) != 0;
+    bool const is_ref  = vidsynt_hevc_nalu_type_is_reference(nal_type) != 0;
+    if (is_idr) {
+      vidsynt_hevc_poc_reset(poc_computer);
+    }
+    int32_t current_poc = 0;
+    if (vidsynt_hevc_poc_compute(poc_computer, sps, pps, slice_header, &current_poc) != VidsyntResult::Success) {
+      MBASE_LOG_ERROR("DecodeVideoH265: vidsynt_hevc_poc_compute failed.");
+      return;
+    }
+
+    // ----- Bin active_references' POCs into RefPicSetStCurrBefore/After -----
+    StdVideoDecodeH265PictureInfo std_picture_info{};
+    std_picture_info.flags.IdrPicFlag                    = is_idr  ? 1 : 0;
+    std_picture_info.flags.IrapPicFlag                   = is_irap ? 1 : 0;
+    std_picture_info.flags.IsReference                   = is_ref  ? 1 : 0;
+    // short_term_ref_pic_set_sps_flag is set when the slice's RPS is one of the
+    // SPS's short-term ref pic sets (rather than inline in the slice header).
+    // vidsynt reports `short_term_ref_pic_set_idx == 0xFF` when the RPS is
+    // signalled inline, otherwise the value is the SPS index.
+    std_picture_info.flags.short_term_ref_pic_set_sps_flag =
+      (slice_header->short_term_ref_pic_set_idx != 0xFFu) ? 1 : 0;
+    std_picture_info.sps_video_parameter_set_id = sps->sps_video_parameter_set_id;
+    std_picture_info.pps_seq_parameter_set_id   = pps->pps_seq_parameter_set_id;
+    std_picture_info.pps_pic_parameter_set_id   = pps->pps_pic_parameter_set_id;
+    std_picture_info.PicOrderCntVal             = current_poc;
+    // NumDeltaPocsOfRefRpsIdx / NumBitsForSTRefPicSetInSlice are required for
+    // some drivers' RPS reconstruction. For inline-RPS slices these need to be
+    // recovered from the slice header bitstream; we leave them at 0 for now
+    // since IDR (RPS empty) and the test bitstreams we drive here do not need
+    // them. Revisit when adding inter-prediction frames.
+    std_picture_info.NumDeltaPocsOfRefRpsIdx     = 0;
+    std_picture_info.NumBitsForSTRefPicSetInSlice = 0;
+
+    uint32_t before_count = 0;
+    uint32_t after_count  = 0;
+    for (auto const& ref : desc.active_references) {
+      if (ref.slot_index < 0) continue;
+      uint8_t const slot_u8 = static_cast<uint8_t>(ref.slot_index);
+      if (ref.pic_order_cnt_val < current_poc) {
+        if (before_count < STD_VIDEO_DECODE_H265_REF_PIC_SET_LIST_SIZE) {
+          std_picture_info.RefPicSetStCurrBefore[before_count++] = slot_u8;
+        }
+      } else if (ref.pic_order_cnt_val > current_poc) {
+        if (after_count < STD_VIDEO_DECODE_H265_REF_PIC_SET_LIST_SIZE) {
+          std_picture_info.RefPicSetStCurrAfter[after_count++] = slot_u8;
+        }
+      }
+    }
+    // Fill unused slots with 0xFF (driver convention for "no entry").
+    for (uint32_t i = before_count; i < STD_VIDEO_DECODE_H265_REF_PIC_SET_LIST_SIZE; ++i) {
+      std_picture_info.RefPicSetStCurrBefore[i] = 0xFFu;
+    }
+    for (uint32_t i = after_count; i < STD_VIDEO_DECODE_H265_REF_PIC_SET_LIST_SIZE; ++i) {
+      std_picture_info.RefPicSetStCurrAfter[i] = 0xFFu;
+    }
+    for (uint32_t i = 0; i < STD_VIDEO_DECODE_H265_REF_PIC_SET_LIST_SIZE; ++i) {
+      std_picture_info.RefPicSetLtCurr[i] = 0xFFu;  // long-term refs not yet supported
+    }
+
+    // ----- Build setup_reference picture resource + DPB slot info -----
+    auto const setup_tex_pool_handle = resource_pool::ResourceHandle::FromU64(desc.setup_reference.picture.Get());
+    auto [setup_hot, setup_cold, setup_lock] =
+      resource_storage_->textures.GetConstRefWithSharedLockGuard(setup_tex_pool_handle);
+    VkImage const setup_vk_image = setup_hot.GetVkImage().handle();
+    mnexus::TextureDesc const& setup_tex_desc = setup_cold.GetTextureDesc();
+    VkFormat const setup_vk_format = ToVkFormat(setup_tex_desc.format);
+
+    auto make_video_decode_image_view = [this](ImageViewCacheKey const& key) {
+      VkImageViewUsageCreateInfo const usage_info{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
+        .pNext = nullptr,
+        .usage = key.usage_override,
+      };
+      VkImageViewCreateInfo const create_info{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .pNext = (key.usage_override != 0) ? &usage_info : nullptr,
+        .flags = 0,
+        .image = key.vk_image,
+        .viewType = key.view_type,
+        .format = key.format,
+        .components = VkComponentMapping {
+          .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+          .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+          .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+          .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+        },
+        .subresourceRange = key.subresource_range,
+      };
+      VkImageView vk_image_view_handle = VK_NULL_HANDLE;
+      VkResult const result = vkCreateImageView(this->vk_device_->handle(), &create_info, nullptr, &vk_image_view_handle);
+      MBASE_ASSERT(result == VK_SUCCESS);
+      return std::make_shared<VulkanImageView>(
+        vk_image_view_handle,
+        [vk_device = this->vk_device_, vk_image_view_handle]() {
+          vkDestroyImageView(vk_device->handle(), vk_image_view_handle, nullptr);
+        },
+        this->vk_device_->GetDeferredDestroyer()
+      );
+    };
+
+    VkImageSubresourceRange const setup_sub_range{
+      .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+      .baseMipLevel = 0,
+      .levelCount = 1,
+      .baseArrayLayer = desc.setup_reference.array_layer,
+      .layerCount = 1,
+    };
+    VulkanImageViewPtr const setup_image_view = resource_storage_->image_view_cache.FindOrInsert(
+      ImageViewCacheKey {
+        .vk_image = setup_vk_image,
+        .view_type = VK_IMAGE_VIEW_TYPE_2D,
+        .format = setup_vk_format,
+        .subresource_range = setup_sub_range,
+        .usage_override = VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR
+                        | VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR,
+      },
+      make_video_decode_image_view
+    );
+
+    VkVideoPictureResourceInfoKHR const setup_picture_resource{
+      .sType = VK_STRUCTURE_TYPE_VIDEO_PICTURE_RESOURCE_INFO_KHR,
+      .pNext = nullptr,
+      .codedOffset = VkOffset2D { 0, 0 },
+      .codedExtent = VkExtent2D { setup_tex_desc.width, setup_tex_desc.height },
+      .baseArrayLayer = 0, // image view targets the right layer already
+      .imageViewBinding = setup_image_view->handle(),
+    };
+
+    StdVideoDecodeH265ReferenceInfo std_setup_ref{};
+    std_setup_ref.PicOrderCntVal = current_poc;
+    std_setup_ref.flags.unused_for_reference        = is_ref ? 0 : 1;
+    std_setup_ref.flags.used_for_long_term_reference = 0;
+
+    VkVideoDecodeH265DpbSlotInfoKHR const setup_dpb_slot_info{
+      .sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_DPB_SLOT_INFO_KHR,
+      .pNext = nullptr,
+      .pStdReferenceInfo = &std_setup_ref,
+    };
+    VkVideoReferenceSlotInfoKHR const setup_slot_info{
+      .sType = VK_STRUCTURE_TYPE_VIDEO_REFERENCE_SLOT_INFO_KHR,
+      .pNext = &setup_dpb_slot_info,
+      .slotIndex = desc.setup_reference.slot_index,
+      .pPictureResource = &setup_picture_resource,
+    };
+
+    referenced_resources_.push_back(setup_tex_pool_handle);
+
+    // ----- Build per-active-reference slot info arrays -----
+    uint32_t const ref_count = desc.active_references.size();
+    mbase::SmallVector<VkVideoPictureResourceInfoKHR, 8>     ref_picture_resources;
+    mbase::SmallVector<StdVideoDecodeH265ReferenceInfo, 8>   ref_std_infos;
+    mbase::SmallVector<VkVideoDecodeH265DpbSlotInfoKHR, 8>   ref_dpb_slot_infos;
+    mbase::SmallVector<VkVideoReferenceSlotInfoKHR, 8>       ref_slot_infos;
+    ref_picture_resources.reserve(ref_count);
+    ref_std_infos.reserve(ref_count);
+    ref_dpb_slot_infos.reserve(ref_count);
+    ref_slot_infos.reserve(ref_count);
+
+    for (auto const& ref : desc.active_references) {
+      auto const ref_tex_pool_handle = resource_pool::ResourceHandle::FromU64(ref.picture.Get());
+      auto [ref_hot, ref_cold, ref_lock] =
+        resource_storage_->textures.GetConstRefWithSharedLockGuard(ref_tex_pool_handle);
+      VkImage const ref_vk_image = ref_hot.GetVkImage().handle();
+      mnexus::TextureDesc const& ref_tex_desc = ref_cold.GetTextureDesc();
+      VkFormat const ref_vk_format = ToVkFormat(ref_tex_desc.format);
+
+      VkImageSubresourceRange const ref_sub_range{
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = ref.array_layer,
+        .layerCount = 1,
+      };
+      VulkanImageViewPtr const ref_image_view = resource_storage_->image_view_cache.FindOrInsert(
+        ImageViewCacheKey {
+          .vk_image = ref_vk_image,
+          .view_type = VK_IMAGE_VIEW_TYPE_2D,
+          .format = ref_vk_format,
+          .subresource_range = ref_sub_range,
+          .usage_override = VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR
+                          | VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR,
+        },
+        make_video_decode_image_view
+      );
+
+      ref_picture_resources.emplace_back(VkVideoPictureResourceInfoKHR {
+        .sType = VK_STRUCTURE_TYPE_VIDEO_PICTURE_RESOURCE_INFO_KHR,
+        .pNext = nullptr,
+        .codedOffset = VkOffset2D { 0, 0 },
+        .codedExtent = VkExtent2D { ref_tex_desc.width, ref_tex_desc.height },
+        .baseArrayLayer = 0,
+        .imageViewBinding = ref_image_view->handle(),
+      });
+
+      StdVideoDecodeH265ReferenceInfo ref_std{};
+      ref_std.PicOrderCntVal = ref.pic_order_cnt_val;
+      ref_std_infos.push_back(ref_std);
+
+      ref_dpb_slot_infos.emplace_back(VkVideoDecodeH265DpbSlotInfoKHR {
+        .sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_DPB_SLOT_INFO_KHR,
+        .pNext = nullptr,
+        .pStdReferenceInfo = &ref_std_infos.back(),
+      });
+
+      ref_slot_infos.emplace_back(VkVideoReferenceSlotInfoKHR {
+        .sType = VK_STRUCTURE_TYPE_VIDEO_REFERENCE_SLOT_INFO_KHR,
+        .pNext = &ref_dpb_slot_infos.back(),
+        .slotIndex = ref.slot_index,
+        .pPictureResource = &ref_picture_resources.back(),
+      });
+
+      referenced_resources_.push_back(ref_tex_pool_handle);
+    }
+
+    // ----- Resolve src bitstream buffer -----
+    auto const src_buffer_pool_handle = resource_pool::ResourceHandle::FromU64(desc.src_buffer.Get());
+    auto [src_buf_hot, src_buf_lock] =
+      resource_storage_->buffers.GetHotConstRefWithSharedLockGuard(src_buffer_pool_handle);
+    VkBuffer const vk_src_buffer = src_buf_hot.vk_buffer.handle();
+    referenced_resources_.push_back(src_buffer_pool_handle);
+
+    // ----- Build slice segment offsets array (uint64 -> uint32) -----
+    mbase::SmallVector<uint32_t, 8> slice_segment_offsets_u32;
+    slice_segment_offsets_u32.reserve(desc.slice_segment_offsets.size());
+    for (uint64_t off : desc.slice_segment_offsets) {
+      slice_segment_offsets_u32.push_back(static_cast<uint32_t>(off));
+    }
+
+    // ----- Build VkVideoDecodeH265PictureInfoKHR + VkVideoDecodeInfoKHR -----
+    VkVideoDecodeH265PictureInfoKHR const h265_picture_info{
+      .sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_PICTURE_INFO_KHR,
+      .pNext = nullptr,
+      .pStdPictureInfo = &std_picture_info,
+      .sliceSegmentCount = static_cast<uint32_t>(slice_segment_offsets_u32.size()),
+      .pSliceSegmentOffsets = slice_segment_offsets_u32.empty() ? nullptr : slice_segment_offsets_u32.data(),
+    };
+
+    VkVideoDecodeInfoKHR const decode_info{
+      .sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_INFO_KHR,
+      .pNext = &h265_picture_info,
+      .flags = 0,
+      .srcBuffer = vk_src_buffer,
+      .srcBufferOffset = desc.src_buffer_offset,
+      .srcBufferRange = desc.src_buffer_range,
+      .dstPictureResource = setup_picture_resource,
+      .pSetupReferenceSlot = &setup_slot_info,
+      .referenceSlotCount = static_cast<uint32_t>(ref_slot_infos.size()),
+      .pReferenceSlots = ref_slot_infos.empty() ? nullptr : ref_slot_infos.data(),
+    };
+
+    vkCmdDecodeVideoKHR(encoder_->vk_cb_handle(), &decode_info);
 #else
     (void)desc;
     MBASE_LOG_ERROR("DecodeVideoH265 called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
@@ -1265,6 +1570,12 @@ private:
   ImageLayoutTracker image_layout_tracker_;
   PendingPipelineBarrier pending_pipeline_barrier_;
   mnexus::RenderStateEventLog render_state_event_log_;
+
+  /// Active video coding scope. Set by `BeginVideoCoding`, used by
+  /// `DecodeVideoH265` to look up the session's POC computer + parameters'
+  /// parsed SPS/PPS, cleared by `EndVideoCoding`.
+  resource_pool::ResourceHandle current_video_session_pool_handle_ = resource_pool::ResourceHandle::Null();
+  resource_pool::ResourceHandle current_video_session_parameters_pool_handle_ = resource_pool::ResourceHandle::Null();
 
   pipeline::RenderPipelineStateTracker render_pipeline_state_tracker_;
   mbase::SmallVector<BoundVertexBuffer, 4> bound_vertex_buffers_;
