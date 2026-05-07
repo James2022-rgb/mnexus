@@ -7,6 +7,7 @@
 
 // public project headers -------------------------------
 #include "mbase/public/log.h"
+#include "mbase/public/trap.h"
 
 // project headers --------------------------------------
 #include "backend-vulkan/depend/vulkan.h"
@@ -88,6 +89,19 @@ public:
   uint64_t AdvanceTimeline() override {
     uint64_t const serial = next_submit_serial_.fetch_add(1, std::memory_order_acq_rel);
 
+    // Host-signal the timeline semaphore so any subsequent WaitSubmitSerial
+    // on this serial actually completes. Without this, callers that take
+    // the "no GPU work was needed" path (e.g. QueueWriteBuffer for a
+    // mappable buffer) would hand back a serial that the timeline can
+    // never reach -- vkWaitSemaphoresKHR would block forever.
+    VkSemaphoreSignalInfoKHR const signal_info {
+      .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO_KHR,
+      .pNext     = nullptr,
+      .semaphore = timeline_semaphore_,
+      .value     = serial,
+    };
+    vkSignalSemaphoreKHR(vk_device_handle_, &signal_info);
+
     if (deferred_destroyer_ != nullptr) {
       deferred_destroyer_->Process();
     }
@@ -129,6 +143,7 @@ public:
     VkResult const result = vkQueueSubmit2KHR(vk_queue_, 1, &submit_info, VK_NULL_HANDLE);
     if (result != VK_SUCCESS) {
       MBASE_LOG_ERROR("vkQueueSubmit2KHR failed: {}", string_VkResult(result));
+      mbase::Trap();
     }
 
     if (deferred_destroyer_ != nullptr) {
