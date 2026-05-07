@@ -85,6 +85,25 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::TextureBarrier(
   // mnexus barrier API is a no-op on this backend.
 }
 
+MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::TextureBarrierRelease(
+  mnexus::TextureHandle /*texture_handle*/,
+  mnexus::TextureSubresourceRange const& /*subresource_range*/,
+  mnexus::ResourceBarrierState /*release_state*/,
+  mnexus::QueueId /*dst_queue_id*/
+) {
+  // WebGPU has no queue family ownership concept; no-op.
+}
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::TextureBarrierAcquire(
+  mnexus::TextureHandle /*texture_handle*/,
+  mnexus::TextureSubresourceRange const& /*subresource_range*/,
+  mnexus::ResourceBarrierStageFlags /*dst_stage_flags*/,
+  mnexus::ResourceBarrierState /*acquire_state*/,
+  mnexus::QueueId /*src_queue_id*/
+) {
+  // WebGPU has no queue family ownership concept; no-op.
+}
+
 //
 // Transfer
 //

@@ -173,6 +173,60 @@ void ImageLayoutTracker::Transition(
   entry.pending = true;
 }
 
+void ImageLayoutTracker::TransitionRelease(
+  VkImage vk_image,
+  Subresource const& subresource,
+  VkImageLayout new_layout,
+  uint32_t current_queue_family_index,
+  uint32_t dst_queue_family_index
+) {
+  Entry& entry = this->FindOrAddDefault(vk_image, subresource);
+
+  // QFOT release: src sync = whatever the image was last accessed with
+  // (already in entry.src_scope), dst sync = NONE/0 (the destination queue
+  // handles the dst side via Acquire). The layout fields declare the
+  // transition that the QFOT performs; per Vulkan spec, release and
+  // acquire halves must declare the same `oldLayout` / `newLayout`.
+  entry.new_layout = new_layout;
+  entry.dst_scope = SyncScope { 0, 0 };
+  entry.src_queue_family_index = current_queue_family_index;
+  entry.dst_queue_family_index = dst_queue_family_index;
+  entry.pending = true;
+}
+
+void ImageLayoutTracker::TransitionAcquire(
+  VkImage vk_image,
+  Subresource const& subresource,
+  VkPipelineStageFlags2KHR dst_stage_mask,
+  VkAccessFlags2KHR dst_access_mask,
+  VkImageLayout new_layout,
+  uint32_t src_queue_family_index,
+  uint32_t current_queue_family_index
+) {
+  // Acquire creates the entry as if the image just appeared in `new_layout`
+  // on this queue, with no prior access scope to wait for. Force-overwrite
+  // any pre-existing default entry; this barrier IS the first authoritative
+  // state on this queue.
+  auto it = tracked_images_.find(vk_image);
+  MBASE_ASSERT_MSG(it != tracked_images_.end(), "ImageLayoutTracker: image not registered");
+
+  auto& tracked = it->second;
+  uint32_t const index = GetSubresourceIndex(tracked.info.mip_level_count, subresource);
+  if (tracked.entries.size() <= index) {
+    tracked.entries.resize(index + 1u);
+  }
+
+  tracked.entries[index] = Entry {
+    .old_layout = new_layout,
+    .src_scope  = SyncScope { 0, 0 },
+    .new_layout = new_layout,
+    .dst_scope  = SyncScope { dst_stage_mask, dst_access_mask },
+    .src_queue_family_index = src_queue_family_index,
+    .dst_queue_family_index = current_queue_family_index,
+    .pending = true,
+  };
+}
+
 void ImageLayoutTracker::TransitionToTransferDst(VkImage vk_image, Subresource const& subresource) {
   this->Transition(
     vk_image, subresource,
@@ -245,7 +299,9 @@ void ImageLayoutTracker::FlushPendingTransitions(PendingPipelineBarrier& barrier
         entry.dst_scope.stage_mask,
         entry.dst_scope.access_mask,
         entry.old_layout,
-        entry.new_layout
+        entry.new_layout,
+        entry.src_queue_family_index,
+        entry.dst_queue_family_index
       );
 
       // Advance state: the transition's destination becomes the new source.
@@ -254,6 +310,10 @@ void ImageLayoutTracker::FlushPendingTransitions(PendingPipelineBarrier& barrier
 
       entry.new_layout = VK_IMAGE_LAYOUT_UNDEFINED;
       entry.dst_scope = {};
+      // QFOT was a one-shot for this barrier; subsequent same-queue
+      // transitions revert to non-QFOT (IGNORED / IGNORED).
+      entry.src_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
+      entry.dst_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
       entry.pending = false;
     }
   }

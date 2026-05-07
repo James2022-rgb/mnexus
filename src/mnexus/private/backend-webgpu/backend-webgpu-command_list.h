@@ -95,6 +95,21 @@ public:
     mnexus::ResourceBarrierState dst_state
   );
 
+  IMPL_VAPI(void, TextureBarrierRelease,
+    mnexus::TextureHandle texture_handle,
+    mnexus::TextureSubresourceRange const& subresource_range,
+    mnexus::ResourceBarrierState release_state,
+    mnexus::QueueId dst_queue_id
+  );
+
+  IMPL_VAPI(void, TextureBarrierAcquire,
+    mnexus::TextureHandle texture_handle,
+    mnexus::TextureSubresourceRange const& subresource_range,
+    mnexus::ResourceBarrierStageFlags dst_stage_flags,
+    mnexus::ResourceBarrierState acquire_state,
+    mnexus::QueueId src_queue_id
+  );
+
   //
   // Transfer
   //

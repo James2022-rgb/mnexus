@@ -860,6 +860,39 @@ public:
     ResourceBarrierState dst_state
   );
 
+  /// Releases queue family ownership of a texture subresource so a different
+  /// queue family can subsequently acquire it. The receiving queue **MUST**
+  /// call `TextureBarrierAcquire` with matching `release_state` and queue
+  /// family pair before using the texture, per the Vulkan QFOT contract.
+  ///
+  /// `release_state` defines the layout the texture is left in; the
+  /// destination queue's `TextureBarrierAcquire` must specify the same state.
+  ///
+  /// On backends without queue family ownership (e.g. WebGPU) this is a
+  /// no-op (logged at warning level).
+  _MNEXUS_VAPI(void, TextureBarrierRelease,
+    TextureHandle texture_handle,
+    TextureSubresourceRange const& subresource_range,
+    ResourceBarrierState release_state,
+    QueueId dst_queue_id
+  );
+
+  /// Acquires queue family ownership of a texture subresource that another
+  /// queue family released via `TextureBarrierRelease`. `acquire_state` must
+  /// match the `release_state` used on the source queue. `dst_stage_flags`
+  /// is the pipeline stage on the acquiring queue at which the texture will
+  /// next be used.
+  ///
+  /// On backends without queue family ownership (e.g. WebGPU) this is a
+  /// no-op (logged at warning level).
+  _MNEXUS_VAPI(void, TextureBarrierAcquire,
+    TextureHandle texture_handle,
+    TextureSubresourceRange const& subresource_range,
+    ResourceBarrierStageFlags dst_stage_flags,
+    ResourceBarrierState acquire_state,
+    QueueId src_queue_id
+  );
+
   //
   // Transfer
   //

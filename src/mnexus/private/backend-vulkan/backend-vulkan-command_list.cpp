@@ -92,6 +92,7 @@ public:
     uint32_t queue_family_index
   ) :
     vk_device_(vk_device),
+    queue_family_index_(queue_family_index),
     vk_command_pool_(MakeVulkanCommandPool(vk_device, CreateCommandPool(vk_device, queue_family_index))),
     encoder_(ICommandEncoder::Create(CommandEncoderDesc {
       .vk_cb_handle = AllocateAndBeginCommandBuffer(vk_device, vk_command_pool_.handle()),
@@ -215,6 +216,91 @@ public:
           vk_stage_mask,
           vk_access_mask,
           vk_layout
+        );
+      }
+    }
+
+    referenced_resources_.push_back(pool_handle);
+  }
+
+  IMPL_VAPI(void, TextureBarrierRelease,
+    mnexus::TextureHandle texture_handle,
+    mnexus::TextureSubresourceRange const& subresource_range,
+    mnexus::ResourceBarrierState release_state,
+    mnexus::QueueId dst_queue_id
+  ) {
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(texture_handle.Get());
+    auto [hot, cold, lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(pool_handle);
+
+    VulkanImage const& vk_image = hot.GetVkImage();
+    VkImage const vk_image_handle = vk_image.handle();
+    mnexus::TextureDesc const& desc = cold.GetTextureDesc();
+    VkFormat const vk_format = ToVkFormat(desc.format);
+
+    image_layout_tracker_.RegisterImage(
+      vk_image_handle,
+      ToVkImageUsageFlags(desc.usage, vk_format),
+      vk_format,
+      desc.mip_level_count,
+      desc.array_layer_count
+    );
+
+    VkImageLayout const vk_layout = ToVkImageLayout(release_state);
+
+    for (uint32_t mip = 0; mip < subresource_range.mip_level_count; ++mip) {
+      for (uint32_t layer = 0; layer < subresource_range.array_layer_count; ++layer) {
+        image_layout_tracker_.TransitionRelease(
+          vk_image_handle,
+          { .mip_level = subresource_range.base_mip_level + mip,
+            .array_layer = subresource_range.base_array_layer + layer },
+          vk_layout,
+          queue_family_index_,
+          dst_queue_id.queue_family_index
+        );
+      }
+    }
+
+    referenced_resources_.push_back(pool_handle);
+  }
+
+  IMPL_VAPI(void, TextureBarrierAcquire,
+    mnexus::TextureHandle texture_handle,
+    mnexus::TextureSubresourceRange const& subresource_range,
+    mnexus::ResourceBarrierStageFlags dst_stage_flags,
+    mnexus::ResourceBarrierState acquire_state,
+    mnexus::QueueId src_queue_id
+  ) {
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(texture_handle.Get());
+    auto [hot, cold, lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(pool_handle);
+
+    VulkanImage const& vk_image = hot.GetVkImage();
+    VkImage const vk_image_handle = vk_image.handle();
+    mnexus::TextureDesc const& desc = cold.GetTextureDesc();
+    VkFormat const vk_format = ToVkFormat(desc.format);
+
+    image_layout_tracker_.RegisterImage(
+      vk_image_handle,
+      ToVkImageUsageFlags(desc.usage, vk_format),
+      vk_format,
+      desc.mip_level_count,
+      desc.array_layer_count
+    );
+
+    VkPipelineStageFlags2KHR const vk_stage_mask = ToVkPipelineStageFlags2(dst_stage_flags);
+    VkAccessFlags2KHR const vk_access_mask = ToVkAccessFlags2(acquire_state, dst_stage_flags);
+    VkImageLayout const vk_layout = ToVkImageLayout(acquire_state);
+
+    for (uint32_t mip = 0; mip < subresource_range.mip_level_count; ++mip) {
+      for (uint32_t layer = 0; layer < subresource_range.array_layer_count; ++layer) {
+        image_layout_tracker_.TransitionAcquire(
+          vk_image_handle,
+          { .mip_level = subresource_range.base_mip_level + mip,
+            .array_layer = subresource_range.base_array_layer + layer },
+          vk_stage_mask,
+          vk_access_mask,
+          vk_layout,
+          src_queue_id.queue_family_index,
+          queue_family_index_
         );
       }
     }
@@ -967,6 +1053,7 @@ private:
   }
 
   IVulkanDevice* vk_device_ = nullptr;
+  uint32_t queue_family_index_ = 0;
   VulkanCommandPool vk_command_pool_;
   ICommandEncoder* encoder_ = nullptr;
   ResourceStorage* resource_storage_ = nullptr;

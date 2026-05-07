@@ -47,6 +47,33 @@ public:
     VkImageLayout new_layout
   );
 
+  /// Release queue family ownership: emits a barrier with the current src
+  /// sync as wait scope, no dst sync (per QFOT release semantics), and the
+  /// (current_qf -> dst_queue_family_index) ownership transfer. The new
+  /// layout becomes the layout the receiving queue must specify in its
+  /// matching Acquire.
+  void TransitionRelease(
+    VkImage vk_image,
+    Subresource const& subresource,
+    VkImageLayout new_layout,
+    uint32_t current_queue_family_index,
+    uint32_t dst_queue_family_index
+  );
+
+  /// Acquire queue family ownership: emits a barrier with no src sync (per
+  /// QFOT acquire semantics) and the given dst sync, and the (src_queue_
+  /// family_index -> current_qf) ownership transfer. `new_layout` MUST
+  /// match the layout passed to the corresponding Release.
+  void TransitionAcquire(
+    VkImage vk_image,
+    Subresource const& subresource,
+    VkPipelineStageFlags2KHR dst_stage_mask,
+    VkAccessFlags2KHR dst_access_mask,
+    VkImageLayout new_layout,
+    uint32_t src_queue_family_index,
+    uint32_t current_queue_family_index
+  );
+
   /// Convenience: transition to TRANSFER_DST_OPTIMAL.
   void TransitionToTransferDst(VkImage vk_image, Subresource const& subresource);
 
@@ -79,6 +106,13 @@ private:
 
     VkImageLayout new_layout = VK_IMAGE_LAYOUT_UNDEFINED;
     SyncScope dst_scope;
+
+    /// Queue family ownership transfer for the pending barrier (if any).
+    /// Both default to `VK_QUEUE_FAMILY_IGNORED`; set to actual indices
+    /// when the pending barrier is one half of a QFOT (release/acquire).
+    /// Reset to IGNORED after flush.
+    uint32_t src_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
+    uint32_t dst_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
 
     bool pending = false;
   };

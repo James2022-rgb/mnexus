@@ -45,6 +45,11 @@ public:
     VkAccessFlags2KHR dst_access_mask = 0;
     VkImageLayout old_layout = VK_IMAGE_LAYOUT_UNDEFINED;
     VkImageLayout new_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    /// Queue family indices for queue family ownership transfer (QFOT).
+    /// Both default to `VK_QUEUE_FAMILY_IGNORED`; set both to actual family
+    /// indices to express a release/acquire half of an ownership transfer.
+    uint32_t src_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
+    uint32_t dst_queue_family_index = VK_QUEUE_FAMILY_IGNORED;
   };
 
   struct GlobalBarrier final {
@@ -62,7 +67,9 @@ public:
     VkPipelineStageFlags2KHR dst_stage_mask,
     VkAccessFlags2KHR dst_access_mask,
     VkImageLayout old_layout,
-    VkImageLayout new_layout
+    VkImageLayout new_layout,
+    uint32_t src_queue_family_index = VK_QUEUE_FAMILY_IGNORED,
+    uint32_t dst_queue_family_index = VK_QUEUE_FAMILY_IGNORED
   );
 
   void AddGlobalMemoryBarrier(

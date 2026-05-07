@@ -11,7 +11,9 @@ void PendingPipelineBarrier::AddImageMemoryBarrier(
   VkPipelineStageFlags2KHR dst_stage_mask,
   VkAccessFlags2KHR dst_access_mask,
   VkImageLayout old_layout,
-  VkImageLayout new_layout
+  VkImageLayout new_layout,
+  uint32_t src_queue_family_index,
+  uint32_t dst_queue_family_index
 ) {
   image_barriers_.emplace_back(ImageBarrier {
     .vk_image = vk_image,
@@ -22,6 +24,8 @@ void PendingPipelineBarrier::AddImageMemoryBarrier(
     .dst_access_mask = dst_access_mask,
     .old_layout = old_layout,
     .new_layout = new_layout,
+    .src_queue_family_index = src_queue_family_index,
+    .dst_queue_family_index = dst_queue_family_index,
   });
 }
 
@@ -59,8 +63,8 @@ void PendingPipelineBarrier::FlushAndClear(VkCommandBuffer command_buffer) {
       .dstAccessMask = b.dst_access_mask,
       .oldLayout = b.old_layout,
       .newLayout = b.new_layout,
-      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .srcQueueFamilyIndex = b.src_queue_family_index,
+      .dstQueueFamilyIndex = b.dst_queue_family_index,
       .image = b.vk_image,
       .subresourceRange = b.subresource_range,
     });
