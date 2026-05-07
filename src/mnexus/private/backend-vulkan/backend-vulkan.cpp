@@ -44,6 +44,7 @@
 
 #if MNEXUS_ENABLE_VIDEO_CODING
 #  include "backend-vulkan/video/vk-video_session.h"
+#  include "backend-vulkan/video/vk-video_session_parameters.h"
 #endif
 
 namespace mnexus_backend::vulkan {
@@ -631,22 +632,35 @@ public:
   }
 
   IMPL_VAPI(mnexus::VideoSessionParametersHandle, CreateVideoSessionParametersDecodeH265,
-    mnexus::VideoSessionParametersDecodeH265Desc const& /*desc*/
+    mnexus::VideoSessionParametersDecodeH265Desc const& desc
   ) {
 #if MNEXUS_ENABLE_VIDEO_CODING
-    // TODO: Parse VPS/SPS/PPS NAL via vidsynt, build StdVideoH265* structs,
-    // call vkCreateVideoSessionParametersKHR.
-    MBASE_LOG_ERROR("CreateVideoSessionParametersDecodeH265 not yet implemented in the Vulkan backend.");
-    return mnexus::VideoSessionParametersHandle::Invalid();
+    resource_pool::ResourceHandle const pool_handle = EmplaceVideoSessionParametersResourcePoolDecodeH265(
+      resource_storage_->video_session_parameters,
+      *vk_device_,
+      resource_storage_->video_sessions,
+      desc
+    );
+    if (pool_handle.IsNull()) {
+      return mnexus::VideoSessionParametersHandle::Invalid();
+    }
+    return mnexus::VideoSessionParametersHandle { pool_handle.AsU64() };
 #else
+    (void)desc;
     MBASE_LOG_ERROR("CreateVideoSessionParametersDecodeH265 called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
     return mnexus::VideoSessionParametersHandle::Invalid();
 #endif
   }
 
   IMPL_VAPI(void, DestroyVideoSessionParameters, mnexus::VideoSessionParametersHandle params) {
-    // No-op: Create currently always returns invalid.
+#if MNEXUS_ENABLE_VIDEO_CODING
+    // FIXME: Should defer destruction until the GPU is done using these
+    // parameters (matches the existing FIXME on Destroy{Buffer,Texture,VideoSession}).
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(params.Get());
+    resource_storage_->video_session_parameters.Erase(pool_handle);
+#else
     (void)params;
+#endif
   }
 
   // ----------------------------------------------------------------------------------------------

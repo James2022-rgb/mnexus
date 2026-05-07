@@ -19,6 +19,7 @@
 
 #if MNEXUS_ENABLE_VIDEO_CODING
 #  include "backend-vulkan/video/vk-video_session.h"
+#  include "backend-vulkan/video/vk-video_session_parameters.h"
 #endif
 
 namespace mnexus_backend::vulkan {
@@ -32,6 +33,7 @@ struct ResourceStorage final {
   SamplerResourcePool samplers;
 #if MNEXUS_ENABLE_VIDEO_CODING
   VideoSessionResourcePool video_sessions;
+  VideoSessionParametersResourcePool video_session_parameters;
 #endif
 
   pipeline::TPipelineLayoutCache<VulkanPipelineLayoutPtr> pipeline_layout_cache;

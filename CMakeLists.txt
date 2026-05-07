@@ -609,6 +609,8 @@ if(${_enable_backend_vulkan})
       # video/
       ${_private_backend_vulkan_dir}/video/vk-video_session.cpp
       ${_private_backend_vulkan_dir}/video/vk-video_session.h
+      ${_private_backend_vulkan_dir}/video/vk-video_session_parameters.cpp
+      ${_private_backend_vulkan_dir}/video/vk-video_session_parameters.h
     )
   endif()
 endif()
