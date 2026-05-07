@@ -62,14 +62,21 @@ public:
 
   /// Acquire queue family ownership: emits a barrier with no src sync (per
   /// QFOT acquire semantics) and the given dst sync, and the (src_queue_
-  /// family_index -> current_qf) ownership transfer. `new_layout` MUST
-  /// match the layout passed to the corresponding Release.
+  /// family_index -> current_qf) ownership transfer.
+  ///
+  /// The QFOT acquire half must declare exactly the same `oldLayout` and
+  /// `newLayout` as the matching release half (Vulkan QFOT contract):
+  /// - `pre_qfot_layout`  = release barrier's `oldLayout` (the layout the
+  ///   image was in on the source queue immediately before its release).
+  /// - `post_qfot_layout` = release barrier's `newLayout` (the layout the
+  ///   image is in after the QFOT completes on this queue).
   void TransitionAcquire(
     VkImage vk_image,
     Subresource const& subresource,
     VkPipelineStageFlags2KHR dst_stage_mask,
     VkAccessFlags2KHR dst_access_mask,
-    VkImageLayout new_layout,
+    VkImageLayout pre_qfot_layout,
+    VkImageLayout post_qfot_layout,
     uint32_t src_queue_family_index,
     uint32_t current_queue_family_index
   );

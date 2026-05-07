@@ -106,9 +106,15 @@ public:
     mnexus::TextureHandle texture_handle,
     mnexus::TextureSubresourceRange const& subresource_range,
     mnexus::ResourceBarrierStageFlags dst_stage_flags,
+    mnexus::ResourceBarrierState released_from_state,
     mnexus::ResourceBarrierState acquire_state,
     mnexus::QueueId src_queue_id
   );
+
+  IMPL_VAPI(void, BeginVideoCoding, mnexus::BeginVideoCodingDesc const& desc);
+  IMPL_VAPI(void, EndVideoCoding);
+  IMPL_VAPI(void, ControlVideoCodingReset);
+  IMPL_VAPI(void, DecodeVideoH265, mnexus::DecodeVideoH265Desc const& desc);
 
   //
   // Transfer

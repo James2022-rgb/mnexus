@@ -27,6 +27,11 @@
 #include "backend-vulkan/resource/resource_storage.h"
 #include "backend-vulkan/resource/types_bridge.h"
 
+#if MNEXUS_ENABLE_VIDEO_CODING
+#  include "backend-vulkan/video/vk-video_session.h"
+#  include "backend-vulkan/video/vk-video_session_parameters.h"
+#endif
+
 namespace mnexus_backend::vulkan {
 
 namespace {
@@ -267,6 +272,7 @@ public:
     mnexus::TextureHandle texture_handle,
     mnexus::TextureSubresourceRange const& subresource_range,
     mnexus::ResourceBarrierStageFlags dst_stage_flags,
+    mnexus::ResourceBarrierState released_from_state,
     mnexus::ResourceBarrierState acquire_state,
     mnexus::QueueId src_queue_id
   ) {
@@ -288,7 +294,8 @@ public:
 
     VkPipelineStageFlags2KHR const vk_stage_mask = ToVkPipelineStageFlags2(dst_stage_flags);
     VkAccessFlags2KHR const vk_access_mask = ToVkAccessFlags2(acquire_state, dst_stage_flags);
-    VkImageLayout const vk_layout = ToVkImageLayout(acquire_state);
+    VkImageLayout const vk_pre_qfot_layout  = ToVkImageLayout(released_from_state);
+    VkImageLayout const vk_post_qfot_layout = ToVkImageLayout(acquire_state);
 
     for (uint32_t mip = 0; mip < subresource_range.mip_level_count; ++mip) {
       for (uint32_t layer = 0; layer < subresource_range.array_layer_count; ++layer) {
@@ -298,7 +305,8 @@ public:
             .array_layer = subresource_range.base_array_layer + layer },
           vk_stage_mask,
           vk_access_mask,
-          vk_layout,
+          vk_pre_qfot_layout,
+          vk_post_qfot_layout,
           src_queue_id.queue_family_index,
           queue_family_index_
         );
@@ -306,6 +314,202 @@ public:
     }
 
     referenced_resources_.push_back(pool_handle);
+  }
+
+  //
+  // Video coding
+  //
+
+  IMPL_VAPI(void, BeginVideoCoding, mnexus::BeginVideoCodingDesc const& desc) {
+#if MNEXUS_ENABLE_VIDEO_CODING
+    // Resolve session.
+    auto const session_pool_handle = resource_pool::ResourceHandle::FromU64(desc.session.Get());
+    auto [session_hot, session_cold, session_lock] =
+      resource_storage_->video_sessions.GetConstRefWithSharedLockGuard(session_pool_handle);
+    VkVideoSessionKHR const vk_session = session_hot.vk_video_session.handle();
+
+    // Resolve parameters.
+    auto const params_pool_handle = resource_pool::ResourceHandle::FromU64(desc.parameters.Get());
+    auto [params_hot, params_cold, params_lock] =
+      resource_storage_->video_session_parameters.GetConstRefWithSharedLockGuard(params_pool_handle);
+    VkVideoSessionParametersKHR const vk_params = params_hot.vk_video_session_parameters.handle();
+
+    // Build per-slot Vulkan structs. Each slot needs (in order):
+    //   - per-array-layer VkImageView (cached)
+    //   - VkVideoPictureResourceInfoKHR pointing at that view
+    //   - StdVideoDecodeH265ReferenceInfo (POC + flags)
+    //   - VkVideoDecodeH265DpbSlotInfoKHR pointing at the std reference info
+    //   - VkVideoReferenceSlotInfoKHR pointing at the picture resource and the codec slot info via pNext
+    // Reserve the SmallVectors up-front so address-of-back() stays valid.
+    uint32_t const slot_count = desc.bound_reference_slots.size();
+    mbase::SmallVector<VkVideoPictureResourceInfoKHR, 8>     picture_resources;
+    mbase::SmallVector<StdVideoDecodeH265ReferenceInfo, 8>   std_ref_infos;
+    mbase::SmallVector<VkVideoDecodeH265DpbSlotInfoKHR, 8>   dpb_slot_infos;
+    mbase::SmallVector<VkVideoReferenceSlotInfoKHR, 8>       slot_infos;
+    picture_resources.reserve(slot_count);
+    std_ref_infos.reserve(slot_count);
+    dpb_slot_infos.reserve(slot_count);
+    slot_infos.reserve(slot_count);
+
+    auto make_image_view = [this](ImageViewCacheKey const& key) {
+      // For video decode views of a SAMPLED multi-planar image we restrict
+      // the view's effective usage to exclude SAMPLED, since otherwise the
+      // view would require a VkSamplerYcbcrConversion in pNext (which we
+      // cannot specify here without coupling decode to a particular sampler
+      // configuration).
+      VkImageViewUsageCreateInfo const usage_info{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
+        .pNext = nullptr,
+        .usage = key.usage_override,
+      };
+      VkImageViewCreateInfo const create_info{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .pNext = (key.usage_override != 0) ? &usage_info : nullptr,
+        .flags = 0,
+        .image = key.vk_image,
+        .viewType = key.view_type,
+        .format = key.format,
+        .components = VkComponentMapping {
+          .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+          .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+          .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+          .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+        },
+        .subresourceRange = key.subresource_range,
+      };
+      VkImageView vk_image_view_handle = VK_NULL_HANDLE;
+      VkResult const result = vkCreateImageView(this->vk_device_->handle(), &create_info, nullptr, &vk_image_view_handle);
+      MBASE_ASSERT(result == VK_SUCCESS);
+      return std::make_shared<VulkanImageView>(
+        vk_image_view_handle,
+        [vk_device = this->vk_device_, vk_image_view_handle]() {
+          vkDestroyImageView(vk_device->handle(), vk_image_view_handle, nullptr);
+        },
+        this->vk_device_->GetDeferredDestroyer()
+      );
+    };
+
+    for (auto const& slot : desc.bound_reference_slots) {
+      auto const tex_pool_handle = resource_pool::ResourceHandle::FromU64(slot.picture.Get());
+      auto [tex_hot, tex_cold, tex_lock] =
+        resource_storage_->textures.GetConstRefWithSharedLockGuard(tex_pool_handle);
+      VkImage const vk_image = tex_hot.GetVkImage().handle();
+      mnexus::TextureDesc const& tex_desc = tex_cold.GetTextureDesc();
+      VkFormat const vk_format = ToVkFormat(tex_desc.format);
+
+      VkImageSubresourceRange const sub_range{
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = slot.array_layer,
+        .layerCount = 1,
+      };
+
+      VulkanImageViewPtr const vk_image_view = resource_storage_->image_view_cache.FindOrInsert(
+        ImageViewCacheKey {
+          .vk_image = vk_image,
+          .view_type = VK_IMAGE_VIEW_TYPE_2D,
+          .format = vk_format,
+          .subresource_range = sub_range,
+          // Restrict the view to video-decode-only usage so it does not
+          // require a YcbcrConversion when the image's format is a multi-
+          // planar YCbCr one (NV12 / P010 etc.).
+          .usage_override = VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR
+                          | VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR,
+        },
+        make_image_view
+      );
+
+      picture_resources.emplace_back(VkVideoPictureResourceInfoKHR {
+        .sType = VK_STRUCTURE_TYPE_VIDEO_PICTURE_RESOURCE_INFO_KHR,
+        .pNext = nullptr,
+        .codedOffset = VkOffset2D { 0, 0 },
+        .codedExtent = VkExtent2D { tex_desc.width, tex_desc.height },
+        .baseArrayLayer = 0, // image view already targets the right layer
+        .imageViewBinding = vk_image_view->handle(),
+      });
+
+      StdVideoDecodeH265ReferenceInfo std_ref{};
+      std_ref.PicOrderCntVal = slot.pic_order_cnt_val;
+      std_ref_infos.push_back(std_ref);
+
+      dpb_slot_infos.emplace_back(VkVideoDecodeH265DpbSlotInfoKHR {
+        .sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_DPB_SLOT_INFO_KHR,
+        .pNext = nullptr,
+        .pStdReferenceInfo = &std_ref_infos.back(),
+      });
+
+      slot_infos.emplace_back(VkVideoReferenceSlotInfoKHR {
+        .sType = VK_STRUCTURE_TYPE_VIDEO_REFERENCE_SLOT_INFO_KHR,
+        .pNext = &dpb_slot_infos.back(),
+        .slotIndex = slot.slot_index,
+        .pPictureResource = &picture_resources.back(),
+      });
+
+      referenced_resources_.push_back(tex_pool_handle);
+    }
+
+    // Flush any pending barriers; Vulkan disallows barriers inside a video coding scope.
+    this->FlushPipelineBarrier();
+
+    VkVideoBeginCodingInfoKHR const begin_info{
+      .sType = VK_STRUCTURE_TYPE_VIDEO_BEGIN_CODING_INFO_KHR,
+      .pNext = nullptr,
+      .flags = 0,
+      .videoSession = vk_session,
+      .videoSessionParameters = vk_params,
+      .referenceSlotCount = static_cast<uint32_t>(slot_infos.size()),
+      .pReferenceSlots = slot_infos.empty() ? nullptr : slot_infos.data(),
+    };
+    vkCmdBeginVideoCodingKHR(encoder_->vk_cb_handle(), &begin_info);
+
+    referenced_resources_.push_back(session_pool_handle);
+    referenced_resources_.push_back(params_pool_handle);
+#else
+    (void)desc;
+    MBASE_LOG_ERROR("BeginVideoCoding called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
+#endif
+  }
+
+  IMPL_VAPI(void, EndVideoCoding) {
+#if MNEXUS_ENABLE_VIDEO_CODING
+    VkVideoEndCodingInfoKHR const end_info{
+      .sType = VK_STRUCTURE_TYPE_VIDEO_END_CODING_INFO_KHR,
+      .pNext = nullptr,
+      .flags = 0,
+    };
+    vkCmdEndVideoCodingKHR(encoder_->vk_cb_handle(), &end_info);
+#else
+    MBASE_LOG_ERROR("EndVideoCoding called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
+#endif
+  }
+
+  IMPL_VAPI(void, ControlVideoCodingReset) {
+#if MNEXUS_ENABLE_VIDEO_CODING
+    VkVideoCodingControlInfoKHR const control_info{
+      .sType = VK_STRUCTURE_TYPE_VIDEO_CODING_CONTROL_INFO_KHR,
+      .pNext = nullptr,
+      .flags = VK_VIDEO_CODING_CONTROL_RESET_BIT_KHR,
+    };
+    vkCmdControlVideoCodingKHR(encoder_->vk_cb_handle(), &control_info);
+#else
+    MBASE_LOG_ERROR("ControlVideoCodingReset called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
+#endif
+  }
+
+  IMPL_VAPI(void, DecodeVideoH265, mnexus::DecodeVideoH265Desc const& desc) {
+#if MNEXUS_ENABLE_VIDEO_CODING
+    // TODO: Build VkVideoDecodeInfoKHR + VkVideoDecodeH265PictureInfoKHR via
+    // vidsynt slice header parsing, then issue vkCmdDecodeVideoKHR. The picture
+    // info construction (POC, RefPicSet slot indices, flags) is the same
+    // shape of work as VideoSessionParameters' Std-struct conversion and is
+    // split into a follow-up commit to keep this change reviewable.
+    (void)desc;
+    MBASE_LOG_ERROR("DecodeVideoH265 not yet implemented in the Vulkan backend.");
+#else
+    (void)desc;
+    MBASE_LOG_ERROR("DecodeVideoH265 called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
+#endif
   }
 
   //

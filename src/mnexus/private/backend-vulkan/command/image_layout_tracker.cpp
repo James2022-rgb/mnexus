@@ -103,14 +103,9 @@ VkImageAspectFlags ImageLayoutTracker::GetAspectMaskFromFormat(VkFormat format) 
   if (vkuFormatIsDepthOrStencil(format)) {
     return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
   }
-  if (vkuFormatIsColor(format)) {
-    return VK_IMAGE_ASPECT_COLOR_BIT;
-  }
-  if (vkuFormatPlaneCount(format) == 2) {
-    return VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT;
-  }
-  MBASE_LOG_ERROR("ImageLayoutTracker: cannot determine aspect mask for format {}", string_VkFormat(format));
-  return 0;
+  // For multi-planar non-disjoint images COLOR_BIT covers all planes
+  // (per spec; equivalent to PLANE_0_BIT|PLANE_1_BIT on disjoint).
+  return VK_IMAGE_ASPECT_COLOR_BIT;
 }
 
 // ====================================================================================================
@@ -199,14 +194,21 @@ void ImageLayoutTracker::TransitionAcquire(
   Subresource const& subresource,
   VkPipelineStageFlags2KHR dst_stage_mask,
   VkAccessFlags2KHR dst_access_mask,
-  VkImageLayout new_layout,
+  VkImageLayout pre_qfot_layout,
+  VkImageLayout post_qfot_layout,
   uint32_t src_queue_family_index,
   uint32_t current_queue_family_index
 ) {
-  // Acquire creates the entry as if the image just appeared in `new_layout`
-  // on this queue, with no prior access scope to wait for. Force-overwrite
-  // any pre-existing default entry; this barrier IS the first authoritative
-  // state on this queue.
+  // Acquire creates the entry as if the image just appeared on this queue,
+  // with no prior access scope to wait for. The QFOT acquire half must
+  // declare the same (oldLayout, newLayout) pair as the matching release
+  // (Vulkan QFOT contract); we set old_layout to the release's pre-QFOT
+  // layout and new_layout to the release's post-QFOT layout. After flush
+  // the entry's old_layout advances to post_qfot_layout, which is the
+  // image's effective state on this queue.
+  //
+  // Force-overwrite any pre-existing default entry; this barrier IS the
+  // first authoritative state on this queue.
   auto it = tracked_images_.find(vk_image);
   MBASE_ASSERT_MSG(it != tracked_images_.end(), "ImageLayoutTracker: image not registered");
 
@@ -217,9 +219,9 @@ void ImageLayoutTracker::TransitionAcquire(
   }
 
   tracked.entries[index] = Entry {
-    .old_layout = new_layout,
+    .old_layout = pre_qfot_layout,
     .src_scope  = SyncScope { 0, 0 },
-    .new_layout = new_layout,
+    .new_layout = post_qfot_layout,
     .dst_scope  = SyncScope { dst_stage_mask, dst_access_mask },
     .src_queue_family_index = src_queue_family_index,
     .dst_queue_family_index = current_queue_family_index,
@@ -253,6 +255,19 @@ void ImageLayoutTracker::TransitionAllToDefaults() {
       }
 
       Entry& entry = tracked.entries[i].value();
+
+      // Skip QFOT-in-progress entries: a Release/Acquire entry has its own
+      // (oldLayout, newLayout, dst_scope) intentionally set by the caller and
+      // must be flushed unmodified, otherwise the release/acquire halves on
+      // the two queues would no longer match (Vulkan QFOT contract requires
+      // identical oldLayout/newLayout on both sides).
+      bool const qfot_pending =
+        entry.src_queue_family_index != VK_QUEUE_FAMILY_IGNORED ||
+        entry.dst_queue_family_index != VK_QUEUE_FAMILY_IGNORED;
+      if (qfot_pending) {
+        continue;
+      }
+
       VkImageLayout const default_layout = GetDefaultLayout(tracked.info.usage, tracked.info.format);
       SyncScope const default_scope = GetDefaultSyncScope(tracked.info.usage, tracked.info.format);
 

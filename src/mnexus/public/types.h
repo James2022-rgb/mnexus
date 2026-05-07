@@ -1432,6 +1432,57 @@ struct VideoSessionParametersDecodeH265Desc final {
 };
 _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(VideoSessionParametersDecodeH265Desc, MnVideoSessionParametersDecodeH265Desc);
 
+/// Identifies a picture slot for `BeginVideoCoding` / `DecodeVideoH265`.
+///
+/// `slot_index = -1` means "the picture being reconstructed" (in `setup_reference`
+/// or as part of `bound_reference_slots`); 0..max_dpb_slots-1 identifies a DPB
+/// slot. `picture` + `array_layer` together specify which array layer of which
+/// 2D array texture backs this slot. `pic_order_cnt_val` is the H.265 Picture
+/// Order Count for this picture, used to populate StdVideoDecodeH265ReferenceInfo.
+struct VideoReferenceSlotInfo final {
+  int32_t        slot_index = -1;
+  TextureHandle  picture;
+  uint32_t       array_layer = 0;
+  int32_t        pic_order_cnt_val = 0;
+};
+
+struct BeginVideoCodingDesc final {
+  VideoSessionHandle           session;
+  VideoSessionParametersHandle parameters;
+  /// All picture slots the decoder may reference during the coding scope.
+  /// MUST include the reconstructed-picture slot (with `slot_index = -1`)
+  /// and every active reference. The driver uses this to validate
+  /// reference picture access in subsequent `DecodeVideoH265` calls.
+  container::ArrayProxy<VideoReferenceSlotInfo const> bound_reference_slots;
+};
+
+struct DecodeVideoH265Desc final {
+  /// Bitstream input. Buffer MUST have `kVideoDecodeSrc` usage.
+  BufferHandle src_buffer;
+  uint64_t     src_buffer_offset = 0;
+  uint64_t     src_buffer_range = 0;
+  /// Byte offsets of each coded slice segment NAL unit within
+  /// `[src_buffer_offset, src_buffer_offset + src_buffer_range)`,
+  /// measured from `src_buffer_offset`.
+  container::ArrayProxy<uint64_t const> slice_segment_offsets;
+
+  /// The slot the reconstructed picture is being decoded into. Layout MUST
+  /// be `kVideoDecodeDpb` (or `kVideoDecodeDst` for separate-images
+  /// configurations); the array_layer identifies the DPB slot to write.
+  VideoReferenceSlotInfo setup_reference;
+
+  /// Active reference pictures (subset of `bound_reference_slots` from the
+  /// enclosing `BeginVideoCoding`).
+  container::ArrayProxy<VideoReferenceSlotInfo const> active_references;
+
+  /// First coded-slice NAL unit of the access unit (NAL header + EBSP;
+  /// start code 0x00000001 NOT included; emulation prevention bytes
+  /// preserved). mnexus parses this internally to populate
+  /// `StdVideoDecodeH265PictureInfo`.
+  uint8_t const* picture_nalu_data = nullptr;
+  uint32_t       picture_nalu_size = 0;
+};
+
 // ----------------------------------------------------------------------------------------------------
 // Shader
 //

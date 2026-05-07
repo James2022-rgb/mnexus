@@ -98,10 +98,31 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::TextureBarrierAcquire(
   mnexus::TextureHandle /*texture_handle*/,
   mnexus::TextureSubresourceRange const& /*subresource_range*/,
   mnexus::ResourceBarrierStageFlags /*dst_stage_flags*/,
+  mnexus::ResourceBarrierState /*released_from_state*/,
   mnexus::ResourceBarrierState /*acquire_state*/,
   mnexus::QueueId /*src_queue_id*/
 ) {
   // WebGPU has no queue family ownership concept; no-op.
+}
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::BeginVideoCoding(
+  mnexus::BeginVideoCodingDesc const& /*desc*/
+) {
+  MBASE_LOG_ERROR("BeginVideoCoding is not supported by the WebGPU backend.");
+}
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::EndVideoCoding() {
+  MBASE_LOG_ERROR("EndVideoCoding is not supported by the WebGPU backend.");
+}
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::ControlVideoCodingReset() {
+  MBASE_LOG_ERROR("ControlVideoCodingReset is not supported by the WebGPU backend.");
+}
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::DecodeVideoH265(
+  mnexus::DecodeVideoH265Desc const& /*desc*/
+) {
+  MBASE_LOG_ERROR("DecodeVideoH265 is not supported by the WebGPU backend.");
 }
 
 //

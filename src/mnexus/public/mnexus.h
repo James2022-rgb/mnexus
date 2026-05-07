@@ -878,10 +878,22 @@ public:
   );
 
   /// Acquires queue family ownership of a texture subresource that another
-  /// queue family released via `TextureBarrierRelease`. `acquire_state` must
-  /// match the `release_state` used on the source queue. `dst_stage_flags`
-  /// is the pipeline stage on the acquiring queue at which the texture will
-  /// next be used.
+  /// queue family released via `TextureBarrierRelease`.
+  ///
+  /// Vulkan QFOT barriers must declare matching `oldLayout` / `newLayout` on
+  /// both the release and acquire halves. The release half emits
+  /// `oldLayout = <pre-release state on source queue>` and
+  /// `newLayout = release_state`; the acquire half therefore needs **both**
+  /// pieces of information:
+  /// - `released_from_state`: the state the texture was in on the source queue
+  ///   immediately before the matching `TextureBarrierRelease` (i.e. the
+  ///   release barrier's `oldLayout`).
+  /// - `acquire_state`: the state the texture is in after the QFOT completes
+  ///   on this queue (i.e. the release barrier's `newLayout`; must equal the
+  ///   `release_state` passed to the matching `TextureBarrierRelease`).
+  ///
+  /// `dst_stage_flags` is the pipeline stage on the acquiring queue at which
+  /// the texture will next be used.
   ///
   /// On backends without queue family ownership (e.g. WebGPU) this is a
   /// no-op (logged at warning level).
@@ -889,9 +901,33 @@ public:
     TextureHandle texture_handle,
     TextureSubresourceRange const& subresource_range,
     ResourceBarrierStageFlags dst_stage_flags,
+    ResourceBarrierState released_from_state,
     ResourceBarrierState acquire_state,
     QueueId src_queue_id
   );
+
+  //
+  // Video coding
+  //
+
+  /// Begins a video coding scope (analogous to `vkCmdBeginVideoCodingKHR`).
+  /// All `DecodeVideoH265` calls MUST be enclosed in a `BeginVideoCoding` /
+  /// `EndVideoCoding` pair. Nesting is not supported.
+  ///
+  /// On backends without Vulkan Video (e.g. WebGPU) this is a no-op.
+  _MNEXUS_VAPI(void, BeginVideoCoding, BeginVideoCodingDesc const& desc);
+
+  /// Ends the current video coding scope (analogous to `vkCmdEndVideoCodingKHR`).
+  _MNEXUS_VAPI(void, EndVideoCoding);
+
+  /// Resets the video session state (analogous to `vkCmdControlVideoCodingKHR`
+  /// with `VK_VIDEO_CODING_CONTROL_RESET_BIT_KHR`). MUST be called inside a
+  /// coding scope, typically before the first decode of a stream.
+  _MNEXUS_VAPI(void, ControlVideoCodingReset);
+
+  /// Decodes one H.265 access unit into the slot specified by
+  /// `desc.setup_reference`. MUST be called inside a coding scope.
+  _MNEXUS_VAPI(void, DecodeVideoH265, DecodeVideoH265Desc const& desc);
 
   //
   // Transfer
