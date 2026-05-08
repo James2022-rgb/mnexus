@@ -348,7 +348,12 @@ public:
           VK_QUERY_RESULT_WITH_STATUS_BIT_KHR | VK_QUERY_RESULT_WAIT_BIT
         );
         if (r == VK_SUCCESS) {
-          MBASE_LOG_INFO("Decode result_status: {} (raw)", static_cast<int32_t>(status));
+          // Successful decodes are the common case -- only surface the
+          // status when it is not COMPLETE so per-frame redecodes do not
+          // spam the log.
+          if (status != VK_QUERY_RESULT_STATUS_COMPLETE_KHR) {
+            MBASE_LOG_WARN("Decode result_status: {} (raw, non-COMPLETE)", static_cast<int32_t>(status));
+          }
         } else {
           MBASE_LOG_ERROR("vkGetQueryPoolResults (decode result_status) failed: {}", string_VkResult(r));
         }
