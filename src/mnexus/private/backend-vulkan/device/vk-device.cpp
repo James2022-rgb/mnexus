@@ -367,6 +367,13 @@ std::unique_ptr<IVulkanDevice> IVulkanDevice::Create(
 
   VkPhysicalDeviceVulkan11Features device_features_11{};
   device_features_11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+  // Slang's HLSL-compat lowering of `SV_VertexID` emits the `DrawParameters`
+  // SPIR-V capability (it subtracts BaseVertex internally to mimic HLSL
+  // semantics), so any vkCreateShaderModule of such SPIR-V trips
+  // VUID-VkShaderModuleCreateInfo-pCode-08740 unless we enable
+  // `shaderDrawParameters` (or the legacy VK_KHR_shader_draw_parameters
+  // extension) here.
+  device_features_11.shaderDrawParameters = VK_TRUE;
   *pp_next = &device_features_11;
   pp_next = &device_features_11.pNext;
 
