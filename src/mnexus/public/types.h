@@ -1456,6 +1456,43 @@ struct BeginVideoCodingDesc final {
   container::ArrayProxy<VideoReferenceSlotInfo const> bound_reference_slots;
 };
 
+/// H.265-specific per-decode picture information. Caller fills this from
+/// its own slice-header parse + POC computer + DPB slot tracker; mnexus
+/// only forwards the values into `StdVideoDecodeH265PictureInfo`. Keeping
+/// these as caller-supplied (rather than re-deriving inside mnexus from
+/// the picture's slice NAL) lets the caller redecode the same picture
+/// repeatedly without drifting the POC computer state.
+struct DecodeVideoH265PictureInfo final {
+  /// PicOrderCntVal of the reconstructed picture.
+  int32_t pic_order_cnt_val = 0;
+
+  /// Mirrors `StdVideoDecodeH265PictureInfoFlags`.
+  bool idr_pic_flag                     = false;
+  bool irap_pic_flag                    = false;
+  bool is_reference                     = true;
+  bool short_term_ref_pic_set_sps_flag  = false;
+
+  /// Identifying parameter set ids (mirrors `StdVideoDecodeH265PictureInfo`).
+  uint8_t sps_video_parameter_set_id = 0;
+  uint8_t pps_seq_parameter_set_id   = 0;
+  uint8_t pps_pic_parameter_set_id   = 0;
+
+  /// DPB slot indices of the short-term / long-term `Curr` reference
+  /// pictures. Unused entries MUST be `0xFF`. Forwarded verbatim into
+  /// `StdVideoDecodeH265PictureInfo::RefPicSetStCurrBefore` /
+  /// `RefPicSetStCurrAfter` / `RefPicSetLtCurr` (size 8 each).
+  uint8_t ref_pic_set_st_curr_before[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+  uint8_t ref_pic_set_st_curr_after[8]  = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+  uint8_t ref_pic_set_lt_curr[8]        = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+
+  /// Inline-RPS slice-header context fields. Required by some drivers'
+  /// RPS reconstruction when `short_term_ref_pic_set_sps_flag` is false
+  /// (= the slice carries an inline STRPS). 0 is a valid value when
+  /// using SPS-based RPS.
+  uint8_t  num_delta_pocs_of_ref_rps_idx        = 0;
+  uint16_t num_bits_for_st_ref_pic_set_in_slice = 0;
+};
+
 struct DecodeVideoH265Desc final {
   /// Bitstream input. Buffer MUST have `kVideoDecodeSrc` usage.
   BufferHandle src_buffer;
@@ -1469,18 +1506,19 @@ struct DecodeVideoH265Desc final {
   /// The slot the reconstructed picture is being decoded into. Layout MUST
   /// be `kVideoDecodeDpb` (or `kVideoDecodeDst` for separate-images
   /// configurations); the array_layer identifies the DPB slot to write.
+  /// `pic_order_cnt_val` here is informational; the actual POC used in
+  /// `StdVideoDecodeH265ReferenceInfo` for the setup slot comes from
+  /// `picture_info.pic_order_cnt_val`.
   VideoReferenceSlotInfo setup_reference;
 
   /// Active reference pictures (subset of `bound_reference_slots` from the
-  /// enclosing `BeginVideoCoding`).
+  /// enclosing `BeginVideoCoding`). Each entry's `pic_order_cnt_val` is
+  /// forwarded into the per-slot `StdVideoDecodeH265ReferenceInfo`.
   container::ArrayProxy<VideoReferenceSlotInfo const> active_references;
 
-  /// First coded-slice NAL unit of the access unit (NAL header + EBSP;
-  /// start code 0x00000001 NOT included; emulation prevention bytes
-  /// preserved). mnexus parses this internally to populate
-  /// `StdVideoDecodeH265PictureInfo`.
-  uint8_t const* picture_nalu_data = nullptr;
-  uint32_t       picture_nalu_size = 0;
+  /// H.265 picture info computed by the caller (slice-header parse, POC
+  /// computer, DPB slot tracker -- see `DecodeVideoH265PictureInfo`).
+  DecodeVideoH265PictureInfo picture_info;
 };
 
 // ----------------------------------------------------------------------------------------------------

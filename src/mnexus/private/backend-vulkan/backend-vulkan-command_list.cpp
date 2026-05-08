@@ -3,6 +3,7 @@
 
 // c++ headers ------------------------------------------
 #include <array>
+#include <cstring>
 #include <optional>
 #include <string>
 #include <vector>
@@ -30,7 +31,6 @@
 #if MNEXUS_ENABLE_VIDEO_CODING
 #  include "backend-vulkan/video/vk-video_session.h"
 #  include "backend-vulkan/video/vk-video_session_parameters.h"
-#  include "vidsynt.h"
 #endif
 
 namespace mnexus_backend::vulkan {
@@ -542,128 +542,34 @@ public:
       return;
     }
 
-    // ----- Resolve session (POC computer + slice-parsing vidsynt context) ----
+    // Resolve the active session for the result_status query pool used to
+    // wrap the decode call below (diagnostic). Slice header / POC / RPS
+    // info comes from `desc.picture_info`, not from a session-side parser.
     auto [session_hot, session_cold, session_lock] =
       resource_storage_->video_sessions.GetConstRefWithSharedLockGuard(current_video_session_pool_handle_);
-    VidsyntHevcContext*     const vidsynt_ctx  = session_hot.vidsynt_ctx.get();
-    VidsyntHevcPocComputer* const poc_computer = session_hot.poc_computer;
-    if (vidsynt_ctx == nullptr || poc_computer == nullptr) {
-      MBASE_LOG_ERROR("DecodeVideoH265: session is missing vidsynt context or POC computer.");
-      return;
-    }
 
-    // ----- Resolve parameters (parsed SPS/PPS) -----
-    auto [params_hot, params_cold, params_lock] =
-      resource_storage_->video_session_parameters.GetConstRefWithSharedLockGuard(current_video_session_parameters_pool_handle_);
-    VidsyntHevcSequenceParameterSet const* const sps = params_cold.parsed_sps;
-    VidsyntHevcPictureParameterSet  const* const pps = params_cold.parsed_pps;
-    if (sps == nullptr || pps == nullptr) {
-      MBASE_LOG_ERROR("DecodeVideoH265: parameters object has no parsed SPS/PPS.");
-      return;
-    }
-
-    // ----- Parse the picture's slice header via vidsynt -----
-    MBASE_LOG_INFO(
-      "DecodeVideoH265: looking up sps_id={}, pps_id={} on session vidsynt ctx={}",
-      static_cast<int>(sps->sps_seq_parameter_set_id),
-      static_cast<int>(pps->pps_pic_parameter_set_id),
-      static_cast<void const*>(vidsynt_ctx)
-    );
-    if (VidsyntResult const r = vidsynt_hevc_context_set_active_sps(vidsynt_ctx, sps); r != VidsyntResult::Success) {
-      MBASE_LOG_ERROR("DecodeVideoH265: vidsynt_hevc_context_set_active_sps failed: {}", static_cast<int>(r));
-      return;
-    }
-    if (VidsyntResult const r = vidsynt_hevc_context_set_active_pps(vidsynt_ctx, pps); r != VidsyntResult::Success) {
-      MBASE_LOG_ERROR("DecodeVideoH265: vidsynt_hevc_context_set_active_pps failed: {}", static_cast<int>(r));
-      return;
-    }
-    if (desc.picture_nalu_data == nullptr || desc.picture_nalu_size == 0) {
-      MBASE_LOG_ERROR("DecodeVideoH265: picture_nalu_data / size are empty.");
-      return;
-    }
-    VidsyntHevcNalu const* picture_nalu = nullptr;
-    if (vidsynt_hevc_parse_nalu_from_bytes(vidsynt_ctx, desc.picture_nalu_data, desc.picture_nalu_size, &picture_nalu)
-        != VidsyntResult::Success) {
-      MBASE_LOG_ERROR("DecodeVideoH265: vidsynt failed to parse picture NAL unit.");
-      return;
-    }
-    VidsyntHevcSliceSegmentHeader const* slice_header = nullptr;
-    if (vidsynt_hevc_nalu_get_slice_header(vidsynt_ctx, picture_nalu, &slice_header) != VidsyntResult::Success) {
-      MBASE_LOG_ERROR("DecodeVideoH265: vidsynt failed to extract slice header from picture NAL.");
-      return;
-    }
-    MBASE_LOG_INFO(
-      "DecodeVideoH265: slice header parsed by vidsynt: nal_unit_type={}, first_slice_in_pic={}, slice_pic_parameter_set_id={}, dependent_slice_segment_flag={}, slice_segment_address={}, slice_pic_order_cnt_lsb={}",
-      static_cast<int>(slice_header->nal_unit_type),
-      static_cast<int>(slice_header->first_slice_segment_in_pic_flag),
-      static_cast<int>(slice_header->slice_pic_parameter_set_id),
-      static_cast<int>(slice_header->dependent_slice_segment_flag),
-      static_cast<unsigned>(slice_header->slice_segment_address),
-      static_cast<unsigned>(slice_header->slice_pic_order_cnt_lsb)
-    );
-
-    // ----- POC: reset on IDR, then compute -----
-    VidsyntHevcNaluType const nal_type = vidsynt_hevc_nalu_get_type(picture_nalu);
-    bool const is_idr  = vidsynt_hevc_nalu_type_is_idr(nal_type) != 0;
-    bool const is_irap = vidsynt_hevc_nalu_type_is_irap(nal_type) != 0;
-    bool const is_ref  = vidsynt_hevc_nalu_type_is_reference(nal_type) != 0;
-    if (is_idr) {
-      vidsynt_hevc_poc_reset(poc_computer);
-    }
-    int32_t current_poc = 0;
-    if (vidsynt_hevc_poc_compute(poc_computer, sps, pps, slice_header, &current_poc) != VidsyntResult::Success) {
-      MBASE_LOG_ERROR("DecodeVideoH265: vidsynt_hevc_poc_compute failed.");
-      return;
-    }
-
-    // ----- Bin active_references' POCs into RefPicSetStCurrBefore/After -----
+    // ----- Build StdVideoDecodeH265PictureInfo from the caller's `picture_info`.
+    // Slice-header parsing, POC computation, and DPB slot tracking are the
+    // caller's responsibility (so callers that re-decode the same picture
+    // multiple times do not drift the POC computer state).
+    auto const& pic_info = desc.picture_info;
     StdVideoDecodeH265PictureInfo std_picture_info{};
-    std_picture_info.flags.IdrPicFlag                    = is_idr  ? 1 : 0;
-    std_picture_info.flags.IrapPicFlag                   = is_irap ? 1 : 0;
-    std_picture_info.flags.IsReference                   = is_ref  ? 1 : 0;
-    // short_term_ref_pic_set_sps_flag is set when the slice's RPS is one of the
-    // SPS's short-term ref pic sets (rather than inline in the slice header).
-    // vidsynt reports `short_term_ref_pic_set_idx == 0xFF` when the RPS is
-    // signalled inline, otherwise the value is the SPS index.
-    std_picture_info.flags.short_term_ref_pic_set_sps_flag =
-      (slice_header->short_term_ref_pic_set_idx != 0xFFu) ? 1 : 0;
-    std_picture_info.sps_video_parameter_set_id = sps->sps_video_parameter_set_id;
-    std_picture_info.pps_seq_parameter_set_id   = pps->pps_seq_parameter_set_id;
-    std_picture_info.pps_pic_parameter_set_id   = pps->pps_pic_parameter_set_id;
-    std_picture_info.PicOrderCntVal             = current_poc;
-    // NumDeltaPocsOfRefRpsIdx / NumBitsForSTRefPicSetInSlice are required for
-    // some drivers' RPS reconstruction. For inline-RPS slices these need to be
-    // recovered from the slice header bitstream; we leave them at 0 for now
-    // since IDR (RPS empty) and the test bitstreams we drive here do not need
-    // them. Revisit when adding inter-prediction frames.
-    std_picture_info.NumDeltaPocsOfRefRpsIdx     = 0;
-    std_picture_info.NumBitsForSTRefPicSetInSlice = 0;
-
-    uint32_t before_count = 0;
-    uint32_t after_count  = 0;
-    for (auto const& ref : desc.active_references) {
-      if (ref.slot_index < 0) continue;
-      uint8_t const slot_u8 = static_cast<uint8_t>(ref.slot_index);
-      if (ref.pic_order_cnt_val < current_poc) {
-        if (before_count < STD_VIDEO_DECODE_H265_REF_PIC_SET_LIST_SIZE) {
-          std_picture_info.RefPicSetStCurrBefore[before_count++] = slot_u8;
-        }
-      } else if (ref.pic_order_cnt_val > current_poc) {
-        if (after_count < STD_VIDEO_DECODE_H265_REF_PIC_SET_LIST_SIZE) {
-          std_picture_info.RefPicSetStCurrAfter[after_count++] = slot_u8;
-        }
-      }
-    }
-    // Fill unused slots with 0xFF (driver convention for "no entry").
-    for (uint32_t i = before_count; i < STD_VIDEO_DECODE_H265_REF_PIC_SET_LIST_SIZE; ++i) {
-      std_picture_info.RefPicSetStCurrBefore[i] = 0xFFu;
-    }
-    for (uint32_t i = after_count; i < STD_VIDEO_DECODE_H265_REF_PIC_SET_LIST_SIZE; ++i) {
-      std_picture_info.RefPicSetStCurrAfter[i] = 0xFFu;
-    }
-    for (uint32_t i = 0; i < STD_VIDEO_DECODE_H265_REF_PIC_SET_LIST_SIZE; ++i) {
-      std_picture_info.RefPicSetLtCurr[i] = 0xFFu;  // long-term refs not yet supported
-    }
+    std_picture_info.flags.IdrPicFlag                      = pic_info.idr_pic_flag                    ? 1 : 0;
+    std_picture_info.flags.IrapPicFlag                     = pic_info.irap_pic_flag                   ? 1 : 0;
+    std_picture_info.flags.IsReference                     = pic_info.is_reference                    ? 1 : 0;
+    std_picture_info.flags.short_term_ref_pic_set_sps_flag = pic_info.short_term_ref_pic_set_sps_flag ? 1 : 0;
+    std_picture_info.sps_video_parameter_set_id            = pic_info.sps_video_parameter_set_id;
+    std_picture_info.pps_seq_parameter_set_id              = pic_info.pps_seq_parameter_set_id;
+    std_picture_info.pps_pic_parameter_set_id              = pic_info.pps_pic_parameter_set_id;
+    std_picture_info.PicOrderCntVal                        = pic_info.pic_order_cnt_val;
+    std_picture_info.NumDeltaPocsOfRefRpsIdx               = pic_info.num_delta_pocs_of_ref_rps_idx;
+    std_picture_info.NumBitsForSTRefPicSetInSlice          = pic_info.num_bits_for_st_ref_pic_set_in_slice;
+    static_assert(sizeof(std_picture_info.RefPicSetStCurrBefore) == sizeof(pic_info.ref_pic_set_st_curr_before));
+    static_assert(sizeof(std_picture_info.RefPicSetStCurrAfter)  == sizeof(pic_info.ref_pic_set_st_curr_after));
+    static_assert(sizeof(std_picture_info.RefPicSetLtCurr)       == sizeof(pic_info.ref_pic_set_lt_curr));
+    std::memcpy(std_picture_info.RefPicSetStCurrBefore, pic_info.ref_pic_set_st_curr_before, sizeof(pic_info.ref_pic_set_st_curr_before));
+    std::memcpy(std_picture_info.RefPicSetStCurrAfter,  pic_info.ref_pic_set_st_curr_after,  sizeof(pic_info.ref_pic_set_st_curr_after));
+    std::memcpy(std_picture_info.RefPicSetLtCurr,       pic_info.ref_pic_set_lt_curr,        sizeof(pic_info.ref_pic_set_lt_curr));
 
     // ----- Build setup_reference picture resource + DPB slot info -----
     auto const setup_tex_pool_handle = resource_pool::ResourceHandle::FromU64(desc.setup_reference.picture.Get());
@@ -735,8 +641,8 @@ public:
     };
 
     StdVideoDecodeH265ReferenceInfo std_setup_ref{};
-    std_setup_ref.PicOrderCntVal = current_poc;
-    std_setup_ref.flags.unused_for_reference        = is_ref ? 0 : 1;
+    std_setup_ref.PicOrderCntVal                    = pic_info.pic_order_cnt_val;
+    std_setup_ref.flags.unused_for_reference        = pic_info.is_reference ? 0 : 1;
     std_setup_ref.flags.used_for_long_term_reference = 0;
 
     VkVideoDecodeH265DpbSlotInfoKHR const setup_dpb_slot_info{

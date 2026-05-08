@@ -416,12 +416,19 @@ resource_pool::ResourceHandle EmplaceVideoSessionParametersResourcePoolDecodeH26
     return resource_pool::ResourceHandle::Null();
   }
 
-  // vidsynt: parse VPS / SPS / PPS NAL units. The context (and the parsed
-  // structs that hang off it) is moved into the parameters' Cold storage at
-  // the end so the parsed_sps / parsed_pps pointers stay valid for the
-  // lifetime of the parameters object (DecodeVideoH265 needs them).
-  VidsyntHevcContextPtr ctx{ vidsynt_hevc_context_new() };
-  if (ctx == nullptr) {
+  // vidsynt: parse VPS / SPS / PPS NAL units. The context only needs to
+  // live long enough for us to translate vidsynt's parsed structs into
+  // the equivalent Std* structs (which `vkCreateVideoSessionParametersKHR`
+  // copies internally), so a local-scope RAII wrapper is enough.
+  // DecodeVideoH265 no longer needs to look up these structs through
+  // mnexus -- the test bed parses slice headers and computes POC against
+  // its own vidsynt context.
+  struct VidsyntCtxRaii {
+    VidsyntHevcContext* p = nullptr;
+    ~VidsyntCtxRaii() { if (p != nullptr) vidsynt_hevc_context_free(p); }
+  };
+  VidsyntCtxRaii ctx{ vidsynt_hevc_context_new() };
+  if (ctx.p == nullptr) {
     MBASE_LOG_ERROR("vidsynt_hevc_context_new returned null.");
     return resource_pool::ResourceHandle::Null();
   }
@@ -429,75 +436,24 @@ resource_pool::ResourceHandle EmplaceVideoSessionParametersResourcePoolDecodeH26
   VidsyntHevcNalu const* vps_nalu = nullptr;
   VidsyntHevcNalu const* sps_nalu = nullptr;
   VidsyntHevcNalu const* pps_nalu = nullptr;
-  if (!ParseNalu(ctx.get(), desc.vps_data, desc.vps_size, &vps_nalu)) return resource_pool::ResourceHandle::Null();
-  if (!ParseNalu(ctx.get(), desc.sps_data, desc.sps_size, &sps_nalu)) return resource_pool::ResourceHandle::Null();
-  if (!ParseNalu(ctx.get(), desc.pps_data, desc.pps_size, &pps_nalu)) return resource_pool::ResourceHandle::Null();
+  if (!ParseNalu(ctx.p, desc.vps_data, desc.vps_size, &vps_nalu)) return resource_pool::ResourceHandle::Null();
+  if (!ParseNalu(ctx.p, desc.sps_data, desc.sps_size, &sps_nalu)) return resource_pool::ResourceHandle::Null();
+  if (!ParseNalu(ctx.p, desc.pps_data, desc.pps_size, &pps_nalu)) return resource_pool::ResourceHandle::Null();
 
   VidsyntHevcVideoParameterSet const* vps_in = nullptr;
   VidsyntHevcSequenceParameterSet const* sps_in = nullptr;
   VidsyntHevcPictureParameterSet const* pps_in = nullptr;
-  if (vidsynt_hevc_nalu_get_vps(ctx.get(), vps_nalu, &vps_in) != VidsyntResult::Success) {
+  if (vidsynt_hevc_nalu_get_vps(ctx.p, vps_nalu, &vps_in) != VidsyntResult::Success) {
     MBASE_LOG_ERROR("vidsynt_hevc_nalu_get_vps failed.");
     return resource_pool::ResourceHandle::Null();
   }
-  if (vidsynt_hevc_nalu_get_sps(ctx.get(), sps_nalu, &sps_in) != VidsyntResult::Success) {
+  if (vidsynt_hevc_nalu_get_sps(ctx.p, sps_nalu, &sps_in) != VidsyntResult::Success) {
     MBASE_LOG_ERROR("vidsynt_hevc_nalu_get_sps failed.");
     return resource_pool::ResourceHandle::Null();
   }
-  if (vidsynt_hevc_nalu_get_pps(ctx.get(), pps_nalu, &pps_in) != VidsyntResult::Success) {
+  if (vidsynt_hevc_nalu_get_pps(ctx.p, pps_nalu, &pps_in) != VidsyntResult::Success) {
     MBASE_LOG_ERROR("vidsynt_hevc_nalu_get_pps failed.");
     return resource_pool::ResourceHandle::Null();
-  }
-
-  // Also seed the session's vidsynt context with the same VPS / SPS / PPS
-  // NAL units. vidsynt's `set_active_sps/pps` (called from
-  // `DecodeVideoH265`) looks up parameter sets by id in the called
-  // context's own `sps_cache` / `pps_cache`, which is populated by
-  // `parse_nalu_from_bytes`. Cross-context refs alone do not register an
-  // entry in the cache, so we have to parse the NALs into the session's
-  // context too.
-  {
-    VidsyntHevcContext* const session_ctx = session_hot.vidsynt_ctx.get();
-    MBASE_ASSERT(session_ctx != nullptr);
-    VidsyntHevcNalu const* seeded_vps_nalu = nullptr;
-    VidsyntHevcNalu const* seeded_sps_nalu = nullptr;
-    VidsyntHevcNalu const* seeded_pps_nalu = nullptr;
-    if (!ParseNalu(session_ctx, desc.vps_data, desc.vps_size, &seeded_vps_nalu)
-     || !ParseNalu(session_ctx, desc.sps_data, desc.sps_size, &seeded_sps_nalu)
-     || !ParseNalu(session_ctx, desc.pps_data, desc.pps_size, &seeded_pps_nalu)) {
-      MBASE_LOG_ERROR("CreateVideoSessionParametersDecodeH265: failed to seed session vidsynt context.");
-      return resource_pool::ResourceHandle::Null();
-    }
-    // Also retrieve the seeded session-side SPS/PPS so we read the id values
-    // out of THIS context's parsed structs (not the parameters' own ctx).
-    // If session-side id != parameters-side id, parsing is non-deterministic
-    // (= bug). If session-side id matches but lookup later still fails, the
-    // ctx pointer is somehow different between here and DecodeVideoH265.
-    VidsyntHevcSequenceParameterSet const* seeded_sps_in_session = nullptr;
-    VidsyntHevcPictureParameterSet  const* seeded_pps_in_session = nullptr;
-    vidsynt_hevc_nalu_get_sps(session_ctx, seeded_sps_nalu, &seeded_sps_in_session);
-    vidsynt_hevc_nalu_get_pps(session_ctx, seeded_pps_nalu, &seeded_pps_in_session);
-
-    MBASE_LOG_INFO(
-      "Seeded session vidsynt ctx={}: vps_nal_type={}, sps_nal_type={}, pps_nal_type={}, "
-      "params_sps_id={}, params_pps_id={}, session_sps_id={}, session_pps_id={}",
-      static_cast<void const*>(session_ctx),
-      static_cast<int>(vidsynt_hevc_nalu_get_type(seeded_vps_nalu)),
-      static_cast<int>(vidsynt_hevc_nalu_get_type(seeded_sps_nalu)),
-      static_cast<int>(vidsynt_hevc_nalu_get_type(seeded_pps_nalu)),
-      static_cast<int>(sps_in->sps_seq_parameter_set_id),
-      static_cast<int>(pps_in->pps_pic_parameter_set_id),
-      seeded_sps_in_session != nullptr ? static_cast<int>(seeded_sps_in_session->sps_seq_parameter_set_id) : -1,
-      seeded_pps_in_session != nullptr ? static_cast<int>(seeded_pps_in_session->pps_pic_parameter_set_id) : -1
-    );
-
-    // Sanity check: try set_active_sps/pps right here in the seed step so
-    // we catch the failure at parameters creation rather than at decode time.
-    if (VidsyntResult const r = vidsynt_hevc_context_set_active_sps(session_ctx, seeded_sps_in_session); r != VidsyntResult::Success) {
-      MBASE_LOG_ERROR("Seed-time set_active_sps on session ctx FAILED: {}", static_cast<int>(r));
-    } else {
-      MBASE_LOG_INFO("Seed-time set_active_sps on session ctx succeeded.");
-    }
   }
 
   // Translate vidsynt -> Std structs. All Std* objects (and the things they
@@ -557,9 +513,6 @@ resource_pool::ResourceHandle EmplaceVideoSessionParametersResourcePoolDecodeH26
   VideoSessionParametersHot hot{ .vk_video_session_parameters = std::move(vk_video_params) };
   VideoSessionParametersCold cold{
     .session_handle = session_pool_handle,
-    .vidsynt_ctx    = std::move(ctx),
-    .parsed_sps     = sps_in,
-    .parsed_pps     = pps_in,
   };
 
   return out_pool.Emplace(

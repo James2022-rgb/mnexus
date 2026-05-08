@@ -405,10 +405,26 @@ if(${_enable_video_coding})
     # this cheap and avoids debug/release CRT-mixing concerns.
     set(_vidsynt_lib "${_vidsynt_dir}/target/release/vidsynt.lib")
 
+    # Force CMake to re-invoke cargo whenever any of vidsynt's Rust sources
+    # or its Cargo manifest change. Without explicit DEPENDS, the custom
+    # command would only fire when the output `vidsynt.lib` is missing, and
+    # subsequent updates to the upstream Rust crate (FetchContent_Populate
+    # writing a new tag, or a developer hand-editing the cached source for
+    # debugging) would silently link against the stale `.lib`. CMake's
+    # CONFIGURE_DEPENDS re-globs at build time so new files added upstream
+    # are picked up too. cargo's own incremental compile keeps the cost
+    # of the redundant invocations cheap.
+    file(GLOB_RECURSE _vidsynt_sources CONFIGURE_DEPENDS
+      "${_vidsynt_dir}/Cargo.toml"
+      "${_vidsynt_dir}/Cargo.lock"
+      "${_vidsynt_dir}/src/*.rs"
+    )
+
     add_custom_command(
       OUTPUT  ${_vidsynt_lib}
       COMMAND ${CARGO_EXECUTABLE} build --release --features ffi
       WORKING_DIRECTORY ${_vidsynt_dir}
+      DEPENDS ${_vidsynt_sources}
       COMMENT "Building vidsynt (cargo build --release --features ffi)"
       VERBATIM
     )

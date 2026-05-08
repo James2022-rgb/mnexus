@@ -1,8 +1,5 @@
 #pragma once
 
-// c++ headers ------------------------------------------
-#include <memory>
-
 // public project headers -------------------------------
 #include "mnexus/public/types.h"
 
@@ -12,30 +9,9 @@
 #include "backend-vulkan/depend/vulkan.h"
 #include "backend-vulkan/object/vk-object.h"
 
-// vidsynt forward decls (extern "C" so the C linkage matches the actual
-// declarations in <vidsynt.h>; full def included only in .cpp).
-extern "C" {
-struct VidsyntHevcContext;
-struct VidsyntHevcPocComputer;
-}
-
 namespace mnexus_backend::vulkan {
 
 class IVulkanDevice;
-
-// ----------------------------------------------------------------------------------------------------
-// VidsyntHevcContextPtr
-//
-// Owning RAII handle for `VidsyntHevcContext`. Freeing the context also frees
-// every NAL unit / parsed parameter set / POC computer that was allocated
-// through it (vidsynt's bump-allocator-style ownership).
-//
-
-struct VidsyntHevcContextDeleter final {
-  void operator()(VidsyntHevcContext* p) const noexcept;
-};
-
-using VidsyntHevcContextPtr = std::unique_ptr<VidsyntHevcContext, VidsyntHevcContextDeleter>;
 
 // ----------------------------------------------------------------------------------------------------
 // VulkanVideoSession
@@ -63,16 +39,6 @@ public:
 
 struct VideoSessionHot final {
   VulkanVideoSession vk_video_session;
-
-  /// Long-lived vidsynt context for slice header parsing and POC computation
-  /// during decode. Owns `poc_computer`.
-  VidsyntHevcContextPtr vidsynt_ctx;
-
-  /// POC (Picture Order Count) computer; allocated through `vidsynt_ctx` and
-  /// freed when `vidsynt_ctx` is freed (so this is a borrowed pointer).
-  /// Stateful: must be reset on every IDR / random access via
-  /// `vidsynt_hevc_poc_reset`.
-  VidsyntHevcPocComputer* poc_computer = nullptr;
 
   /// `VK_QUERY_TYPE_RESULT_STATUS_ONLY_KHR` query pool with a single slot,
   /// chained with this session's `VkVideoProfileInfoKHR`. Each
