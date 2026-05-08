@@ -391,9 +391,14 @@ if(${_enable_video_coding})
 
     find_program(CARGO_EXECUTABLE cargo REQUIRED)
 
+    # Pin to a specific commit rather than tracking the branch tip:
+    # FetchContent re-fetches whenever the recorded GIT_TAG changes, so
+    # a moving branch like `feature/capi` would silently shift the
+    # vidsynt revision under our build. Bump this SHA when a new
+    # vidsynt feature is needed.
     FetchContent_Declare(vidsynt
       GIT_REPOSITORY https://github.com/James2022-rgb/vidsynt.git
-      GIT_TAG        feature/capi
+      GIT_TAG        a93bae221cb94315488c86cbb1dc08c5df555141 # feature/capi @ "Expose inline short_term_ref_pic_set ..."
     )
     FetchContent_GetProperties(vidsynt)
     if(NOT vidsynt_POPULATED)
