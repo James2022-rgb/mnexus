@@ -134,6 +134,19 @@ std::optional<CreateVulkanImageResult> CreateVulkanImage(
   if (wants_video_decode) {
     flags |= VK_IMAGE_CREATE_VIDEO_PROFILE_INDEPENDENT_BIT_KHR;
   }
+  // NOTE on multi-planar sampling: an earlier iteration set
+  // VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT (and chained VkImageFormatListCreateInfo)
+  // here so that callers could create per-plane image views with single-
+  // plane formats (R8 for plane 0, R8G8 for plane 1) of the same texture.
+  // The combination of MUTABLE_FORMAT_BIT with
+  // VIDEO_PROFILE_INDEPENDENT_BIT trips the video extension's validator
+  // ("not a video format supported by the video profile") at
+  // vkCmdBeginVideoCodingKHR even with the video format listed in the
+  // format list, so we no longer try to share a single multi-planar
+  // texture between video decode and per-plane sampling. Callers that
+  // want to sample the decoded planes should copy them out to dedicated
+  // single-plane display textures (`CopyTextureToTexture` from a
+  // PLANE_0/PLANE_1 source subresource to a COLOR destination).
 
   VkImageCreateInfo create_info {
     .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,

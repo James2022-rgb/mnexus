@@ -159,6 +159,35 @@ public:
     );
   }
 
+  void CmdCopyImageSubresourceToImageSubresource(
+    VulkanImage const& src_vk_image,
+    mnexus::TextureSubresourceRange const& src_subresource_range,
+    VulkanImage const& dst_vk_image,
+    mnexus::TextureSubresourceRange const& dst_subresource_range,
+    mnexus::Extent3d const& copy_extent
+  ) override {
+    constexpr VkImageLayout kSrcLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    constexpr VkImageLayout kDstLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+    VkImageCopy const region {
+      .srcSubresource = ToVkImageSubresourceLayers(src_subresource_range),
+      .srcOffset      = { 0, 0, 0 },
+      .dstSubresource = ToVkImageSubresourceLayers(dst_subresource_range),
+      .dstOffset      = { 0, 0, 0 },
+      .extent         = VkExtent3D { copy_extent.width, copy_extent.height, copy_extent.depth },
+    };
+
+    vkCmdCopyImage(
+      vk_cb_handle_,
+      src_vk_image.handle(),
+      kSrcLayout,
+      dst_vk_image.handle(),
+      kDstLayout,
+      1,
+      &region
+    );
+  }
+
   void CmdBeginRendering(DynamicRenderPassDesc const& desc) override {
     // TODO: Image view type should be configurable.
     constexpr VkImageViewType kImageViewType = VK_IMAGE_VIEW_TYPE_2D;

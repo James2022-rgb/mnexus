@@ -321,6 +321,17 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::CopyTextureToBuffer(
   wgpu_command_encoder_.CopyTextureToBuffer(&src, &dst, &wgpu_copy_size);
 }
 
+MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::CopyTextureToTexture(
+  mnexus::TextureHandle /*src_texture_handle*/,
+  mnexus::TextureSubresourceRange const& /*src_subresource_range*/,
+  mnexus::TextureHandle /*dst_texture_handle*/,
+  mnexus::TextureSubresourceRange const& /*dst_subresource_range*/,
+  mnexus::Extent3d const& /*copy_extent*/
+) {
+  // TODO: implement via wgpu::CommandEncoder::CopyTextureToTexture.
+  STUB_NOT_IMPLEMENTED();
+}
+
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::BlitTexture(
   mnexus::TextureHandle src_texture_handle,
   mnexus::TextureSubresourceRange const& src_subresource_range,
@@ -437,7 +448,8 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::BindStorageBuffer(
 MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::BindSampledTexture(
   mnexus::BindingId const& id,
   mnexus::TextureHandle texture_handle,
-  mnexus::TextureSubresourceRange const& subresource_range
+  mnexus::TextureSubresourceRange const& subresource_range,
+  mnexus::Format /*view_format*/  // not yet plumbed through to wgpu::TextureViewDescriptor
 ) {
   bind_group_state_tracker_.SetTexture(
     id.group, id.binding, id.array_element,

@@ -142,6 +142,14 @@ public:
     mnexus::Extent3d const& copy_extent
   );
 
+  IMPL_VAPI(void, CopyTextureToTexture,
+    mnexus::TextureHandle src_texture_handle,
+    mnexus::TextureSubresourceRange const& src_subresource_range,
+    mnexus::TextureHandle dst_texture_handle,
+    mnexus::TextureSubresourceRange const& dst_subresource_range,
+    mnexus::Extent3d const& copy_extent
+  );
+
   IMPL_VAPI(void, BlitTexture,
     mnexus::TextureHandle src_texture_handle,
     mnexus::TextureSubresourceRange const& src_subresource_range,
@@ -187,7 +195,8 @@ public:
   IMPL_VAPI(void, BindSampledTexture,
     mnexus::BindingId const& id,
     mnexus::TextureHandle texture_handle,
-    mnexus::TextureSubresourceRange const& subresource_range
+    mnexus::TextureSubresourceRange const& subresource_range,
+    mnexus::Format view_format
   );
 
   IMPL_VAPI(void, BindSampler,

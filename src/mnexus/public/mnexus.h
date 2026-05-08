@@ -714,10 +714,19 @@ public:
     uint64_t size
   );
 
+  /// Binds a texture as a sampled image at the given binding location.
+  ///
+  /// `view_format` selects the format the underlying image view is created
+  /// with. Pass `Format::kUndefined` (the default) to use the texture's
+  /// own format. Use a specific format when sampling an individual plane
+  /// of a multi-planar texture (e.g. `kR8_UNORM` for plane 0 of NV12,
+  /// `kR8G8_UNORM` for plane 1) -- in that case `subresource_range`
+  /// `aspect_mask` should also be `kPlane0` / `kPlane1` accordingly.
   _MNEXUS_VAPI(void, BindSampledTexture,
     BindingId const& id,
     TextureHandle texture_handle,
-    TextureSubresourceRange const& subresource_range
+    TextureSubresourceRange const& subresource_range,
+    Format view_format = Format::kUndefined
   );
 
   _MNEXUS_VAPI(void, BindSampler,
@@ -1004,6 +1013,22 @@ public:
     TextureSubresourceRange const& src_subresource_range,
     BufferHandle dst_buffer_handle,
     uint32_t dst_buffer_offset,
+    Extent3d const& copy_extent
+  );
+
+  /// Copies a subresource of `src_texture` into a subresource of
+  /// `dst_texture`. `src_subresource_range` and `dst_subresource_range`
+  /// must each refer to exactly one mip level + one array layer; their
+  /// `aspect_mask` fields can differ (e.g. plane 0 of an NV12 source to
+  /// the COLOR aspect of a single-plane R8 destination).
+  ///
+  /// Caller must transition `src_texture` into `kTransferSrc` and
+  /// `dst_texture` into `kTransferDst` (stage `kTransfer`) before calling.
+  _MNEXUS_VAPI(void, CopyTextureToTexture,
+    TextureHandle src_texture_handle,
+    TextureSubresourceRange const& src_subresource_range,
+    TextureHandle dst_texture_handle,
+    TextureSubresourceRange const& dst_subresource_range,
     Extent3d const& copy_extent
   );
 

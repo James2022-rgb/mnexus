@@ -964,6 +964,38 @@ public:
     referenced_resources_.push_back(dst_pool_handle);
   }
 
+  IMPL_VAPI(void, CopyTextureToTexture,
+    mnexus::TextureHandle src_texture_handle,
+    mnexus::TextureSubresourceRange const& src_subresource_range,
+    mnexus::TextureHandle dst_texture_handle,
+    mnexus::TextureSubresourceRange const& dst_subresource_range,
+    mnexus::Extent3d const& copy_extent
+  ) {
+    MBASE_ASSERT(src_subresource_range.mip_level_count == 1);
+    MBASE_ASSERT(dst_subresource_range.mip_level_count == 1);
+
+    // Caller is responsible for transitioning src into kTransferSrc and
+    // dst into kTransferDst (stage kTransfer) beforehand via TextureBarrier.
+    this->FlushPipelineBarrier();
+
+    auto const src_pool_handle = resource_pool::ResourceHandle::FromU64(src_texture_handle.Get());
+    auto [src_hot, src_cold, src_lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(src_pool_handle);
+
+    auto const dst_pool_handle = resource_pool::ResourceHandle::FromU64(dst_texture_handle.Get());
+    auto [dst_hot, dst_cold, dst_lock] = resource_storage_->textures.GetConstRefWithSharedLockGuard(dst_pool_handle);
+
+    encoder_->CmdCopyImageSubresourceToImageSubresource(
+      src_hot.GetVkImage(),
+      src_subresource_range,
+      dst_hot.GetVkImage(),
+      dst_subresource_range,
+      copy_extent
+    );
+
+    referenced_resources_.push_back(src_pool_handle);
+    referenced_resources_.push_back(dst_pool_handle);
+  }
+
   IMPL_VAPI(void, BlitTexture,
     mnexus::TextureHandle src_texture_handle,
     mnexus::TextureSubresourceRange const& src_subresource_range,
@@ -1104,7 +1136,8 @@ public:
   IMPL_VAPI(void, BindSampledTexture,
     mnexus::BindingId const& id,
     mnexus::TextureHandle texture_handle,
-    mnexus::TextureSubresourceRange const& subresource_range
+    mnexus::TextureSubresourceRange const& subresource_range,
+    mnexus::Format view_format
   ) {
     // Pre-condition: the texture's subresource range MUST already be in
     // VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR. machina/folgos-style: this
@@ -1120,7 +1153,12 @@ public:
     VulkanImage const& vk_image = hot.GetVkImage();
     VkImage const vk_image_handle = vk_image.handle();
     mnexus::TextureDesc const& desc = cold.GetTextureDesc();
-    VkFormat const vk_format = ToVkFormat(desc.format);
+    // The image view's format defaults to the texture's format. Callers
+    // can override (typically when sampling an individual plane of a
+    // multi-planar texture, e.g. R8 for plane 0 of NV12).
+    VkFormat const vk_format = ToVkFormat(
+      view_format == mnexus::Format::kUndefined ? desc.format : view_format
+    );
     VkImageSubresourceRange const vk_subresource_range = ToVkImageSubresourceRange(subresource_range);
 
     constexpr VkImageLayout kShaderReadLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;

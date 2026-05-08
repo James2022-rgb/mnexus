@@ -113,6 +113,24 @@ public:
     mnexus::Extent3d const& copy_extent
   ) = 0;
 
+  /// Copies a subresource of `src_vk_image` to a subresource of
+  /// `dst_vk_image`. The aspect masks may differ (e.g. plane 0 of a
+  /// multi-planar source to COLOR of a single-plane destination).
+  ///
+  /// ## Render Pass Scope
+  /// Outside.
+  ///
+  /// ## Resource State
+  /// Source MUST be `VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL`, destination
+  /// MUST be `VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL`.
+  virtual void CmdCopyImageSubresourceToImageSubresource(
+    VulkanImage const& src_vk_image,
+    mnexus::TextureSubresourceRange const& src_subresource_range,
+    VulkanImage const& dst_vk_image,
+    mnexus::TextureSubresourceRange const& dst_subresource_range,
+    mnexus::Extent3d const& copy_extent
+  ) = 0;
+
   // ----------------------------------------------------------------------------------------------
   // Graphics Pipeline
   //
