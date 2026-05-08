@@ -254,6 +254,22 @@ public:
     return mnexus::IntraQueueSubmissionId { serial };
   }
 
+  IMPL_VAPI(void, WriteMappedBuffer,
+    mnexus::BufferHandle buffer_handle,
+    uint32_t buffer_offset,
+    void const* data,
+    uint32_t data_size_in_bytes
+  ) {
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(buffer_handle.Get());
+    auto [hot, lock] = resource_storage_->buffers.GetHotRefWithSharedLockGuard(pool_handle);
+
+    MBASE_ASSERT_MSG(hot.mapped_data != nullptr,
+      "WriteMappedBuffer requires a buffer created with kMappable usage.");
+
+    std::memcpy(static_cast<uint8_t*>(hot.mapped_data) + buffer_offset, data, data_size_in_bytes);
+    vmaFlushAllocation(hot.vma_allocator, hot.vma_allocation, buffer_offset, data_size_in_bytes);
+  }
+
   IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueReadBuffer,
     mnexus::QueueId const& queue_id,
     mnexus::BufferHandle buffer_handle,

@@ -307,6 +307,36 @@ public:
     uint32_t data_size_in_bytes
   );
 
+  /// Writes data into a host-mapped GPU buffer via direct memcpy + flush,
+  /// WITHOUT touching any queue timeline. Intended for callers that want
+  /// to pipeline host-side uploads with concurrent in-flight queue work
+  /// on the SAME queue: `QueueWriteBuffer` for a mappable buffer
+  /// host-signals the timeline (see `AdvanceTimeline`), which collides
+  /// with later queue-signal submits because both share a single
+  /// monotonic counter and the spec requires a host-signal value to be
+  /// less than every pending queue-signal. This API sidesteps the issue
+  /// by performing the memcpy + `vmaFlushAllocation` and nothing else.
+  ///
+  /// - `buffer_handle`: **MUST** be a valid handle of a buffer created
+  ///   with `BufferUsageFlagBits::kMappable`. Asserts otherwise.
+  /// - `buffer_offset`: Byte offset into the destination buffer.
+  /// - `data`: **MUST** be non-null. **MUST** point to at least
+  ///   `data_size_in_bytes` readable bytes.
+  /// - `data_size_in_bytes`: `buffer_offset + data_size_in_bytes`
+  ///   **MUST NOT** exceed the buffer's size.
+  ///
+  /// **Synchronization is the caller's responsibility.** The buffer's
+  /// contents become visible to subsequent GPU submits on any queue,
+  /// but a concurrent in-flight GPU read of the same byte range races
+  /// with this write. Callers should track the last submission that
+  /// read the buffer and `QueueWaitIdle` on it before invoking this.
+  _MNEXUS_VAPI(void, WriteMappedBuffer,
+    BufferHandle buffer_handle,
+    uint32_t buffer_offset,
+    void const* data,
+    uint32_t data_size_in_bytes
+  );
+
   /// Reads data from a GPU buffer into a CPU-accessible destination.
   ///
   /// The read is asynchronous. Data at `dst` is not valid until the

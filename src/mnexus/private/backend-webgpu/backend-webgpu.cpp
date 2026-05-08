@@ -162,6 +162,20 @@ public:
     return id;
   }
 
+  IMPL_VAPI(void, WriteMappedBuffer,
+    mnexus::BufferHandle /*buffer_handle*/,
+    uint32_t /*buffer_offset*/,
+    void const* /*data*/,
+    uint32_t /*data_size_in_bytes*/
+  ) {
+    // WebGPU has no host-visible mappable buffer in the WebGPU 1.0 API
+    // surface (`writeBuffer` always goes through a copy), so the
+    // pipelining motivation behind this method does not apply. Callers
+    // targeting cross-backend code should prefer `QueueWriteBuffer`.
+    MBASE_LOG_ERROR("WriteMappedBuffer not supported on the WebGPU backend.");
+    MBASE_ASSERT_MSG(false, "WriteMappedBuffer not supported on the WebGPU backend.");
+  }
+
   IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueReadBuffer,
     mnexus::QueueId const& queue_id,
     mnexus::BufferHandle buffer_handle,
