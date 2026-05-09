@@ -28,6 +28,7 @@ Key CMake options:
 - `MNEXUS_ENABLE_BACKEND_VULKAN` - Enable Vulkan backend (default: ON, ignored on Emscripten). Requires `VULKAN_SDK` environment variable
 - `MNEXUS_ENABLE_DAWN` - Enable Dawn for WebGPU on native platforms (default: ON, ignored on Emscripten and Android). Cascade: when the WebGPU backend is force-disabled on Android, Dawn (and Tint) follow automatically — Android targets compile only the Vulkan backend
 - `MNEXUS_ENABLE_TINT_ON_WEB` - Enable Tint SPIR-V to WGSL conversion on Emscripten (default: ON)
+- `MNEXUS_ENABLE_VIDEO_CODING` - Enable Vulkan Video decode (default: OFF). Requires `vidsynt` (HEVC bitstream parser; Rust crate, needs `cargo`) and the Vulkan backend, and is currently Windows-only. When OFF, the public `Create*VideoSession*` / `*VideoH265*` entry points always fail / no-op
 - `MNEXUS_BUILD_TESTS` - Build test executables (default: OFF)
 
 Compiler warnings: `-Wall -Wextra -Werror` (GCC/Clang), `/W4` (MSVC). Thread-safety analysis (`-Werror=thread-safety`) is enabled on Clang/GCC.
@@ -63,6 +64,18 @@ State contracts the backend assumes at op entry (documented on each method in `m
 The Vulkan backend queues transitions via `command/image_layout_tracker.h` and flushes them through `command/pending_pipeline_barrier.h` at the start of every transfer / dispatch op and at `BeginRenderPass` — never inside a render pass instance. The WebGPU backend implements `TextureBarrier` as a no-op (WebGPU manages resource state implicitly).
 
 Stage-aware access derivation: in the Vulkan backend, `ToVkAccessFlags2(state, stage_flags)` masks attachment access bits by the stage mask so `kAttachment` + `kColorAttachmentOutput` emits only `COLOR_ATTACHMENT_R/W`, while `kAttachment` + fragment-tests emits only `DEPTH_STENCIL_ATTACHMENT_R/W` — required to satisfy `VUID-VkImageMemoryBarrier2-dstAccessMask-*`.
+
+### Bindings
+
+Resources are bound per-draw via `ICommandList::BindUniformBuffer`, `BindStorageBuffer`, `BindSampledTexture`, `BindStorageTexture`, and `BindSampler`. Each call takes a `BindingId { group, binding, array_element }` matching the SPIR-V descriptor set/binding decorations in the bound program.
+
+There is **no public push-constant API**. Small per-draw scalars/matrices (e.g. a 2x2 UV transform) currently flow through a small uniform buffer + `BindUniformBuffer`. Layout note: in `cbuffer` blocks Slang/SPIR-V emit `float2x2` as two 16-byte rows (std140-ish), so callers should pass the matrix as `float4 row0; float4 row1;` and only use the `.xy` of each.
+
+### Surface Format / Color Space
+
+The public `INexus::OnSurfaceRecreated(SurfaceSourceDesc)` API does **not** expose color-space or surface-format selection. The Vulkan backend's swapchain selection (`vk-wsi_surface.cpp`) currently negotiates an SDR sRGB format (`R8G8B8A8_SRGB` / `B8G8R8A8_SRGB` + `VK_COLOR_SPACE_SRGB_NONLINEAR_KHR`).
+
+Internally `mnexus::ColorSpace::kHdr10St2084` is mapped to `VK_COLOR_SPACE_HDR10_ST2084_EXT` and the surface format helper accepts a `desired_surface_format`, but no public path lets a caller request HDR10 / Rec.2020 today. Consumers presenting HDR (PQ / HLG) content must trap upstream (e.g. on `transfer_characteristics == 16 || 18` from the bitstream) until this is plumbed through.
 
 ### Public Utility (`src/mnexus/public/container/array_proxy.h`)
 
@@ -123,6 +136,34 @@ log.Clear();
 ```
 
 **Text formatting** is available via static methods on `RenderPipelineStateTracker` (private header): `FormatSnapshot()` and `FormatDiff()`. These take the public `RenderPipelineStateSnapshot` type.
+
+### Video Decode (Vulkan, Windows only — `MNEXUS_ENABLE_VIDEO_CODING`)
+
+mnexus exposes Vulkan Video H.265 decode through the same `IDevice` / `ICommandList` surfaces as the rest of the API. The WebGPU backend treats the relevant calls as no-ops; on builds with `MNEXUS_ENABLE_VIDEO_CODING=OFF` the public entry points always fail or return invalid handles.
+
+**Capability + session lifecycle (`IDevice`):**
+- `QueryVideoDecodeH265Capabilities(profile, bit_depth, out_caps)` — must succeed before session creation.
+- `CreateVideoSessionDecodeH265(VideoSessionDecodeH265Desc)` / `DestroyVideoSession` — analogous to `VkVideoSessionKHR`. Holds the operation-specific state (DPB layout, max active references, etc.).
+- `CreateVideoSessionParametersDecodeH265(VideoSessionParametersDecodeH265Desc)` / `DestroyVideoSessionParameters` — analogous to `VkVideoSessionParametersKHR`. VPS/SPS/PPS NAL units are parsed via the bundled `vidsynt` HEVC parser and packed into the standard header structs.
+
+**Queue selection (`IDevice::GetQueueSelection`):** `QueueSelection::dedicated_video_decode` (gated by `has_dedicated_video_decode`) is the queue family/index for `BeginVideoCoding` / `DecodeVideoH265`. `present_capable` is the graphics queue. The DPB and bitstream buffer must be transferred between them via `TextureBarrierRelease` / `TextureBarrierAcquire` (QFOT) — the acquire half MUST mirror the release half's `oldLayout` and `newLayout` exactly, or the validation layer will reject it.
+
+**Recording a decode (`ICommandList`):**
+1. `TextureBarrier(dpb, ..., kVideoDecode, kVideoDecodeDpb)` on the setup slot's subresource.
+2. `BeginVideoCoding(BeginVideoCodingDesc { session, parameters, bound_reference_slots })` — `bound_reference_slots` lists the setup slot (with `slot_index = -1` to mark it as about-to-be-activated) and every currently-active reference slot (with its real `slot_index`, `array_layer`, and `pic_order_cnt_val`).
+3. `ControlVideoCodingReset()` — once at the start of a new CVS (e.g. on the first decode after an IDR rewind / seek).
+4. `DecodeVideoH265(DecodeVideoH265Desc { src_buffer, src_buffer_offset, src_buffer_range, slice_segment_offsets, setup_reference, active_references, picture_info })`. The bitstream buffer must have `kVideoDecodeSrc` usage; the DPB must be `kVideoDecodeDpb` (or `kVideoDecodeDst` for separate-images implementations).
+5. `EndVideoCoding()`.
+6. QFOT release back to the graphics queue (`TextureBarrierRelease(..., kReadOnly, present_capable)`), then QFOT acquire on the graphics CL (`TextureBarrierAcquire(..., kVideoDecodeDpb, kReadOnly, video_decode_queue)`) before sampling the decoded planes.
+
+**Resource states / stages:**
+- `ResourceBarrierStageFlagBits::kVideoDecode` — pipeline stage for any decode-side barrier.
+- `ResourceBarrierState::kVideoDecodeDpb` — DPB slot during decode (and during the QFOT round-trip; both halves must declare it as the layout being transferred).
+- `ResourceBarrierState::kVideoDecodeDst` — used by separate-images decode targets.
+- `ResourceBarrierState::kVideoDecodeSrc` — bitstream buffer.
+- `BufferUsageFlagBits::kVideoDecodeSrc`, `TextureUsageFlagBits::kVideoDecodeDst` / `kVideoDecodeDpb`.
+
+**Reference slot tracking** is the caller's responsibility: mnexus does not maintain a DPB tracker. Callers typically wrap the session in their own DPB manager that maps POC → slot index, evicts on RPS change, and feeds the right `VideoReferenceSlotInfo` lists into `BeginVideoCoding` and `DecodeVideoH265`.
 
 ### Backend Structure (`src/mnexus/private/`)
 
