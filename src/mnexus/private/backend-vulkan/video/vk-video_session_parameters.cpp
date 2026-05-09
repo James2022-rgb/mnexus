@@ -117,7 +117,8 @@ StdVideoH265PpsFlags BuildPpsFlags(VidsyntHevcPictureParameterSet const& pps) {
   flags.loop_filter_across_tiles_enabled_flag    = (pps.tiles != nullptr) ? pps.tiles->loop_filter_across_tiles_enabled_flag : 0u;
   flags.pps_loop_filter_across_slices_enabled_flag = pps.pps_loop_filter_across_slices_enabled_flag;
   flags.deblocking_filter_control_present_flag   = (pps.deblocking_filter_control != nullptr) ? 1u : 0u;
-  flags.deblocking_filter_override_enabled_flag  = 0; // vidsynt does not surface this.
+  flags.deblocking_filter_override_enabled_flag  =
+      (pps.deblocking_filter_control != nullptr) ? pps.deblocking_filter_control->deblocking_filter_override_enabled_flag : 0u;
   flags.pps_deblocking_filter_disabled_flag      =
       (pps.deblocking_filter_control != nullptr) ? pps.deblocking_filter_control->pps_deblocking_filter_disabled_flag : 0u;
   flags.pps_scaling_list_data_present_flag       = pps.pps_scaling_list_data_present_flag;
@@ -369,8 +370,19 @@ void FillPps(ParsedPps& out, VidsyntHevcPictureParameterSet const& src) {
   if (src.tiles != nullptr) {
     out.pps.num_tile_columns_minus1 = src.tiles->num_tile_columns_minus1;
     out.pps.num_tile_rows_minus1    = src.tiles->num_tile_rows_minus1;
-    // column_width_minus1 / row_height_minus1: only meaningful when uniform_spacing_flag is 0;
-    // vidsynt does not surface them. Default-zero is acceptable when uniform_spacing_flag is set.
+    // Forward per-column / per-row dimensions. Required (= must be
+    // non-zero) when uniform_spacing_flag is 0 -- otherwise the driver
+    // mis-aligns slice bytes against the tile grid and silently fails
+    // the decode (Samsung Android HEVC encoders, for example, emit
+    // 2-column non-uniform tiles for HDR10).
+    static_assert(sizeof(out.pps.column_width_minus1) == sizeof(src.tiles->column_width_minus1),
+      "column_width_minus1 size mismatch between vidsynt and std H.265");
+    static_assert(sizeof(out.pps.row_height_minus1)   == sizeof(src.tiles->row_height_minus1),
+      "row_height_minus1 size mismatch between vidsynt and std H.265");
+    std::memcpy(out.pps.column_width_minus1, src.tiles->column_width_minus1,
+                sizeof(out.pps.column_width_minus1));
+    std::memcpy(out.pps.row_height_minus1,   src.tiles->row_height_minus1,
+                sizeof(out.pps.row_height_minus1));
   }
   // Range / SCC extension fields and scaling lists / palette entries: not provided.
   out.pps.pScalingLists            = nullptr;

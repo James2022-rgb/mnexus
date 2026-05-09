@@ -384,6 +384,8 @@ std::string_view ToString(MnFormat value) {
     MAP(R8G8B8A8_SRGB),
     MAP(B8G8R8A8_UNORM),
     MAP(B8G8R8A8_SRGB),
+    MAP(R16_UNORM),
+    MAP(R16G16_UNORM),
     MAP(R16_SFLOAT),
     MAP(R16G16_SFLOAT),
     MAP(R16G16B16_SFLOAT),

@@ -79,6 +79,8 @@ VkFormat ToVkFormat(mnexus::Format value) {
   case mnexus::Format::kB8G8R8A8_UNORM:        return VK_FORMAT_B8G8R8A8_UNORM;
   case mnexus::Format::kB8G8R8A8_SRGB:         return VK_FORMAT_B8G8R8A8_SRGB;
 
+  case mnexus::Format::kR16_UNORM:             return VK_FORMAT_R16_UNORM;
+  case mnexus::Format::kR16G16_UNORM:          return VK_FORMAT_R16G16_UNORM;
   case mnexus::Format::kR16_SFLOAT:            return VK_FORMAT_R16_SFLOAT;
   case mnexus::Format::kR16G16_SFLOAT:         return VK_FORMAT_R16G16_SFLOAT;
   case mnexus::Format::kR16G16B16_SFLOAT:      return VK_FORMAT_R16G16B16_SFLOAT;
@@ -186,6 +188,8 @@ mnexus::Format FromVkFormat(VkFormat value) {
   case VK_FORMAT_B8G8R8A8_UNORM:             return mnexus::Format::kB8G8R8A8_UNORM;
   case VK_FORMAT_B8G8R8A8_SRGB:              return mnexus::Format::kB8G8R8A8_SRGB;
 
+  case VK_FORMAT_R16_UNORM:                  return mnexus::Format::kR16_UNORM;
+  case VK_FORMAT_R16G16_UNORM:               return mnexus::Format::kR16G16_UNORM;
   case VK_FORMAT_R16_SFLOAT:                 return mnexus::Format::kR16_SFLOAT;
   case VK_FORMAT_R16G16_SFLOAT:              return mnexus::Format::kR16G16_SFLOAT;
   case VK_FORMAT_R16G16B16_SFLOAT:           return mnexus::Format::kR16G16B16_SFLOAT;
