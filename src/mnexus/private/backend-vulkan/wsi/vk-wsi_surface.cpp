@@ -235,7 +235,8 @@ mnexus::TextureDesc const& WsiSwapchain::GetTextureDesc() const {
   return texture_desc_;
 }
 
-bool WsiSwapchain::OnSourceCreated(mnexus::SurfaceSourceDesc const& source_desc) {
+bool WsiSwapchain::OnSourceCreated(mnexus::SurfaceSourceDesc const& source_desc,
+                                   std::optional<VkSurfaceFormatKHR> opt_desired_surface_format) {
   MBASE_ASSERT_MSG(!surface_.has_value(), "Surface already created");
 
   std::optional<WsiSurface> opt_surface = WsiSurface::Create(vk_instance_, source_desc);
@@ -246,13 +247,53 @@ bool WsiSwapchain::OnSourceCreated(mnexus::SurfaceSourceDesc const& source_desc)
 
   surface_ = std::move(opt_surface.value());
 
+  if (!CreateSwapchainOnExistingSurface(opt_desired_surface_format)) {
+    surface_->Destroy();
+    surface_ = std::nullopt;
+    return false;
+  }
+  return true;
+}
+
+bool WsiSwapchain::RecreateSwapchain(std::optional<VkSurfaceFormatKHR> opt_desired_surface_format) {
+  MBASE_ASSERT_MSG(surface_.has_value(),
+    "RecreateSwapchain requires an existing surface; call OnSourceCreated first.");
+  // Wait for any prior submissions referencing the old swapchain images to
+  // complete before destroying. Caller-side QueueWaitIdle is also acceptable;
+  // we do it here defensively because this is the only safe entry point.
+  vkDeviceWaitIdle(vk_device_->handle());
+
+  DestroySwapchainOnly();
+  return CreateSwapchainOnExistingSurface(opt_desired_surface_format);
+}
+
+mnexus::SurfaceCapability WsiSwapchain::QuerySurfaceCapability() const {
+  MBASE_ASSERT_MSG(surface_.has_value(),
+    "QuerySurfaceCapability requires an existing surface.");
+  PhysicalDeviceSurfaceSupportInfo const support_info =
+    surface_->QueryPhysicalDeviceSurfaceSupportInfo(vk_device_->physical_device_desc().handle());
+
+  mnexus::SurfaceCapability out;
+  out.color_formats.reserve(support_info.formats.size());
+  for (VkSurfaceFormatKHR const& sf : support_info.formats) {
+    out.color_formats.push_back(mnexus::SurfaceColorFormat {
+      .format      = FromVkFormat(sf.format),
+      .color_space = FromVkColorSpace(sf.colorSpace),
+    });
+  }
+  return out;
+}
+
+bool WsiSwapchain::CreateSwapchainOnExistingSurface(std::optional<VkSurfaceFormatKHR> opt_desired_surface_format) {
+  MBASE_ASSERT(surface_.has_value());
+
   PhysicalDeviceSurfaceSupportInfo const support_info = surface_->QueryPhysicalDeviceSurfaceSupportInfo(vk_device_->physical_device_desc().handle());
 
   std::optional<VkExtent2D> const opt_client_area_extent = surface_->QuerySurfaceExtent(vk_device_->physical_device_desc().handle());
 
   VulkanSwapchainConfiguration configuration = VulkanSwapchainConfiguration::Select(
     support_info,
-    /*opt_desired_surface_format=*/std::nullopt,
+    opt_desired_surface_format,
     opt_client_area_extent,
     vk_device_->queue_selection().present_capable.queue_family_index
   );
@@ -362,15 +403,14 @@ bool WsiSwapchain::OnSourceCreated(mnexus::SurfaceSourceDesc const& source_desc)
     .mip_level_count = 1,
     .array_layer_count = 1,
   };
+  current_color_space_ = FromVkColorSpace(configuration.image_color_space);
 
   default_vk_image_layout_ = ImageLayoutTracker::GetDefaultLayout(configuration.image_usage, configuration.image_format);
 
   return true;
 }
 
-void WsiSwapchain::OnSourceDestroyed() {
-  MBASE_ASSERT_MSG(surface_.has_value(), "Surface not created");
-
+void WsiSwapchain::DestroySwapchainOnly() {
   vkDestroySwapchainKHR(vk_device_->handle(), vk_swapchain_handle_, nullptr);
   vk_swapchain_handle_ = VK_NULL_HANDLE;
   for (SwapchainImage& image : images_) {
@@ -380,6 +420,12 @@ void WsiSwapchain::OnSourceDestroyed() {
     }
   }
   images_.clear();
+}
+
+void WsiSwapchain::OnSourceDestroyed() {
+  MBASE_ASSERT_MSG(surface_.has_value(), "Surface not created");
+
+  DestroySwapchainOnly();
 
   surface_->Destroy();
   surface_ = std::nullopt;

@@ -26,6 +26,14 @@ public:
   virtual void OnPresentEpilogue() = 0;
 
   // ----------------------------------------------------------------------------------------------
+  // Surface / Swapchain Capability
+
+  virtual mnexus::SurfaceCapability GetSurfaceCapability() = 0;
+  virtual void                      RequestSwapchainRecreation(mnexus::SwapchainRecreateDesc const& desc) = 0;
+  virtual mnexus::ColorSpace        GetSwapchainSurfaceColorSpace() = 0;
+  virtual mnexus::Format            GetSwapchainSurfaceFormat() = 0;
+
+  // ----------------------------------------------------------------------------------------------
   // Device.
 
   virtual mnexus::IDevice* GetDevice() = 0;

@@ -76,6 +76,29 @@ public:
   }
 
   // ----------------------------------------------------------------------------------------------
+  // Surface / Swapchain Capability
+
+  MNEXUS_NO_THROW SurfaceCapability MNEXUS_CALL GetSurfaceCapability() override {
+    MBASE_ASSERT_MSG(!headless_, "GetSurfaceCapability() must not be called on a headless INexus instance");
+    return backend_->GetSurfaceCapability();
+  }
+
+  MNEXUS_NO_THROW void MNEXUS_CALL RequestSwapchainRecreation(SwapchainRecreateDesc const& desc) override {
+    MBASE_ASSERT_MSG(!headless_, "RequestSwapchainRecreation() must not be called on a headless INexus instance");
+    backend_->RequestSwapchainRecreation(desc);
+  }
+
+  MNEXUS_NO_THROW ColorSpace MNEXUS_CALL GetSwapchainSurfaceColorSpace() override {
+    MBASE_ASSERT_MSG(!headless_, "GetSwapchainSurfaceColorSpace() must not be called on a headless INexus instance");
+    return backend_->GetSwapchainSurfaceColorSpace();
+  }
+
+  MNEXUS_NO_THROW Format MNEXUS_CALL GetSwapchainSurfaceFormat() override {
+    MBASE_ASSERT_MSG(!headless_, "GetSwapchainSurfaceFormat() must not be called on a headless INexus instance");
+    return backend_->GetSwapchainSurfaceFormat();
+  }
+
+  // ----------------------------------------------------------------------------------------------
   // Device.
 
   MNEXUS_NO_THROW IDevice* MNEXUS_CALL GetDevice() override {

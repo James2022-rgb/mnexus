@@ -8,6 +8,7 @@
 # include <string>
 # include <optional>
 # include <span>
+# include <vector>
 #else
 # include <stdint.h>
 #endif
@@ -76,6 +77,19 @@ typedef enum MnColorSpace {
   MnColorSpaceSrgb,
   MnColorSpaceHdr10St2084,
 } MnColorSpace;
+
+// ----------------------------------------------------------------------------------------------------
+// Swapchain Recreation
+
+typedef uint32_t MnSwapchainCreateFlags;
+enum {
+  MnSwapchainCreateFlagBitNone = 0,
+  MnSwapchainCreateFlagBitHdr  = 1u << 0,    /* Request an HDR10 ST.2084 swapchain if the surface supports it; otherwise fall back to SDR. */
+};
+
+typedef struct MnSwapchainRecreateDesc {
+  MnSwapchainCreateFlags flags _MN_INIT(MnSwapchainCreateFlagBitNone);
+} MnSwapchainRecreateDesc;
 
 // ----------------------------------------------------------------------------------------------------
 // Nexus
@@ -1626,6 +1640,50 @@ enum class ColorSpace : uint8_t {
   kLinear      = MnColorSpaceLinear,
   kSrgb        = MnColorSpaceSrgb,
   kHdr10St2084 = MnColorSpaceHdr10St2084,
+};
+
+// ----------------------------------------------------------------------------------------------------
+// Swapchain Recreation
+//
+
+enum class SwapchainCreateFlagBits : uint32_t {
+  kNone = MnSwapchainCreateFlagBitNone,
+  /// Request an HDR10 ST.2084 swapchain if the surface supports it. If the
+  /// current monitor's surface format list does not include any compatible
+  /// HDR10 format, the swapchain is recreated as SDR -- callers should
+  /// re-read `INexus::GetSwapchainSurfaceColorSpace()` to confirm what was
+  /// actually negotiated.
+  kHdr  = MnSwapchainCreateFlagBitHdr,
+};
+MBASE_DEFINE_ENUM_CLASS_BITFLAGS_OPERATORS(SwapchainCreateFlagBits);
+using SwapchainCreateFlags = mbase::BitFlags<SwapchainCreateFlagBits>;
+
+/// One (format, color_space) pair supported by the current surface, as
+/// reported by `INexus::GetSurfaceCapability()`. The list reflects the
+/// surface's currently-active monitor: moving the window to a different
+/// monitor (or toggling the OS HDR setting) MAY change which formats appear.
+struct SurfaceColorFormat final {
+  Format     format      = Format::kUndefined;
+  ColorSpace color_space = ColorSpace::kSrgb;
+
+  bool operator==(SurfaceColorFormat const& other) const = default;
+};
+
+/// Snapshot of what the underlying surface can present right now. Re-read
+/// this whenever the application receives `OnDisplayChanged()` or otherwise
+/// suspects the monitor configuration changed.
+struct SurfaceCapability final {
+  std::vector<SurfaceColorFormat> color_formats;
+
+  /// Convenience: returns the first 10-bit `A2*10G10R10` UNORM PACK32 format
+  /// paired with `kHdr10St2084` in the supported list, or `nullptr` if no
+  /// HDR10 ST.2084 format is presentable. Use this to gate offering an HDR
+  /// option to the user.
+  SurfaceColorFormat const* GetHdr10ColorFormat() const;
+};
+
+struct SwapchainRecreateDesc final {
+  SwapchainCreateFlags flags = SwapchainCreateFlagBits::kNone;
 };
 
 // ----------------------------------------------------------------------------------------------------

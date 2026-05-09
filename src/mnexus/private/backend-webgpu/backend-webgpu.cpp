@@ -1104,6 +1104,35 @@ public:
   }
 
   // ----------------------------------------------------------------------------------------------
+  // Surface / Swapchain Capability
+  //
+  // The WebGPU backend currently only configures an SDR RGBA8Unorm surface
+  // (see OnSurfaceRecreated). HDR is not exposed through Dawn / browser
+  // WebGPU here yet, so capability returns just that single SDR format and
+  // recreation requests are accepted but ignored.
+
+  mnexus::SurfaceCapability GetSurfaceCapability() override {
+    mnexus::SurfaceCapability cap;
+    cap.color_formats.push_back(mnexus::SurfaceColorFormat {
+      .format      = mnexus::Format::kR8G8B8A8_UNORM,
+      .color_space = mnexus::ColorSpace::kSrgb,
+    });
+    return cap;
+  }
+
+  void RequestSwapchainRecreation(mnexus::SwapchainRecreateDesc const& /*desc*/) override {
+    // No-op on WebGPU backend (no HDR path yet).
+  }
+
+  mnexus::ColorSpace GetSwapchainSurfaceColorSpace() override {
+    return mnexus::ColorSpace::kSrgb;
+  }
+
+  mnexus::Format GetSwapchainSurfaceFormat() override {
+    return mnexus::Format::kR8G8B8A8_UNORM;
+  }
+
+  // ----------------------------------------------------------------------------------------------
   // Resource creation.
 
   mnexus::IDevice* GetDevice() override {

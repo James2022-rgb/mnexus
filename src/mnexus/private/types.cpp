@@ -354,6 +354,20 @@ std::string_view ToString(ColorSpace value) {
   return "N/A";
 }
 
+SurfaceColorFormat const* SurfaceCapability::GetHdr10ColorFormat() const {
+  // Match the same {format, color_space} pairs the Vulkan backend will
+  // attempt at swapchain creation -- 10-bit UNORM packed paired with
+  // ST.2084. RGB/BGR ordering depends on the surface, so accept either.
+  for (auto const& cf : color_formats) {
+    if (cf.color_space != ColorSpace::kHdr10St2084) continue;
+    if (cf.format == Format::kA2B10G10R10_UNORM_PACK32 ||
+        cf.format == Format::kA2R10G10B10_UNORM_PACK32) {
+      return &cf;
+    }
+  }
+  return nullptr;
+}
+
 std::string_view ToString(MnFormat value) {
   // In C++11 and later, std::string is guaranteed to be contiguous and null-terminated.
 

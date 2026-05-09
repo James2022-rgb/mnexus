@@ -720,8 +720,25 @@ public:
     wsi_swapchain_.OnSourceDestroyed();
   }
 
-  void OnSurfaceRecreated(mnexus::SurfaceSourceDesc const& surface_source_desc) {
-    wsi_swapchain_.OnSourceCreated(surface_source_desc);
+  void OnSurfaceRecreated(mnexus::SurfaceSourceDesc const& surface_source_desc,
+                          std::optional<VkSurfaceFormatKHR> opt_desired_surface_format) {
+    wsi_swapchain_.OnSourceCreated(surface_source_desc, opt_desired_surface_format);
+  }
+
+  bool RecreateSwapchain(std::optional<VkSurfaceFormatKHR> opt_desired_surface_format) {
+    return wsi_swapchain_.RecreateSwapchain(opt_desired_surface_format);
+  }
+
+  mnexus::SurfaceCapability QuerySurfaceCapability() const {
+    return wsi_swapchain_.QuerySurfaceCapability();
+  }
+
+  mnexus::ColorSpace GetSwapchainColorSpace() const {
+    return wsi_swapchain_.GetCurrentColorSpace();
+  }
+
+  mnexus::Format GetSwapchainFormat() const {
+    return wsi_swapchain_.GetTextureDesc().format;
   }
 
   std::optional<uint32_t> AcquireNextSwapchainTexture(
@@ -818,7 +835,15 @@ public:
   // Surface lifecycle.
 
   void OnDisplayChanged() override {
-    STUB_NOT_IMPLEMENTED();
+    // The current monitor's HDR availability and surface format list may
+    // have changed (e.g. window dragged to a different display, OS HDR
+    // toggled). We can't safely re-realize mid-frame, so just flag a
+    // recreation to be picked up at the next OnPresentPrologue. The
+    // recreation re-runs format selection against the now-updated
+    // surface formats list, so a still-applicable kHdr request is
+    // honored on the new monitor (if it supports HDR), and falls back
+    // to SDR otherwise.
+    pending_swapchain_recreation_ = true;
   }
 
   void OnSurfaceDestroyed() override {
@@ -826,13 +851,41 @@ public:
   }
 
   void OnSurfaceRecreated(mnexus::SurfaceSourceDesc const& surface_source_desc) override {
-    device_.OnSurfaceRecreated(surface_source_desc);
+    device_.OnSurfaceRecreated(surface_source_desc, DesiredSurfaceFormat());
+    // The new swapchain already reflects the current request, so clear
+    // any previously-pending recreation flag.
+    pending_swapchain_recreation_ = false;
+  }
+
+  // ----------------------------------------------------------------------------------------------
+  // Surface / Swapchain Capability
+
+  mnexus::SurfaceCapability GetSurfaceCapability() override {
+    return device_.QuerySurfaceCapability();
+  }
+
+  void RequestSwapchainRecreation(mnexus::SwapchainRecreateDesc const& desc) override {
+    requested_swapchain_flags_      = desc.flags;
+    pending_swapchain_recreation_   = true;
+  }
+
+  mnexus::ColorSpace GetSwapchainSurfaceColorSpace() override {
+    return device_.GetSwapchainColorSpace();
+  }
+
+  mnexus::Format GetSwapchainSurfaceFormat() override {
+    return device_.GetSwapchainFormat();
   }
 
   // ----------------------------------------------------------------------------------------------
   // Presentation.
 
   void OnPresentPrologue() override {
+    if (pending_swapchain_recreation_) {
+      device_.RecreateSwapchain(DesiredSurfaceFormat());
+      pending_swapchain_recreation_ = false;
+    }
+
     VkFence signal_fence = VK_NULL_HANDLE;
     {
       VkFenceCreateInfo fence_info {
@@ -980,6 +1033,32 @@ public:
 
   void ShowDebugUi() override {
 #if MNEXUS_HAVE_DEAR_IMGUI
+    if (ImGui::CollapsingHeader("Surface / Swapchain")) {
+      mnexus::Format     const cur_format = device_.GetSwapchainFormat();
+      mnexus::ColorSpace const cur_cs     = device_.GetSwapchainColorSpace();
+      auto const fmt_str = mnexus::ToString(static_cast<MnFormat>(cur_format));
+      auto const cs_str  = mnexus::ToString(cur_cs);
+      ImGui::Text("Format: %.*s",      static_cast<int>(fmt_str.size()), fmt_str.data());
+      ImGui::Text("Color space: %.*s", static_cast<int>(cs_str.size()),  cs_str.data());
+
+      mnexus::SurfaceCapability const cap = device_.QuerySurfaceCapability();
+      bool const hdr_supported = (cap.GetHdr10ColorFormat() != nullptr);
+      ImGui::Text("HDR10 ST.2084 supported on this monitor: %s",
+                  hdr_supported ? "yes" : "no");
+
+      bool requested_hdr =
+        requested_swapchain_flags_.HasAnyOf(mnexus::SwapchainCreateFlagBits::kHdr);
+      bool const previous = requested_hdr;
+      ImGui::BeginDisabled(!hdr_supported && !requested_hdr);
+      if (ImGui::Checkbox("Request HDR10", &requested_hdr) && requested_hdr != previous) {
+        mnexus::SwapchainRecreateDesc desc;
+        desc.flags = requested_hdr
+          ? mnexus::SwapchainCreateFlags(mnexus::SwapchainCreateFlagBits::kHdr)
+          : mnexus::SwapchainCreateFlags(mnexus::SwapchainCreateFlagBits::kNone);
+        RequestSwapchainRecreation(desc);
+      }
+      ImGui::EndDisabled();
+    }
     if (ImGui::CollapsingHeader("Physical Device")) {
       vk_device_->physical_device_desc().ShowDebugUi();
     }
@@ -1002,12 +1081,39 @@ public:
   }
 
 private:
+  /// Translate `requested_swapchain_flags_` into a Vulkan desired surface
+  /// format. Returns `nullopt` for "no preference" (= SDR fallback path
+  /// in `Select`). For `kHdr`, returns `(A2B10G10R10_UNORM_PACK32,
+  /// HDR10_ST2084_EXT)`; the surface-format Selector probes this as an
+  /// exact match and silently falls back to the default sRGB pick if
+  /// the current monitor doesn't expose it.
+  std::optional<VkSurfaceFormatKHR> DesiredSurfaceFormat() const {
+    if (requested_swapchain_flags_.HasAnyOf(mnexus::SwapchainCreateFlagBits::kHdr)) {
+      return VkSurfaceFormatKHR {
+        .format     = VK_FORMAT_A2B10G10R10_UNORM_PACK32,
+        .colorSpace = VK_COLOR_SPACE_HDR10_ST2084_EXT,
+      };
+    }
+    return std::nullopt;
+  }
+
   std::unique_ptr<IVulkanDevice> vk_device_;
 
   ResourceStorage resource_storage_;
   StagingBufferPool staging_buffer_pool_;
   TransientCommandPool transient_command_pool_;
   MnexusDeviceVulkan device_;
+
+  /// Currently-active app request (e.g. Dear ImGui's "Request HDR10"
+  /// checkbox). Persisted across monitor changes so a still-applicable
+  /// HDR request is reattempted when the window moves to an
+  /// HDR-capable display.
+  mnexus::SwapchainCreateFlags requested_swapchain_flags_  = mnexus::SwapchainCreateFlagBits::kNone;
+  /// Set by `RequestSwapchainRecreation` and `OnDisplayChanged`. Picked
+  /// up at the start of the next `OnPresentPrologue`, which runs the
+  /// Vulkan-side `RecreateSwapchain` (which does its own
+  /// `vkDeviceWaitIdle`).
+  bool                          pending_swapchain_recreation_ = false;
 };
 
 // ==================================================================================================

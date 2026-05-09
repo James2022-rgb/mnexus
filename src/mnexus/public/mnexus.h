@@ -189,6 +189,42 @@ public:
   _MNEXUS_VAPI(void, OnPresentEpilogue);
 
   // ----------------------------------------------------------------------------------------------
+  // Surface / Swapchain Capability
+
+  /// Snapshot of the formats / color spaces the current surface can present
+  /// right now. The list reflects the surface's currently-active monitor;
+  /// moving the window to a different monitor (or toggling Windows' HDR
+  /// setting) MAY change which formats appear, so callers SHOULD re-query
+  /// after `OnDisplayChanged()`.
+  ///
+  /// - **MUST NOT** be called on a headless instance.
+  /// - **MUST** be called after a surface has been configured via
+  ///   `OnSurfaceRecreated`.
+  _MNEXUS_VAPI(SurfaceCapability, GetSurfaceCapability);
+
+  /// Asks the backend to tear down the current swapchain on the next
+  /// `OnPresentPrologue` and rebuild it according to `desc`. The surface
+  /// itself is preserved (no `WM_*` traffic with the windowing system),
+  /// so this is appropriate for runtime HDR / SDR toggles. If the
+  /// requested mode (e.g. `kHdr`) is not supported on the current monitor,
+  /// the swapchain falls back to SDR; callers MUST re-read
+  /// `GetSwapchainSurfaceColorSpace()` to learn what was actually negotiated.
+  ///
+  /// Calls coalesce: only the most recent `desc` takes effect.
+  ///
+  /// - **MUST NOT** be called on a headless instance.
+  _MNEXUS_VAPI(void, RequestSwapchainRecreation, SwapchainRecreateDesc const& desc);
+
+  /// Color space the current swapchain was actually created with. May
+  /// differ from what was last requested via `RequestSwapchainRecreation`
+  /// if the surface didn't expose a matching format on the current
+  /// monitor.
+  _MNEXUS_VAPI(ColorSpace, GetSwapchainSurfaceColorSpace);
+
+  /// Pixel format the current swapchain was actually created with.
+  _MNEXUS_VAPI(Format, GetSwapchainSurfaceFormat);
+
+  // ----------------------------------------------------------------------------------------------
   // Device
 
   /// Returns the `IDevice` associated with this instance.

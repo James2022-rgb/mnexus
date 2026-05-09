@@ -86,9 +86,26 @@ public:
   VkSwapchainKHR GetVkSwapchainHandle() const { return vk_swapchain_handle_; }
   mnexus::TextureDesc const& GetTextureDesc() const;
   VkImageLayout GetDefaultVkImageLayout() const { return default_vk_image_layout_; }
+  /// Color space the current swapchain was actually created with. Read after
+  /// every (re)creation to confirm what was negotiated.
+  mnexus::ColorSpace GetCurrentColorSpace() const { return current_color_space_; }
 
-  bool OnSourceCreated(mnexus::SurfaceSourceDesc const& source_desc);
+  bool OnSourceCreated(mnexus::SurfaceSourceDesc const& source_desc,
+                       std::optional<VkSurfaceFormatKHR> opt_desired_surface_format = std::nullopt);
   void OnSourceDestroyed();
+
+  /// Tears down the VkSwapchainKHR (and its semaphores / images) but leaves
+  /// the underlying VkSurfaceKHR alive, then creates a new swapchain that
+  /// targets `opt_desired_surface_format` (falling back to SDR if not
+  /// supported on the surface's current monitor). Used for runtime HDR
+  /// toggles and for monitor-change-triggered re-realizations.
+  bool RecreateSwapchain(std::optional<VkSurfaceFormatKHR> opt_desired_surface_format);
+
+  /// Snapshot of the (format, color_space) pairs the surface currently
+  /// supports. Re-queries `vkGetPhysicalDeviceSurfaceFormatsKHR`, so the
+  /// result reflects the monitor the window is currently on. Surface MUST
+  /// be valid.
+  mnexus::SurfaceCapability QuerySurfaceCapability() const;
 
   std::optional<std::pair<uint32_t, SwapchainImage const*>> AcquireNextImage(
     uint64_t timeout_ns,
@@ -104,6 +121,14 @@ private:
     : vk_instance_(vk_instance), vk_device_(vk_device)
   {}
 
+  /// Builds the VkSwapchainKHR + per-image semaphores + `texture_desc_` /
+  /// `current_color_space_`. Surface MUST already be set in `surface_`.
+  bool CreateSwapchainOnExistingSurface(std::optional<VkSurfaceFormatKHR> opt_desired_surface_format);
+
+  /// Destroys the VkSwapchainKHR, per-image semaphores, and clears `images_`.
+  /// Does NOT touch the surface.
+  void DestroySwapchainOnly();
+
   VulkanInstance const* vk_instance_ = nullptr;
   IVulkanDevice const* vk_device_ = nullptr;
 
@@ -111,6 +136,7 @@ private:
   VkSwapchainKHR vk_swapchain_handle_ = VK_NULL_HANDLE;
   std::vector<SwapchainImage> images_;
   mnexus::TextureDesc texture_desc_;
+  mnexus::ColorSpace current_color_space_ = mnexus::ColorSpace::kSrgb;
   VkImageLayout default_vk_image_layout_ = VK_IMAGE_LAYOUT_UNDEFINED;
 
   mbase::Lockable<std::mutex> mutable mutex_;
