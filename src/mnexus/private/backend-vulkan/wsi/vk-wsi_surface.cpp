@@ -276,9 +276,16 @@ mnexus::SurfaceCapability WsiSwapchain::QuerySurfaceCapability() const {
   mnexus::SurfaceCapability out;
   out.color_formats.reserve(support_info.formats.size());
   for (VkSurfaceFormatKHR const& sf : support_info.formats) {
+    // Drop entries whose VkColorSpaceKHR has no `mnexus::ColorSpace`
+    // counterpart (scRGB linear, BT.2020 nonlinear, AdobeRGB, ...).
+    // We don't model those today, and surfacing them here would make
+    // `GetHdr10ColorFormat()` and the ImGui debug listing noisier
+    // without giving callers anything to act on.
+    auto const opt_cs = TryFromVkColorSpace(sf.colorSpace);
+    if (!opt_cs.has_value()) continue;
     out.color_formats.push_back(mnexus::SurfaceColorFormat {
       .format      = FromVkFormat(sf.format),
-      .color_space = FromVkColorSpace(sf.colorSpace),
+      .color_space = opt_cs.value(),
     });
   }
   return out;

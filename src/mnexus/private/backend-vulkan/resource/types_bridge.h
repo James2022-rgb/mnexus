@@ -37,6 +37,12 @@ mnexus::Format FromVkFormat(VkFormat value);
 
 VkColorSpaceKHR    ToVkColorSpaceKHR(mnexus::ColorSpace value);
 mnexus::ColorSpace FromVkColorSpace(VkColorSpaceKHR value);
+/// `FromVkColorSpace` without the warning log -- returns `nullopt` for any
+/// `VkColorSpaceKHR` that doesn't have a `mnexus::ColorSpace` counterpart.
+/// Used by `WsiSwapchain::QuerySurfaceCapability` to silently drop entries
+/// the public API can't represent yet (scRGB linear, BT.2020 nonlinear,
+/// AdobeRGB, etc.).
+std::optional<mnexus::ColorSpace> TryFromVkColorSpace(VkColorSpaceKHR value);
 
 // ----------------------------------------------------------------------------------------------------
 // Samplers

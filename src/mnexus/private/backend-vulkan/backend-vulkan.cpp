@@ -1152,6 +1152,13 @@ std::unique_ptr<IBackendVulkan> IBackendVulkan::Create(BackendVulkanCreateDesc c
     };
 
     AddExtensionIfAvailable(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    if (!desc.headless) {
+      // Required to enumerate / select non-sRGB swapchain color spaces
+      // (HDR10 ST.2084, scRGB, etc). Without it `vkGetPhysicalDevice
+      // SurfaceFormatsKHR` only reports the legacy SRGB_NONLINEAR_KHR
+      // entry and `vkCreateSwapchainKHR` rejects every other space.
+      AddExtensionIfAvailable(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
+    }
   }
 
   mbase::ArrayProxy<VkValidationFeatureEnableEXT const> enabled_validation_features;

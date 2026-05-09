@@ -294,15 +294,22 @@ VkColorSpaceKHR ToVkColorSpaceKHR(mnexus::ColorSpace value) {
   return VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
 }
 
-mnexus::ColorSpace FromVkColorSpace(VkColorSpaceKHR value) {
+std::optional<mnexus::ColorSpace> TryFromVkColorSpace(VkColorSpaceKHR value) {
   switch (value) {
   case VK_COLOR_SPACE_PASS_THROUGH_EXT:    return mnexus::ColorSpace::kLinear;
   case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:  return mnexus::ColorSpace::kSrgb;
   case VK_COLOR_SPACE_HDR10_ST2084_EXT:    return mnexus::ColorSpace::kHdr10St2084;
   default:
-    MBASE_LOG_ERROR("Unknown VkColorSpaceKHR value");
-    return mnexus::ColorSpace::kSrgb;
+    return std::nullopt;
   }
+}
+
+mnexus::ColorSpace FromVkColorSpace(VkColorSpaceKHR value) {
+  if (auto opt = TryFromVkColorSpace(value); opt.has_value()) {
+    return opt.value();
+  }
+  MBASE_LOG_ERROR("Unknown VkColorSpaceKHR value: {}", static_cast<uint32_t>(value));
+  return mnexus::ColorSpace::kSrgb;
 }
 
 // ====================================================================================================
