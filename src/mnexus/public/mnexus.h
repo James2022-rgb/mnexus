@@ -694,6 +694,34 @@ public:
   _MNEXUS_VAPI(void, DestroyVideoSessionParameters, VideoSessionParametersHandle params);
 
   //
+  // Timestamp queries
+  //
+
+  /// Creates a `VK_QUERY_TYPE_TIMESTAMP` query pool with `query_count`
+  /// slots. Returns an invalid handle on failure (e.g. WebGPU backend
+  /// where timestamp queries are not exposed today).
+  ///
+  /// The pool MUST be reset before any slot is written. Reset via
+  /// `ICommandList::ResetQueries`.
+  _MNEXUS_VAPI(QueryPoolHandle, CreateTimestampQueryPool, uint32_t query_count);
+  _MNEXUS_VAPI(void, DestroyQueryPool, QueryPoolHandle pool);
+
+  /// Reads up to `count` timestamp values starting at `first_query`,
+  /// converting from raw GPU ticks to nanoseconds via the
+  /// `VkPhysicalDeviceLimits::timestampPeriod` of the device.
+  ///
+  /// Non-blocking: only slots whose write has already completed
+  /// produce a value. Returns the number of slots that filled in;
+  /// `out_timestamps_ns` entries past that count are left untouched.
+  /// `out_timestamps_ns` MUST point to at least `count` entries.
+  _MNEXUS_VAPI(uint32_t, GetTimestampQueryResults,
+    QueryPoolHandle pool,
+    uint32_t        first_query,
+    uint32_t        count,
+    uint64_t*       out_timestamps_ns
+  );
+
+  //
   // Diagnostics
   //
 
@@ -1003,6 +1031,30 @@ public:
   /// Decodes one H.265 access unit into the slot specified by
   /// `desc.setup_reference`. MUST be called inside a coding scope.
   _MNEXUS_VAPI(void, DecodeVideoH265, DecodeVideoH265Desc const& desc);
+
+  //
+  // Timestamp queries
+  //
+
+  /// Resets `count` consecutive query slots starting at
+  /// `first_query`, preparing them for a fresh write. MUST be called
+  /// before each (re)use of a slot. On backends without timestamp
+  /// support this is a no-op.
+  _MNEXUS_VAPI(void, ResetQueries,
+    QueryPoolHandle pool,
+    uint32_t        first_query,
+    uint32_t        count
+  );
+
+  /// Writes the GPU timestamp at the end of the specified pipeline
+  /// stage into `pool[query_index]`. The slot MUST have been reset
+  /// since its last write (or since pool creation). On backends
+  /// without timestamp support this is a no-op.
+  _MNEXUS_VAPI(void, WriteTimestamp,
+    QueryPoolHandle             pool,
+    uint32_t                    query_index,
+    ResourceBarrierStageFlagBits stage
+  );
 
   //
   // Transfer

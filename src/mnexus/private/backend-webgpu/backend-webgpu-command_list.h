@@ -117,6 +117,16 @@ public:
   IMPL_VAPI(void, DecodeVideoH265, mnexus::DecodeVideoH265Desc const& desc);
 
   //
+  // Timestamp queries (no-op on WebGPU; the public Create returns invalid).
+  //
+
+  IMPL_VAPI(void, ResetQueries,
+    mnexus::QueryPoolHandle pool, uint32_t first_query, uint32_t count);
+  IMPL_VAPI(void, WriteTimestamp,
+    mnexus::QueryPoolHandle pool, uint32_t query_index,
+    mnexus::ResourceBarrierStageFlagBits stage);
+
+  //
   // Transfer
   //
 

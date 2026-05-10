@@ -687,6 +687,26 @@ public:
   }
 
   //
+  // Timestamp queries
+  //
+
+  IMPL_VAPI(mnexus::QueryPoolHandle, CreateTimestampQueryPool, uint32_t /*query_count*/) {
+    MBASE_LOG_ERROR("CreateTimestampQueryPool is not supported by the WebGPU backend.");
+    return mnexus::QueryPoolHandle::Invalid();
+  }
+
+  IMPL_VAPI(void, DestroyQueryPool, mnexus::QueryPoolHandle /*pool*/) {
+    // No-op: Create always returns invalid.
+  }
+
+  IMPL_VAPI(uint32_t, GetTimestampQueryResults,
+    mnexus::QueryPoolHandle /*pool*/,
+    uint32_t /*first_query*/, uint32_t /*count*/, uint64_t* /*out_timestamps_ns*/
+  ) {
+    return 0;
+  }
+
+  //
   // Diagnostics
   //
 

@@ -51,6 +51,11 @@ void ResourceStorage::StampResourceUse(resource_pool::ResourceHandle handle, uin
     samplers.UnlockShared();
     break;
   }
+  case mnexus::kResourceTypeQueryPool: {
+    // Query pools have no timeline tracking (the public read API is
+    // non-blocking), so this is a deliberate no-op.
+    break;
+  }
 #if MNEXUS_ENABLE_VIDEO_CODING
   case mnexus::kResourceTypeVideoSession: {
     auto& hot = video_sessions.LockSharedAndGetRefHot(handle);

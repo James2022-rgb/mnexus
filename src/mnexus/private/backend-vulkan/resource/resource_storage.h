@@ -16,6 +16,7 @@
 #include "backend-vulkan/backend-vulkan-compute_pipeline.h"
 #include "backend-vulkan/object/vk-object-render_pipeline.h"
 #include "backend-vulkan/resource/image_view_cache.h"
+#include "backend-vulkan/resource/vk-query_pool.h"
 
 #if MNEXUS_ENABLE_VIDEO_CODING
 #  include "backend-vulkan/video/vk-video_session.h"
@@ -31,6 +32,7 @@ struct ResourceStorage final {
   ProgramResourcePool programs;
   ComputePipelineResourcePool compute_pipelines;
   SamplerResourcePool samplers;
+  QueryPoolResourcePool query_pools;
 #if MNEXUS_ENABLE_VIDEO_CODING
   VideoSessionResourcePool video_sessions;
   VideoSessionParametersResourcePool video_session_parameters;

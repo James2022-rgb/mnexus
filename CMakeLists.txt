@@ -398,7 +398,7 @@ if(${_enable_video_coding})
     # vidsynt feature is needed.
     FetchContent_Declare(vidsynt
       GIT_REPOSITORY https://github.com/James2022-rgb/vidsynt.git
-      GIT_TAG        a93bae221cb94315488c86cbb1dc08c5df555141 # feature/capi @ "Expose inline short_term_ref_pic_set ..."
+      GIT_TAG        75a6449bfb4564f8606d5ce28a92136cacea2ce2 # feature/capi @ "NaluType: Add TSA / STSA / RADL / reserved-VCL types."
     )
     FetchContent_GetProperties(vidsynt)
     if(NOT vidsynt_POPULATED)
@@ -588,6 +588,8 @@ if(${_enable_backend_vulkan})
     ${_private_backend_vulkan_dir}/resource/shader_module.h
     ${_private_backend_vulkan_dir}/resource/types_bridge.cpp
     ${_private_backend_vulkan_dir}/resource/types_bridge.h
+    ${_private_backend_vulkan_dir}/resource/vk-query_pool.cpp
+    ${_private_backend_vulkan_dir}/resource/vk-query_pool.h
     # descriptor/
     ${_private_backend_vulkan_dir}/descriptor/fwd.h
     ${_private_backend_vulkan_dir}/descriptor/descriptor_set_allocator.cpp

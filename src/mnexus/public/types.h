@@ -999,6 +999,7 @@ _MNEXUS_DEFINE_TYPESAFE_HANDLE(RenderPipelineHandle);
 _MNEXUS_DEFINE_TYPESAFE_HANDLE(SamplerHandle);
 _MNEXUS_DEFINE_TYPESAFE_HANDLE(VideoSessionHandle);
 _MNEXUS_DEFINE_TYPESAFE_HANDLE(VideoSessionParametersHandle);
+_MNEXUS_DEFINE_TYPESAFE_HANDLE(QueryPoolHandle);
 
 // Resource type tags embedded in bits 59-63 of the handle's u64 representation.
 // Type 0 is reserved for null/invalid handles.
@@ -1012,6 +1013,7 @@ inline constexpr uint8_t kResourceTypeRenderPipeline          = 6;
 inline constexpr uint8_t kResourceTypeSampler                 = 7;
 inline constexpr uint8_t kResourceTypeVideoSession            = 8;
 inline constexpr uint8_t kResourceTypeVideoSessionParameters  = 9;
+inline constexpr uint8_t kResourceTypeQueryPool               = 10;
 
 // ----------------------------------------------------------------------------------------------------
 // Queue

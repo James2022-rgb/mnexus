@@ -126,6 +126,21 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::DecodeVideoH265(
 }
 
 //
+// Timestamp queries (no-op: paired with the WebGPU IDevice's invalid
+// CreateTimestampQueryPool, so callers either skip these or use a
+// would-be-invalid handle that maps to a no-op).
+//
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::ResetQueries(
+  mnexus::QueryPoolHandle /*pool*/, uint32_t /*first_query*/, uint32_t /*count*/
+) {}
+
+MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::WriteTimestamp(
+  mnexus::QueryPoolHandle /*pool*/, uint32_t /*query_index*/,
+  mnexus::ResourceBarrierStageFlagBits /*stage*/
+) {}
+
+//
 // Transfer
 //
 

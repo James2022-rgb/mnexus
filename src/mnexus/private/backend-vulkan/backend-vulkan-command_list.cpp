@@ -793,6 +793,43 @@ public:
   }
 
   //
+  // Timestamp queries
+  //
+
+  IMPL_VAPI(void, ResetQueries,
+    mnexus::QueryPoolHandle pool, uint32_t first_query, uint32_t count
+  ) {
+    if (count == 0) return;
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(pool.Get());
+    if (pool_handle.IsNull()) return;
+
+    auto [hot, cold, lock] =
+      resource_storage_->query_pools.GetConstRefWithSharedLockGuard(pool_handle);
+    if (hot.vk_query_pool == VK_NULL_HANDLE) return;
+    // Pipeline barriers may not be flushed mid-render-pass; ResetQueries
+    // is required outside one anyway, so just emit the cmd directly.
+    vkCmdResetQueryPool(encoder_->vk_cb_handle(), hot.vk_query_pool, first_query, count);
+  }
+
+  IMPL_VAPI(void, WriteTimestamp,
+    mnexus::QueryPoolHandle pool, uint32_t query_index,
+    mnexus::ResourceBarrierStageFlagBits stage
+  ) {
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(pool.Get());
+    if (pool_handle.IsNull()) return;
+
+    auto [hot, cold, lock] =
+      resource_storage_->query_pools.GetConstRefWithSharedLockGuard(pool_handle);
+    if (hot.vk_query_pool == VK_NULL_HANDLE) return;
+
+    // Translate the abstract stage to its Vulkan synchronization2 mask
+    // and write the timestamp at the END of that stage.
+    VkPipelineStageFlags2KHR const vk_stage = ToVkPipelineStageFlags2(
+      mnexus::ResourceBarrierStageFlags{stage});
+    vkCmdWriteTimestamp2KHR(encoder_->vk_cb_handle(), vk_stage, hot.vk_query_pool, query_index);
+  }
+
+  //
   // Transfer
   //
 

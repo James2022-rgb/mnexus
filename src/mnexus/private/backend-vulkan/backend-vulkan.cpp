@@ -687,6 +687,93 @@ public:
   }
 
   // ----------------------------------------------------------------------------------------------
+  // Timestamp queries
+  //
+
+  IMPL_VAPI(mnexus::QueryPoolHandle, CreateTimestampQueryPool, uint32_t query_count) {
+    resource_pool::ResourceHandle const pool_handle = EmplaceTimestampQueryPool(
+      resource_storage_->query_pools, *vk_device_, query_count);
+    if (pool_handle.IsNull()) {
+      return mnexus::QueryPoolHandle::Invalid();
+    }
+    return mnexus::QueryPoolHandle { pool_handle.AsU64() };
+  }
+
+  IMPL_VAPI(void, DestroyQueryPool, mnexus::QueryPoolHandle pool) {
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(pool.Get());
+    if (pool_handle.IsNull()) return;
+    {
+      auto [hot, cold, lock] =
+        resource_storage_->query_pools.GetConstRefWithSharedLockGuard(pool_handle);
+      if (hot.vk_query_pool != VK_NULL_HANDLE) {
+        // FIXME: defer destruction in case the pool is still being
+        // touched by an in-flight CL (rare for non-blocking timestamp
+        // reads, but the same issue exists for buffers / textures and
+        // is tracked by the FIXME on Destroy{Buffer,Texture}).
+        vkDestroyQueryPool(vk_device_->handle(), hot.vk_query_pool, nullptr);
+      }
+    }
+    resource_storage_->query_pools.Erase(pool_handle);
+  }
+
+  IMPL_VAPI(uint32_t, GetTimestampQueryResults,
+    mnexus::QueryPoolHandle pool,
+    uint32_t                first_query,
+    uint32_t                count,
+    uint64_t*               out_timestamps_ns
+  ) {
+    if (out_timestamps_ns == nullptr || count == 0) return 0;
+
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(pool.Get());
+    if (pool_handle.IsNull()) return 0;
+
+    auto [hot, cold, lock] =
+      resource_storage_->query_pools.GetConstRefWithSharedLockGuard(pool_handle);
+    if (hot.vk_query_pool == VK_NULL_HANDLE || cold.query_count == 0) return 0;
+    if (first_query + count > cold.query_count) {
+      // Clamp range to the pool size.
+      count = (first_query >= cold.query_count) ? 0u : (cold.query_count - first_query);
+      if (count == 0) return 0;
+    }
+
+    // Pull (timestamp_u64, availability_u64) per slot, non-blocking.
+    // Only entries whose `availability != 0` get converted into
+    // `out_timestamps_ns`. Untouched entries are NOT cleared (it's
+    // the caller's job to track which slots they've consumed).
+    struct TimestampPair {
+      uint64_t timestamp;
+      uint64_t availability;
+    };
+    std::vector<TimestampPair> raw(count);
+    VkResult const r = vkGetQueryPoolResults(
+      vk_device_->handle(),
+      hot.vk_query_pool,
+      first_query, count,
+      sizeof(TimestampPair) * count,
+      raw.data(),
+      sizeof(TimestampPair),
+      VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT
+    );
+    // VK_NOT_READY is expected and normal for non-blocking polling --
+    // it just means "not all queries are ready", and per-slot availability
+    // tells us which ones are. VK_SUCCESS means all queries are ready.
+    if (r != VK_SUCCESS && r != VK_NOT_READY) {
+      MBASE_LOG_ERROR("vkGetQueryPoolResults (timestamp) failed: {}", string_VkResult(r));
+      return 0;
+    }
+
+    uint32_t completed = 0;
+    for (uint32_t i = 0; i < count; ++i) {
+      if (raw[i].availability != 0) {
+        out_timestamps_ns[i] = static_cast<uint64_t>(
+          static_cast<double>(raw[i].timestamp) * static_cast<double>(cold.timestamp_period_ns));
+        ++completed;
+      }
+    }
+    return completed;
+  }
+
+  // ----------------------------------------------------------------------------------------------
   // Diagnostics
   //
 
