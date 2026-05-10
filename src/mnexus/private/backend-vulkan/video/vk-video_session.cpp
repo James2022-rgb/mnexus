@@ -122,9 +122,19 @@ resource_pool::ResourceHandle EmplaceVideoSessionResourcePoolDecodeH265(
     .pNext         = nullptr,
     .stdProfileIdc = ToStdVideoH265ProfileIdc(desc.profile),
   };
+  // Hint to the driver that this is real-time playback rather than
+  // an offline transcode. NVIDIA in particular uses this to keep
+  // NVDEC at a higher clock state instead of clock-gating between
+  // sparse one-frame-at-a-time submissions, which otherwise costs
+  // ~30-80 ms per cold-wake decode (visibly stutters playback).
+  VkVideoDecodeUsageInfoKHR usage_info {
+    .sType           = VK_STRUCTURE_TYPE_VIDEO_DECODE_USAGE_INFO_KHR,
+    .pNext           = &h265_profile_info,
+    .videoUsageHints = VK_VIDEO_DECODE_USAGE_STREAMING_BIT_KHR,
+  };
   VkVideoProfileInfoKHR profile_info {
     .sType               = VK_STRUCTURE_TYPE_VIDEO_PROFILE_INFO_KHR,
-    .pNext               = &h265_profile_info,
+    .pNext               = &usage_info,
     .videoCodecOperation = VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR,
     .chromaSubsampling   = VK_VIDEO_CHROMA_SUBSAMPLING_420_BIT_KHR,
     .lumaBitDepth        = bit_depth_flag,
