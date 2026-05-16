@@ -199,6 +199,18 @@ MNEXUS_NO_THROW MnIntraQueueSubmissionId MNEXUS_CALL MnDeviceQueueSubmitCommandL
     ToCommandList(command_list)).Get();
 }
 
+MNEXUS_NO_THROW MnIntraQueueSubmissionId MNEXUS_CALL MnDeviceQueueSubmitCommandListWithWaits(
+    MnDevice device, MnQueueId const* queue_id, MnCommandList command_list,
+    MnQueueWaitInfo const* waits, uint32_t wait_count) {
+  return ToDevice(device)->QueueSubmitCommandListWithWaits(
+    *reinterpret_cast<mnexus::QueueId const*>(queue_id),
+    ToCommandList(command_list),
+    mnexus::container::ArrayProxy<mnexus::QueueWaitInfo const>{
+      reinterpret_cast<mnexus::QueueWaitInfo const*>(waits), wait_count
+    }
+  ).Get();
+}
+
 MNEXUS_NO_THROW MnIntraQueueSubmissionId MNEXUS_CALL MnDeviceQueueReadBuffer(
     MnDevice device, MnQueueId const* queue_id,
     MnResourceHandle buffer, uint32_t offset,

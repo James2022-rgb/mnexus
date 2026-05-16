@@ -318,6 +318,34 @@ public:
     ICommandList* command_list
   );
 
+  /// Same as `QueueSubmitCommandList` but the submission's execution
+  /// is gated on a set of inter-queue dependencies. Each `QueueWaitInfo`
+  /// names a source queue and a timeline value on it; the submitted
+  /// command list's GPU work starts only after every named source has
+  /// reached its value (i.e. `QueueGetCompletedValue(src.queue) >= src.value`).
+  /// CPU is never blocked by the wait -- the dependency is enforced
+  /// on the GPU via a per-queue timeline semaphore.
+  ///
+  /// Typical use: cross-queue ownership transfer. Pair a decode CL
+  /// submission on a video-decode queue with a graphics CL submission
+  /// on the present queue that waits on the decode's timeline value,
+  /// without busy-waiting on the host between them.
+  ///
+  /// - `queue_id`: **MUST** identify a valid queue.
+  /// - `command_list`: same contract as `QueueSubmitCommandList`.
+  /// - `waits`: zero or more dependencies. A value of 0 (i.e. an
+  ///   uninitialized `IntraQueueSubmissionId`) is silently ignored.
+  ///   Each named queue **MUST** identify a valid queue.
+  /// - Returns: the new `IntraQueueSubmissionId` on `queue_id`.
+  ///
+  /// On WebGPU (no explicit cross-queue sync needed) the waits are
+  /// ignored and behavior matches `QueueSubmitCommandList`.
+  _MNEXUS_VAPI(IntraQueueSubmissionId, QueueSubmitCommandListWithWaits,
+    QueueId const& queue_id,
+    ICommandList* command_list,
+    container::ArrayProxy<QueueWaitInfo const> waits
+  );
+
   /// Writes data from CPU memory into a GPU buffer.
   ///
   /// - `queue_id`: **MUST** identify a valid queue.
@@ -1321,6 +1349,10 @@ MNEXUS_NO_THROW MnIntraQueueSubmissionId MNEXUS_CALL MnDeviceQueueWriteBuffer(
 
 MNEXUS_NO_THROW MnIntraQueueSubmissionId MNEXUS_CALL MnDeviceQueueSubmitCommandList(
   MnDevice device, MnQueueId const* queue_id, MnCommandList command_list);
+
+MNEXUS_NO_THROW MnIntraQueueSubmissionId MNEXUS_CALL MnDeviceQueueSubmitCommandListWithWaits(
+  MnDevice device, MnQueueId const* queue_id, MnCommandList command_list,
+  MnQueueWaitInfo const* waits, uint32_t wait_count);
 
 MNEXUS_NO_THROW MnIntraQueueSubmissionId MNEXUS_CALL MnDeviceQueueReadBuffer(
   MnDevice device, MnQueueId const* queue_id,

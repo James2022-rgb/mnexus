@@ -60,6 +60,10 @@ public:
     return completed_value;
   }
 
+  VkSemaphore timeline_semaphore() const override {
+    return timeline_semaphore_;
+  }
+
   void WaitSubmitSerial(uint64_t value) override {
     if (value == 0) {
       return;
@@ -110,6 +114,15 @@ public:
   }
 
   uint64_t SubmitSingle(VkCommandBuffer command_buffer) override {
+    return this->SubmitSingleWithWaits(command_buffer, 0, nullptr, nullptr);
+  }
+
+  uint64_t SubmitSingleWithWaits(
+    VkCommandBuffer command_buffer,
+    uint32_t wait_count,
+    VkSemaphore const* wait_semaphores,
+    uint64_t const* wait_values
+  ) override {
     uint64_t const serial = next_submit_serial_.fetch_add(1, std::memory_order_acq_rel);
 
     VkCommandBufferSubmitInfoKHR cmd_info {
@@ -128,12 +141,28 @@ public:
       .deviceIndex = 0,
     };
 
+    // Drop wait entries whose value is 0 (= no prior submission on
+    // that source queue) so vkQueueSubmit2KHR doesn't trip on them.
+    std::vector<VkSemaphoreSubmitInfoKHR> wait_infos;
+    wait_infos.reserve(wait_count);
+    for (uint32_t i = 0; i < wait_count; ++i) {
+      if (wait_values[i] == 0) continue;
+      wait_infos.push_back(VkSemaphoreSubmitInfoKHR {
+        .sType       = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR,
+        .pNext       = nullptr,
+        .semaphore   = wait_semaphores[i],
+        .value       = wait_values[i],
+        .stageMask   = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR,
+        .deviceIndex = 0,
+      });
+    }
+
     VkSubmitInfo2KHR submit_info {
       .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR,
       .pNext = nullptr,
       .flags = 0,
-      .waitSemaphoreInfoCount = 0,
-      .pWaitSemaphoreInfos = nullptr,
+      .waitSemaphoreInfoCount = static_cast<uint32_t>(wait_infos.size()),
+      .pWaitSemaphoreInfos = wait_infos.empty() ? nullptr : wait_infos.data(),
       .commandBufferInfoCount = 1,
       .pCommandBufferInfos = &cmd_info,
       .signalSemaphoreInfoCount = 1,

@@ -133,6 +133,17 @@ public:
     return id;
   }
 
+  IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueSubmitCommandListWithWaits,
+    mnexus::QueueId const& queue_id,
+    mnexus::ICommandList* command_list,
+    mnexus::container::ArrayProxy<mnexus::QueueWaitInfo const> /*waits*/
+  ) {
+    // WebGPU only exposes one logical queue and Dawn manages
+    // cross-queue ordering internally, so inter-queue waits are
+    // a no-op. Delegate to the non-waiting path.
+    return this->QueueSubmitCommandList(queue_id, command_list);
+  }
+
   IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueWriteBuffer,
     mnexus::QueueId const& queue_id,
     mnexus::BufferHandle buffer_handle,

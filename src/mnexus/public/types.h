@@ -163,6 +163,11 @@ typedef struct MnQueueId _MN_FINAL {
 
 typedef uint64_t MnIntraQueueSubmissionId;
 
+typedef struct MnQueueWaitInfo _MN_FINAL {
+  MnQueueId queue;
+  MnIntraQueueSubmissionId value;
+} MnQueueWaitInfo;
+
 typedef enum MnQueueFamilyCapabilityFlagBits {
   MnQueueFamilyCapabilityFlagBitNone        = 0,
   MnQueueFamilyCapabilityFlagBitGraphics    = 1 << 0,
@@ -1070,6 +1075,16 @@ static_assert(sizeof(QueueId) == sizeof(MnQueueId) && alignof(QueueId) == aligno
 /// - A value V is "completed" when `IDevice::QueueGetCompletedValue() >= V`.
 using IntraQueueSubmissionId = mbase::TypesafeHandle<struct MnIntraQueueSubmissionIdTag, uint64_t, 0>;
 _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(IntraQueueSubmissionId, MnIntraQueueSubmissionId);
+
+/// A single inter-queue wait dependency for
+/// `IDevice::QueueSubmitCommandListWithWaits`. The submission will not
+/// start executing until the operation on `queue` whose returned
+/// `IntraQueueSubmissionId` was `value` has completed.
+struct QueueWaitInfo final {
+  QueueId queue;
+  IntraQueueSubmissionId value;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(QueueWaitInfo, MnQueueWaitInfo);
 
 struct QueueSelection final {
   QueueId present_capable;

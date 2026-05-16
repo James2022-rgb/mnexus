@@ -53,9 +53,32 @@ public:
   virtual void WaitSubmitSerial(uint64_t value) = 0;
   [[nodiscard]] virtual uint64_t WaitIdle() = 0;
 
+  /// Direct access to the underlying timeline semaphore. Used by the
+  /// device's `QueueSubmitCommandListWithWaits` to resolve an inter-
+  /// queue wait dependency into a `vkQueueSubmit2KHR` wait-semaphore
+  /// entry (waited via `vkWaitSemaphoresKHR` on the GPU, no host wait).
+  [[nodiscard]] virtual VkSemaphore timeline_semaphore() const = 0;
+
   // Submit / advance.
   [[nodiscard]] virtual uint64_t AdvanceTimeline() = 0;
   [[nodiscard]] virtual uint64_t SubmitSingle(VkCommandBuffer command_buffer) = 0;
+
+  /// Same as `SubmitSingle` but waits on the given source-queue
+  /// timeline semaphores / values before the command buffer starts
+  /// executing. The CPU is not blocked by these waits -- they are
+  /// enforced GPU-side via `vkQueueSubmit2KHR`'s `pWaitSemaphoreInfos`.
+  ///
+  /// `wait_semaphores` / `wait_values` are parallel arrays of length
+  /// `wait_count`. Each `wait_semaphores[i]` MUST be the source queue's
+  /// timeline semaphore; `wait_values[i]` MUST be a serial previously
+  /// returned by that queue's submission. Pairs with `value == 0` are
+  /// silently dropped (they correspond to "no prior submission").
+  [[nodiscard]] virtual uint64_t SubmitSingleWithWaits(
+    VkCommandBuffer command_buffer,
+    uint32_t wait_count,
+    VkSemaphore const* wait_semaphores,
+    uint64_t const* wait_values
+  ) = 0;
 
   // Present.
   virtual uint64_t PresentSwapchainImage(

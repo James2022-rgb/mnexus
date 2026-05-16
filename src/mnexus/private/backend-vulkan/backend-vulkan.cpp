@@ -183,11 +183,38 @@ public:
     mnexus::QueueId const& queue_id,
     mnexus::ICommandList* command_list
   ) {
+    return this->QueueSubmitCommandListWithWaits(queue_id, command_list, {});
+  }
+
+  IMPL_VAPI(mnexus::IntraQueueSubmissionId, QueueSubmitCommandListWithWaits,
+    mnexus::QueueId const& queue_id,
+    mnexus::ICommandList* command_list,
+    mnexus::container::ArrayProxy<mnexus::QueueWaitInfo const> waits
+  ) {
     auto* cmd_list_vk = static_cast<IMnexusCommandListVulkan*>(command_list);
     VkCommandBuffer vk_cb_handle = cmd_list_vk->encoder().vk_cb_handle();
 
     IVulkanQueue* const queue = vk_device_->GetQueue(queue_id);
-    uint64_t const serial = queue->SubmitSingle(vk_cb_handle);
+
+    // Resolve each (QueueId, IntraQueueSubmissionId) wait to the source
+    // queue's timeline semaphore + serial. Zero-valued serials are
+    // silently dropped inside SubmitSingleWithWaits.
+    std::vector<VkSemaphore> wait_semaphores;
+    std::vector<uint64_t>    wait_values;
+    wait_semaphores.reserve(waits.size());
+    wait_values.reserve(waits.size());
+    for (mnexus::QueueWaitInfo const& w : waits) {
+      IVulkanQueue* const src = vk_device_->GetQueue(w.queue);
+      wait_semaphores.push_back(src->timeline_semaphore());
+      wait_values.push_back(w.value.Get());
+    }
+
+    uint64_t const serial = queue->SubmitSingleWithWaits(
+      vk_cb_handle,
+      static_cast<uint32_t>(wait_semaphores.size()),
+      wait_semaphores.empty() ? nullptr : wait_semaphores.data(),
+      wait_values.empty()     ? nullptr : wait_values.data()
+    );
     uint32_t const queue_compact_index = queue->compact_index();
 
     // Stamp the per-list command pool so its deferred destruction waits for GPU completion.
