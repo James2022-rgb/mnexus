@@ -30,6 +30,8 @@ uint32_t MnGetFormatSizeInBytes(MnFormat value) {
   case MnFormatB8G8R8A8_SRGB:              return 4;
 
   // 16-bit per channel.
+  case MnFormatR16_UNORM:                  return 2;
+  case MnFormatR16G16_UNORM:               return 4;
   case MnFormatR16_SFLOAT:                 return 2;
   case MnFormatR16G16_SFLOAT:              return 4;
   case MnFormatR16G16B16_SFLOAT:           return 6;
