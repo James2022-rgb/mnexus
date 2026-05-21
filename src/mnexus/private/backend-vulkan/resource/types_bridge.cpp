@@ -56,6 +56,8 @@ VkImageUsageFlags ToVkImageUsageFlags(mnexus::TextureUsageFlags usage, VkFormat 
   if (usage.HasAnyOf(mnexus::TextureUsageFlagBits::kTransferDst))     { result |= VK_IMAGE_USAGE_TRANSFER_DST_BIT; }
   if (usage.HasAnyOf(mnexus::TextureUsageFlagBits::kVideoDecodeDst))  { result |= VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR; }
   if (usage.HasAnyOf(mnexus::TextureUsageFlagBits::kVideoDecodeDpb))  { result |= VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR; }
+  if (usage.HasAnyOf(mnexus::TextureUsageFlagBits::kVideoEncodeSrc))  { result |= VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT_KHR; }
+  if (usage.HasAnyOf(mnexus::TextureUsageFlagBits::kVideoEncodeDpb))  { result |= VK_IMAGE_USAGE_VIDEO_ENCODE_DPB_BIT_KHR; }
 
   return result;
 }
@@ -598,6 +600,7 @@ VkPipelineStageFlags2KHR ToVkPipelineStageFlags2(mnexus::ResourceBarrierStageFla
   if (value.HasAnyOf(B::kComputeShader))         { result |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR; }
   if (value.HasAnyOf(B::kTransfer))              { result |= VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT_KHR; }
   if (value.HasAnyOf(B::kVideoDecode))           { result |= VK_PIPELINE_STAGE_2_VIDEO_DECODE_BIT_KHR; }
+  if (value.HasAnyOf(B::kVideoEncode))           { result |= VK_PIPELINE_STAGE_2_VIDEO_ENCODE_BIT_KHR; }
   return result;
 }
 
@@ -639,6 +642,9 @@ VkAccessFlags2KHR ToVkAccessFlags2(
   case mnexus::ResourceBarrierState::kVideoDecodeDpb:   return VK_ACCESS_2_VIDEO_DECODE_READ_BIT_KHR
                                                              | VK_ACCESS_2_VIDEO_DECODE_WRITE_BIT_KHR;
   case mnexus::ResourceBarrierState::kVideoDecodeSrc:   return VK_ACCESS_2_VIDEO_DECODE_READ_BIT_KHR;
+  case mnexus::ResourceBarrierState::kVideoEncodeSrc:   return VK_ACCESS_2_VIDEO_ENCODE_READ_BIT_KHR;
+  case mnexus::ResourceBarrierState::kVideoEncodeDpb:   return VK_ACCESS_2_VIDEO_ENCODE_READ_BIT_KHR
+                                                             | VK_ACCESS_2_VIDEO_ENCODE_WRITE_BIT_KHR;
   }
   MBASE_LOG_ERROR("Unknown mnexus::ResourceBarrierState value");
   return 0;
@@ -660,6 +666,8 @@ VkImageLayout ToVkImageLayout(mnexus::ResourceBarrierState value) {
   case mnexus::ResourceBarrierState::kVideoDecodeDst:  return VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR;
   case mnexus::ResourceBarrierState::kVideoDecodeDpb:  return VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR;
   case mnexus::ResourceBarrierState::kVideoDecodeSrc:  return VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR;
+  case mnexus::ResourceBarrierState::kVideoEncodeSrc:  return VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR;
+  case mnexus::ResourceBarrierState::kVideoEncodeDpb:  return VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR;
   }
   MBASE_LOG_ERROR("Unknown mnexus::ResourceBarrierState value");
   return VK_IMAGE_LAYOUT_UNDEFINED;

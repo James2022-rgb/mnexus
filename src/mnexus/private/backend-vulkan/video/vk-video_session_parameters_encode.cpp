@@ -48,7 +48,10 @@ StdVideoH265ProfileTierLevel BuildEncodeProfileTierLevel(
   ptl_flags.general_tier_flag                  = 0;
   ptl_flags.general_progressive_source_flag    = 1;
   ptl_flags.general_interlaced_source_flag     = 0;
-  ptl_flags.general_non_packed_constraint_flag = 1;
+  // Khronos reference HEVC encoder sets this to 0; NVIDIA cross-checks
+  // the general constraint indicator bits, and packed-source = 0 is the
+  // working combination with progressive_source = 1.
+  ptl_flags.general_non_packed_constraint_flag = 0;
   ptl_flags.general_frame_only_constraint_flag = 1;
 
   return StdVideoH265ProfileTierLevel {
@@ -75,7 +78,8 @@ StdVideoH265DecPicBufMgr BuildEncodeDecPicBufMgr(
 
 StdVideoH265VideoParameterSet BuildEncodeVps(
   StdVideoH265ProfileTierLevel const& ptl,
-  StdVideoH265DecPicBufMgr const& buf_mgr
+  StdVideoH265DecPicBufMgr const& buf_mgr,
+  StdVideoH265HrdParameters const& hrd_params
 ) {
   StdVideoH265VpsFlags vps_flags{};
   vps_flags.vps_temporal_id_nesting_flag             = 1;
@@ -94,16 +98,60 @@ StdVideoH265VideoParameterSet BuildEncodeVps(
     .vps_num_ticks_poc_diff_one_minus1= 0,
     .reserved3                        = 0,
     .pDecPicBufMgr                    = &buf_mgr,
-    .pHrdParameters                   = nullptr,
+    // Khronos reference encoder always points pHrdParameters at a
+    // (typically zeroed) HRD struct rather than nullptr; some drivers
+    // dereference this even when vps_timing_info_present_flag = 0.
+    .pHrdParameters                   = &hrd_params,
     .pProfileTierLevel                = &ptl,
   };
+}
+
+StdVideoH265ShortTermRefPicSet BuildEncodeStrps() {
+  // Single STRPS describing the GoPro-style "one prev forward ref" config.
+  // The slice header for P pictures uses `short_term_ref_pic_set_idx = 0`
+  // to reference this set.
+  StdVideoH265ShortTermRefPicSet strps{};
+  strps.flags.inter_ref_pic_set_prediction_flag = 0;
+  strps.flags.delta_rps_sign                    = 0;
+  strps.delta_idx_minus1                        = 0;
+  strps.use_delta_flag                          = 0;
+  strps.abs_delta_rps_minus1                    = 0;
+  strps.used_by_curr_pic_flag                   = 0;
+  strps.used_by_curr_pic_s0_flag                = 1;  // bit 0 = "use the first negative ref"
+  strps.used_by_curr_pic_s1_flag                = 0;
+  strps.num_negative_pics                       = 1;
+  strps.num_positive_pics                       = 0;
+  strps.delta_poc_s0_minus1[0]                  = 0;  // POC delta = 1 (prev picture)
+  return strps;
+}
+
+StdVideoH265SequenceParameterSetVui BuildEncodeVui() {
+  // Minimal VUI: square pixel aspect, no overscan, no video signal type,
+  // no chroma loc, no timing (the encoder doesn't need it for CQP), no
+  // HRD. Some drivers (notably NVIDIA) require a non-null VUI struct
+  // even with all-zero flags; the Khronos reference encoder always wires
+  // one.
+  StdVideoH265SequenceParameterSetVui vui{};
+  vui.flags.aspect_ratio_info_present_flag           = 1;
+  vui.aspect_ratio_idc                               = STD_VIDEO_H265_ASPECT_RATIO_IDC_SQUARE;
+  // Reference encoder always sets these in its working path; some
+  // drivers' VUI bitstream writers read the MV-length fields whether
+  // or not bitstream_restriction_flag is set, and the two motion-vector
+  // flags interact with the encoder's RPL-handling firmware.
+  vui.flags.motion_vectors_over_pic_boundaries_flag  = 1;
+  vui.flags.restricted_ref_pic_lists_flag            = 1;
+  vui.log2_max_mv_length_horizontal                  = 12;
+  vui.log2_max_mv_length_vertical                    = 10;
+  return vui;
 }
 
 StdVideoH265SequenceParameterSet BuildEncodeSps(
   uint32_t coded_width,
   uint32_t coded_height,
   StdVideoH265ProfileTierLevel const& ptl,
-  StdVideoH265DecPicBufMgr const& buf_mgr
+  StdVideoH265DecPicBufMgr const& buf_mgr,
+  StdVideoH265ShortTermRefPicSet const& strps,
+  StdVideoH265SequenceParameterSetVui const& vui
 ) {
   StdVideoH265SpsFlags sps_flags{};
   sps_flags.sps_temporal_id_nesting_flag             = 1;
@@ -116,9 +164,21 @@ StdVideoH265SequenceParameterSet BuildEncodeSps(
   sps_flags.sample_adaptive_offset_enabled_flag      = 1;
   sps_flags.pcm_enabled_flag                         = 0;
   sps_flags.long_term_ref_pics_present_flag          = 0;
-  sps_flags.sps_temporal_mvp_enabled_flag            = 1;
-  sps_flags.strong_intra_smoothing_enabled_flag      = 1;
-  sps_flags.vui_parameters_present_flag              = 0;
+  // sps_temporal_mvp_enabled_flag: disabled on the conservative side.
+  // Enabling it requires matching picture-level / slice-level flags +
+  // collocated picture book-keeping; some drivers reject the encoded
+  // parameters when the implicit slice-level flag is left at 0.
+  sps_flags.sps_temporal_mvp_enabled_flag            = 0;
+  // strong_intra_smoothing_enabled_flag: 0 to match the Khronos reference
+  // encoder's working SPS for Main 8-bit CQP encoding. Enabling it gives
+  // marginal quality improvement on intra blocks but interacts with the
+  // intra prediction path in ways some encoders do not like.
+  sps_flags.strong_intra_smoothing_enabled_flag      = 0;
+  // vui_parameters_present_flag: 1 with a populated VUI. Required by the
+  // working reference encoder path; NVIDIA's driver rejects SPS emission
+  // when the flag is 1 with a null VUI pointer (or, observed here, when
+  // it is 0 and no VUI is provided).
+  sps_flags.vui_parameters_present_flag              = 1;
   sps_flags.sps_extension_present_flag               = 0;
 
   // Coding block sizes -- targets common encoder defaults:
@@ -138,18 +198,25 @@ StdVideoH265SequenceParameterSet BuildEncodeSps(
     .bit_depth_luma_minus8                          = 0,
     .bit_depth_chroma_minus8                        = 0,
     .log2_max_pic_order_cnt_lsb_minus4              = 4,    // 8-bit LSB -- enough for any GOP up to 256
+    // CTB = 32, min CB = 8. NVIDIA's HEVC encoder on some hardware /
+    // driver combinations rejects CTB = 64 with OOM at parameters
+    // emission time even though the spec allows it.
     .log2_min_luma_coding_block_size_minus3         = 0,
-    .log2_diff_max_min_luma_coding_block_size       = 3,
+    .log2_diff_max_min_luma_coding_block_size       = 2,
     .log2_min_luma_transform_block_size_minus2      = 0,
     .log2_diff_max_min_luma_transform_block_size    = 3,
-    .max_transform_hierarchy_depth_inter            = 3,
-    .max_transform_hierarchy_depth_intra            = 3,
-    .num_short_term_ref_pic_sets                    = 0,
+    .max_transform_hierarchy_depth_inter            = 2,
+    .max_transform_hierarchy_depth_intra            = 2,
+    .num_short_term_ref_pic_sets                    = 1,
     .num_long_term_ref_pics_sps                     = 0,
-    .pcm_sample_bit_depth_luma_minus1               = 0,
-    .pcm_sample_bit_depth_chroma_minus1             = 0,
+    // PCM fields are set to spec-defined defaults even when
+    // pcm_enabled_flag = 0; NVIDIA's encoder reads them unconditionally
+    // and rejects all-zero values (vkGetEncodedVideoSessionParametersKHR
+    // surfaces this as VK_ERROR_OUT_OF_HOST_MEMORY).
+    .pcm_sample_bit_depth_luma_minus1               = 7,
+    .pcm_sample_bit_depth_chroma_minus1             = 7,
     .log2_min_pcm_luma_coding_block_size_minus3     = 0,
-    .log2_diff_max_min_pcm_luma_coding_block_size   = 0,
+    .log2_diff_max_min_pcm_luma_coding_block_size   = 2,  // mirrors log2_diff_max_min_luma_coding_block_size
     .reserved1                                      = 0,
     .reserved2                                      = 0,
     .palette_max_size                               = 0,
@@ -163,9 +230,9 @@ StdVideoH265SequenceParameterSet BuildEncodeSps(
     .pProfileTierLevel                              = &ptl,
     .pDecPicBufMgr                                  = &buf_mgr,
     .pScalingLists                                  = nullptr,
-    .pShortTermRefPicSet                            = nullptr,
+    .pShortTermRefPicSet                            = &strps,
     .pLongTermRefPicsSps                            = nullptr,
-    .pSequenceParameterSetVui                       = nullptr,
+    .pSequenceParameterSetVui                       = &vui,
     .pPredictorPaletteEntries                       = nullptr,
   };
 }
@@ -175,10 +242,14 @@ StdVideoH265PictureParameterSet BuildEncodePps(int8_t qp) {
   pps_flags.dependent_slice_segments_enabled_flag         = 0;
   pps_flags.output_flag_present_flag                      = 0;
   pps_flags.sign_data_hiding_enabled_flag                 = 0;
-  pps_flags.cabac_init_present_flag                       = 0;
+  // The four flags set to 1 below match the Khronos reference encoder's
+  // working PPS for Main 8-bit CQP single-slice. NVIDIA's encoder
+  // firmware reads cu_qp_delta_enabled_flag during rate-control setup
+  // (even at CQP) and rejects parameters NAL emission when it is 0.
+  pps_flags.cabac_init_present_flag                       = 1;
   pps_flags.constrained_intra_pred_flag                   = 0;
-  pps_flags.transform_skip_enabled_flag                   = 0;
-  pps_flags.cu_qp_delta_enabled_flag                      = 0;
+  pps_flags.transform_skip_enabled_flag                   = 1;
+  pps_flags.cu_qp_delta_enabled_flag                      = 1;
   pps_flags.pps_slice_chroma_qp_offsets_present_flag      = 0;
   pps_flags.weighted_pred_flag                            = 0;
   pps_flags.weighted_bipred_flag                          = 0;
@@ -188,11 +259,16 @@ StdVideoH265PictureParameterSet BuildEncodePps(int8_t qp) {
   pps_flags.uniform_spacing_flag                          = 0;
   pps_flags.loop_filter_across_tiles_enabled_flag         = 0;
   pps_flags.pps_loop_filter_across_slices_enabled_flag    = 1;
-  pps_flags.deblocking_filter_control_present_flag        = 0;
+  pps_flags.deblocking_filter_control_present_flag        = 1;
   pps_flags.deblocking_filter_override_enabled_flag       = 0;
   pps_flags.pps_deblocking_filter_disabled_flag           = 0;
   pps_flags.pps_scaling_list_data_present_flag            = 0;
-  pps_flags.lists_modification_present_flag               = 1;  // slice header can rewrite RPL
+  // lists_modification_present_flag: 0 since the IDR + N x P GOP we author
+  // never needs the slice header to override the default RPL order.
+  // Setting it to 1 forces ref_pic_list_modification() into every slice
+  // header; some drivers fail the parameters NAL emission when no actual
+  // modification is needed but the flag is set.
+  pps_flags.lists_modification_present_flag               = 0;
   pps_flags.slice_segment_header_extension_present_flag   = 0;
   pps_flags.pps_extension_present_flag                    = 0;
 
@@ -226,17 +302,18 @@ StdVideoH265PictureParameterSet BuildEncodePps(int8_t qp) {
 // start code).
 //
 
-bool ReadEncodedParametersBytes(
+bool TryFetchOneNal(
   VkDevice vk_device_handle,
   VkVideoSessionParametersKHR vk_params,
+  bool wantVps, bool wantSps, bool wantPps,
   std::vector<uint8_t>& out_bytes
 ) {
   VkVideoEncodeH265SessionParametersGetInfoKHR h265_get_info {
     .sType        = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_GET_INFO_KHR,
     .pNext        = nullptr,
-    .writeStdVPS  = VK_TRUE,
-    .writeStdSPS  = VK_TRUE,
-    .writeStdPPS  = VK_TRUE,
+    .writeStdVPS  = wantVps ? VK_TRUE : VK_FALSE,
+    .writeStdSPS  = wantSps ? VK_TRUE : VK_FALSE,
+    .writeStdPPS  = wantPps ? VK_TRUE : VK_FALSE,
     .stdVPSId     = 0,
     .stdSPSId     = 0,
     .stdPPSId     = 0,
@@ -246,23 +323,51 @@ bool ReadEncodedParametersBytes(
     .pNext                  = &h265_get_info,
     .videoSessionParameters = vk_params,
   };
-
-  size_t data_size = 0;
+  out_bytes.assign(8192, 0);
+  size_t data_size = out_bytes.size();
   VkResult r = vkGetEncodedVideoSessionParametersKHR(
-    vk_device_handle, &get_info, nullptr, &data_size, nullptr);
-  if (r != VK_SUCCESS || data_size == 0) {
-    MBASE_LOG_ERROR("vkGetEncodedVideoSessionParametersKHR (size query) failed or returned 0 bytes: {}", string_VkResult(r));
-    return false;
+    vk_device_handle, &get_info, nullptr, &data_size, out_bytes.data());
+  if (r == VK_INCOMPLETE) {
+    out_bytes.assign(data_size, 0);
+    r = vkGetEncodedVideoSessionParametersKHR(
+      vk_device_handle, &get_info, nullptr, &data_size, out_bytes.data());
+  }
+  if (r != VK_SUCCESS) return false;
+  if (data_size == 0)  return false;
+  out_bytes.resize(data_size);
+  return true;
+}
+
+bool ReadEncodedParametersBytes(
+  VkDevice vk_device_handle,
+  VkVideoSessionParametersKHR vk_params,
+  std::vector<uint8_t>& out_bytes
+) {
+  // First attempt: ask for VPS + SPS + PPS in a single call.
+  if (TryFetchOneNal(vk_device_handle, vk_params, true, true, true, out_bytes)) {
+    return true;
   }
 
-  out_bytes.assign(data_size, 0);
-  r = vkGetEncodedVideoSessionParametersKHR(
-    vk_device_handle, &get_info, nullptr, &data_size, out_bytes.data());
-  if (r != VK_SUCCESS) {
-    MBASE_LOG_ERROR("vkGetEncodedVideoSessionParametersKHR (data fetch) failed: {}", string_VkResult(r));
+  // Diagnostic fallback: try each NAL separately so the log narrows down
+  // which one trips the driver, then re-concatenate on success. This path
+  // also exercises the workaround used by some apps that fetch the three
+  // NALs individually.
+  MBASE_LOG_WARN("Combined VPS+SPS+PPS fetch failed; trying per-NAL fallback.");
+
+  std::vector<uint8_t> vps_bytes, sps_bytes, pps_bytes;
+  bool const ok_vps = TryFetchOneNal(vk_device_handle, vk_params, true,  false, false, vps_bytes);
+  bool const ok_sps = TryFetchOneNal(vk_device_handle, vk_params, false, true,  false, sps_bytes);
+  bool const ok_pps = TryFetchOneNal(vk_device_handle, vk_params, false, false, true,  pps_bytes);
+  MBASE_LOG_ERROR("Per-NAL fetch results: VPS={}({}B), SPS={}({}B), PPS={}({}B)",
+    ok_vps, vps_bytes.size(), ok_sps, sps_bytes.size(), ok_pps, pps_bytes.size());
+
+  if (!ok_vps || !ok_sps || !ok_pps) {
     return false;
   }
-  out_bytes.resize(data_size);
+  out_bytes.clear();
+  out_bytes.insert(out_bytes.end(), vps_bytes.begin(), vps_bytes.end());
+  out_bytes.insert(out_bytes.end(), sps_bytes.begin(), sps_bytes.end());
+  out_bytes.insert(out_bytes.end(), pps_bytes.begin(), pps_bytes.end());
   return true;
 }
 
@@ -307,15 +412,16 @@ resource_pool::ResourceHandle EmplaceVideoSessionParametersResourcePoolEncodeH26
     BuildEncodeProfileTierLevel(session_desc.profile, desc.level);
   StdVideoH265DecPicBufMgr const buf_mgr =
     BuildEncodeDecPicBufMgr(desc.num_ref_frames, desc.max_num_reorder_pics);
-  StdVideoH265VideoParameterSet const std_vps = BuildEncodeVps(ptl, buf_mgr);
+  StdVideoH265ShortTermRefPicSet const strps = BuildEncodeStrps();
+  StdVideoH265SequenceParameterSetVui const vui = BuildEncodeVui();
+  StdVideoH265HrdParameters const hrd_params{};  // zero-init; VPS dereferences it
+  StdVideoH265VideoParameterSet const std_vps = BuildEncodeVps(ptl, buf_mgr, hrd_params);
   StdVideoH265SequenceParameterSet const std_sps =
-    BuildEncodeSps(desc.coded_width, desc.coded_height, ptl, buf_mgr);
-  // For PPS we need a configurable init_qp_minus26; without a per-frame
-  // QP override path yet, pick the midpoint of the spec range so the
-  // encoder defaults to "reasonable quality". Per-frame
-  // EncodeVideoH265PictureInfo::constant_qp supersedes this via the
-  // slice-header delta path.
-  StdVideoH265PictureParameterSet const std_pps = BuildEncodePps(28);
+    BuildEncodeSps(desc.coded_width, desc.coded_height, ptl, buf_mgr, strps, vui);
+  // PPS init_qp_minus26 = 0 matches the Khronos reference encoder.
+  // Per-frame `EncodeVideoH265PictureInfo::constant_qp` arrives in the
+  // bitstream as slice_qp_delta = constant_qp - 26.
+  StdVideoH265PictureParameterSet const std_pps = BuildEncodePps(26);
 
   VkVideoEncodeH265SessionParametersAddInfoKHR add_info {
     .sType       = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_ADD_INFO_KHR,
@@ -335,9 +441,19 @@ resource_pool::ResourceHandle EmplaceVideoSessionParametersResourcePoolEncodeH26
     .maxStdPPSCount     = 1,
     .pParametersAddInfo = &add_info,
   };
+  // Bind quality level 0 (fastest preset) to the parameters object.
+  // NVIDIA's encoder firmware validates the std params against the bound
+  // quality level's preferred values at parameters emission time; the
+  // implicit "no quality level set" path is observed to OOM during
+  // vkGetEncodedVideoSessionParametersKHR for the SPS.
+  VkVideoEncodeQualityLevelInfoKHR quality_level_info {
+    .sType        = VK_STRUCTURE_TYPE_VIDEO_ENCODE_QUALITY_LEVEL_INFO_KHR,
+    .pNext        = &encode_params_create_info,
+    .qualityLevel = 0,
+  };
   VkVideoSessionParametersCreateInfoKHR create_info {
     .sType                              = VK_STRUCTURE_TYPE_VIDEO_SESSION_PARAMETERS_CREATE_INFO_KHR,
-    .pNext                              = &encode_params_create_info,
+    .pNext                              = &quality_level_info,
     .flags                              = 0,
     .videoSessionParametersTemplate     = VK_NULL_HANDLE,
     .videoSession                       = session_hot.vk_video_session.handle(),

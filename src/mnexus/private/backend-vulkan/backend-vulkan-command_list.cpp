@@ -512,11 +512,13 @@ public:
       void const* dpb_slot_info_pnext = nullptr;
       if (is_encode_session) {
         StdVideoEncodeH265ReferenceInfo std_ref{};
-        // pic_type for buffered references defaults to P -- the GoPro-style
-        // IDR + N x P GOP never references an entry as anything else. Real
-        // multi-codec scenarios will need this plumbed through the public
-        // VideoReferenceSlotInfo struct.
-        std_ref.pic_type       = STD_VIDEO_H265_PICTURE_TYPE_P;
+        // pic_type heuristic: POC = 0 is the IDR at the start of the
+        // current CVS, anything else is a P. Sufficient for the GoPro-
+        // style IDR + N x P GOP; richer multi-GOP / B-frame scenarios
+        // will need the pic_type plumbed through VideoReferenceSlotInfo.
+        std_ref.pic_type       = (slot.pic_order_cnt_val == 0)
+          ? STD_VIDEO_H265_PICTURE_TYPE_IDR
+          : STD_VIDEO_H265_PICTURE_TYPE_P;
         std_ref.PicOrderCntVal = slot.pic_order_cnt_val;
         std_ref.TemporalId     = 0;
         enc_std_ref_infos.push_back(std_ref);
@@ -553,36 +555,45 @@ public:
     // Flush any pending barriers; Vulkan disallows barriers inside a video coding scope.
     this->FlushPipelineBarrier();
 
+    // Encode: rate control state must match between the session and the
+    // pBeginInfo->pNext chain at Begin time (VUIDs 08253 / 08254).
+    //   - First scope on the session: state is DEFAULT, so DO NOT chain
+    //     RateControlInfo (chaining DISABLED would mismatch DEFAULT). The
+    //     scope then issues Control(RESET + RATE_CONTROL = DISABLED) to
+    //     transition the session into DISABLED before the first encode.
+    //   - Subsequent scopes: state is DISABLED, so we MUST chain
+    //     RateControlInfo(DISABLED) at Begin (VUID-08253 forbids omitting
+    //     the chain when state is non-DEFAULT).
+    VkVideoEncodeRateControlInfoKHR encode_rate_control_info{};
+    encode_rate_control_info.sType           = VK_STRUCTURE_TYPE_VIDEO_ENCODE_RATE_CONTROL_INFO_KHR;
+    encode_rate_control_info.pNext           = nullptr;
+    encode_rate_control_info.rateControlMode = VK_VIDEO_ENCODE_RATE_CONTROL_MODE_DISABLED_BIT_KHR;
+
+    bool const is_first_encode_scope = is_encode_session && session_hot.encode_needs_rate_control_init;
+    void const* begin_pnext = nullptr;
+    if (is_encode_session && !is_first_encode_scope) {
+      begin_pnext = &encode_rate_control_info;
+    }
+
     VkVideoBeginCodingInfoKHR const begin_info{
-      .sType = VK_STRUCTURE_TYPE_VIDEO_BEGIN_CODING_INFO_KHR,
-      .pNext = nullptr,
-      .flags = 0,
-      .videoSession = vk_session,
+      .sType                  = VK_STRUCTURE_TYPE_VIDEO_BEGIN_CODING_INFO_KHR,
+      .pNext                  = begin_pnext,
+      .flags                  = 0,
+      .videoSession           = vk_session,
       .videoSessionParameters = vk_params,
-      .referenceSlotCount = static_cast<uint32_t>(slot_infos.size()),
-      .pReferenceSlots = slot_infos.empty() ? nullptr : slot_infos.data(),
+      .referenceSlotCount     = static_cast<uint32_t>(slot_infos.size()),
+      .pReferenceSlots        = slot_infos.empty() ? nullptr : slot_infos.data(),
     };
     vkCmdBeginVideoCodingKHR(encoder_->vk_cb_handle(), &begin_info);
 
-    // Encode: emit a one-shot RESET + RATE_CONTROL configuration the very
-    // first time we open a coding scope on this session. The driver requires
-    // a rate-control mode to be set before the first encode op; we use
-    // DISABLED (= constant QP, application-driven rate control) since that
-    // is the only mode the encoder currently exposes.
-    if (is_encode_session && session_hot.encode_needs_rate_control_init) {
-      VkVideoEncodeRateControlInfoKHR const rate_control_info {
-        .sType                        = VK_STRUCTURE_TYPE_VIDEO_ENCODE_RATE_CONTROL_INFO_KHR,
-        .pNext                        = nullptr,
-        .flags                        = 0,
-        .rateControlMode              = VK_VIDEO_ENCODE_RATE_CONTROL_MODE_DISABLED_BIT_KHR,
-        .layerCount                   = 0,
-        .pLayers                      = nullptr,
-        .virtualBufferSizeInMs        = 0,
-        .initialVirtualBufferSizeInMs = 0,
-      };
+    // First encode scope on this session: transition the session into the
+    // application-driven CQP path (RESET clears prior state, then
+    // RATE_CONTROL=DISABLED sets the mode the chained Begin info will
+    // declare from the next scope onwards).
+    if (is_first_encode_scope) {
       VkVideoCodingControlInfoKHR const control_info {
         .sType = VK_STRUCTURE_TYPE_VIDEO_CODING_CONTROL_INFO_KHR,
-        .pNext = &rate_control_info,
+        .pNext = &encode_rate_control_info,
         .flags = VK_VIDEO_CODING_CONTROL_RESET_BIT_KHR
                | VK_VIDEO_CODING_CONTROL_ENCODE_RATE_CONTROL_BIT_KHR,
       };
@@ -941,7 +952,11 @@ public:
     std_pic.flags.cross_layer_bla_flag             = 0;
     std_pic.flags.pic_output_flag                  = 1;
     std_pic.flags.no_output_of_prior_pics_flag     = is_idr ? 1 : 0;
-    std_pic.flags.short_term_ref_pic_set_sps_flag  = 0;  // inline RPS in slice header
+    // Emit the STRPS inline in the slice header (set via pShortTermRefPicSet
+    // below) rather than reference the SPS-defined one. Some drivers do not
+    // resolve `short_term_ref_pic_set_idx` correctly for P frames; inline
+    // RPS sidesteps that path entirely.
+    std_pic.flags.short_term_ref_pic_set_sps_flag  = 0;
     std_pic.flags.slice_temporal_mvp_enabled_flag  = 0;
     std_pic.pic_type                          = std_pic_type;
     std_pic.sps_video_parameter_set_id        = 0;
@@ -951,7 +966,24 @@ public:
     std_pic.PicOrderCntVal                    = pic_info.pic_order_cnt_val;
     std_pic.TemporalId                        = pic_info.temporal_id;
     std_pic.pRefLists                         = is_p ? &ref_lists : nullptr;
-    std_pic.pShortTermRefPicSet               = nullptr;
+    // Inline STRPS for the slice header. Built lazily here so the
+    // pointer is valid through the vkCmdEncodeVideoKHR call. For IDR
+    // (no refs) we still emit an empty STRPS rather than nullptr because
+    // the slice header always carries the syntax when SPS-based RPS is
+    // off.
+    StdVideoH265ShortTermRefPicSet inline_strps{};
+    inline_strps.flags.inter_ref_pic_set_prediction_flag = 0;
+    inline_strps.flags.delta_rps_sign                    = 0;
+    inline_strps.delta_idx_minus1                        = 0;
+    inline_strps.use_delta_flag                          = 0;
+    inline_strps.abs_delta_rps_minus1                    = 0;
+    inline_strps.used_by_curr_pic_flag                   = 0;
+    inline_strps.used_by_curr_pic_s0_flag                = is_p ? 1 : 0;
+    inline_strps.used_by_curr_pic_s1_flag                = 0;
+    inline_strps.num_negative_pics                       = is_p ? 1 : 0;
+    inline_strps.num_positive_pics                       = 0;
+    inline_strps.delta_poc_s0_minus1[0]                  = 0;  // POC delta = 1
+    std_pic.pShortTermRefPicSet               = &inline_strps;
     std_pic.pLongTermRefPics                  = nullptr;
 
     // ----- Build StdVideoEncodeH265SliceSegmentHeader -----
@@ -976,9 +1008,9 @@ public:
     slice_header.slice_cr_qp_offset     = 0;
     slice_header.slice_beta_offset_div2 = 0;
     slice_header.slice_tc_offset_div2   = 0;
-    // The PPS hardcodes init_qp = 28 (init_qp_minus26 = 2). The caller's
+    // The PPS hardcodes init_qp = 26 (init_qp_minus26 = 0). The caller's
     // requested per-frame QP is delivered as a slice-header delta.
-    slice_header.slice_qp_delta         = static_cast<int8_t>(pic_info.constant_qp - 28);
+    slice_header.slice_qp_delta         = static_cast<int8_t>(pic_info.constant_qp - 26);
     slice_header.pWeightTable           = nullptr;
 
     VkVideoEncodeH265NaluSliceSegmentInfoKHR const nalu_slice_segment_info {
@@ -1163,7 +1195,11 @@ public:
       });
 
       StdVideoEncodeH265ReferenceInfo ref_std{};
-      ref_std.pic_type       = STD_VIDEO_H265_PICTURE_TYPE_P;  // see note in BeginVideoCoding
+      // pic_type heuristic mirrors BeginVideoCoding: POC = 0 -> IDR,
+      // else P. See the note there.
+      ref_std.pic_type       = (ref.pic_order_cnt_val == 0)
+        ? STD_VIDEO_H265_PICTURE_TYPE_IDR
+        : STD_VIDEO_H265_PICTURE_TYPE_P;
       ref_std.PicOrderCntVal = ref.pic_order_cnt_val;
       ref_std.TemporalId     = 0;
       ref_std_infos.push_back(ref_std);

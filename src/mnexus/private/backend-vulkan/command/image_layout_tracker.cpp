@@ -52,6 +52,24 @@ SyncScope ImageLayoutTracker::GetDefaultSyncScope(VkImageUsageFlags usage, VkFor
       VK_ACCESS_2_MEMORY_READ_BIT_KHR
     };
   }
+  // Video-only textures (no SAMPLED / TRANSFER bits set, as on encode SRC
+  // / DPB or decode SRC). The post-create pre-barrier runs on the
+  // present queue (which lacks the VIDEO_ENCODE / VIDEO_DECODE pipeline
+  // stages) and End()'s TransitionAllToDefaults runs on whatever queue
+  // the CL is built for; use ALL_COMMANDS + MEMORY_READ/WRITE so the
+  // default sync scope is valid on every queue family.
+  if (usage & (
+        VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT_KHR
+      | VK_IMAGE_USAGE_VIDEO_ENCODE_DPB_BIT_KHR
+      | VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR
+      | VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR
+      | VK_IMAGE_USAGE_VIDEO_DECODE_SRC_BIT_KHR
+  )) {
+    return {
+      VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR,
+      VK_ACCESS_2_MEMORY_READ_BIT_KHR | VK_ACCESS_2_MEMORY_WRITE_BIT_KHR
+    };
+  }
   MBASE_LOG_ERROR("ImageLayoutTracker: cannot determine default sync scope for usage {}", usage);
   return {};
 }
@@ -69,6 +87,18 @@ VkImageLayout ImageLayoutTracker::GetDefaultLayout(VkImageUsageFlags usage, VkFo
   if (usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) {
     return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
   }
+  // Video-only textures (no SAMPLED / TRANSFER bits set). Treat the
+  // matching video-coding-side layout as the default: the post-create
+  // transition brings the image into that layout once, and End()'s
+  // TransitionAllToDefaults emits a no-op same-layout barrier on most
+  // CLs (or a real return-trip when a CL temporarily put the texture in
+  // TRANSFER_DST / similar). DPB layout dominates SRC for combined
+  // encode/decode usages.
+  if (usage & VK_IMAGE_USAGE_VIDEO_ENCODE_DPB_BIT_KHR) { return VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR; }
+  if (usage & VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT_KHR) { return VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR; }
+  if (usage & VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR) { return VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR; }
+  if (usage & VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR) { return VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR; }
+  if (usage & VK_IMAGE_USAGE_VIDEO_DECODE_SRC_BIT_KHR) { return VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR; }
   MBASE_LOG_ERROR("ImageLayoutTracker: cannot determine default layout for usage {}", usage);
   mbase::Trap();
   return VK_IMAGE_LAYOUT_UNDEFINED;

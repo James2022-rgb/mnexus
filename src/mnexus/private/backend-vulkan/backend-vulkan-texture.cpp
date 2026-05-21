@@ -123,16 +123,55 @@ std::optional<CreateVulkanImageResult> CreateVulkanImage(
     MBASE_LOG_ERROR("TextureUsageFlagBits::kVideoDecode* requires VK_KHR_video_decode_queue, which is not enabled on this device.");
     return std::nullopt;
   }
+  bool const wants_video_encode =
+       texture_desc.usage.HasAnyOf(mnexus::TextureUsageFlagBits::kVideoEncodeSrc)
+    || texture_desc.usage.HasAnyOf(mnexus::TextureUsageFlagBits::kVideoEncodeDpb);
+  if (wants_video_encode && !vk_device.IsExtensionEnabled(VK_KHR_VIDEO_ENCODE_QUEUE_EXTENSION_NAME)) {
+    MBASE_LOG_ERROR("TextureUsageFlagBits::kVideoEncode* requires VK_KHR_video_encode_queue, which is not enabled on this device.");
+    return std::nullopt;
+  }
 
   VkImageCreateFlags flags = 0;
   if (texture_desc.dimension == mnexus::TextureDimension::kCube) {
     flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
   }
-  // Decouple the image from any specific VkVideoProfileInfoKHR; pairs with
-  // VK_KHR_video_maintenance1 (enabled in vk-device.cpp when video coding
-  // capability probe succeeded). Symmetric with the buffer side.
+  // Decode side decouples the image from any specific VkVideoProfileInfoKHR
+  // via VK_IMAGE_CREATE_VIDEO_PROFILE_INDEPENDENT_BIT_KHR (pairs with
+  // VK_KHR_video_maintenance1). Encode is asymmetric: per
+  // VUID-VkImageCreateInfo-flags-08331, VIDEO_ENCODE_DPB_BIT cannot coexist
+  // with PROFILE_INDEPENDENT_BIT -- the DPB must be bound to an encode
+  // profile via a VkVideoProfileListInfoKHR pNext (built below). For
+  // encode-src-only textures the spec allows either path, but we keep
+  // them profile-bound too for symmetry with the DPB.
   if (wants_video_decode) {
     flags |= VK_IMAGE_CREATE_VIDEO_PROFILE_INDEPENDENT_BIT_KHR;
+  }
+
+  // Build the encode profile list info up-front so the lifetime extends
+  // through vmaCreateImage below. The profile content is hardcoded to the
+  // single H.265 Main 8-bit configuration that PhysicalDeviceDesc::Query
+  // probes today; multi-profile encode would require threading the
+  // profile through the TextureDesc.
+  VkVideoEncodeH265ProfileInfoKHR encode_h265_profile_info{};
+  VkVideoProfileInfoKHR           encode_profile_info{};
+  VkVideoProfileListInfoKHR       encode_profile_list_info{};
+  void const*                     pnext_chain_head = nullptr;
+  if (wants_video_encode) {
+    encode_h265_profile_info.sType         = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_PROFILE_INFO_KHR;
+    encode_h265_profile_info.stdProfileIdc = STD_VIDEO_H265_PROFILE_IDC_MAIN;
+
+    encode_profile_info.sType               = VK_STRUCTURE_TYPE_VIDEO_PROFILE_INFO_KHR;
+    encode_profile_info.pNext               = &encode_h265_profile_info;
+    encode_profile_info.videoCodecOperation = VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR;
+    encode_profile_info.chromaSubsampling   = VK_VIDEO_CHROMA_SUBSAMPLING_420_BIT_KHR;
+    encode_profile_info.lumaBitDepth        = VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR;
+    encode_profile_info.chromaBitDepth      = VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR;
+
+    encode_profile_list_info.sType        = VK_STRUCTURE_TYPE_VIDEO_PROFILE_LIST_INFO_KHR;
+    encode_profile_list_info.profileCount = 1;
+    encode_profile_list_info.pProfiles    = &encode_profile_info;
+
+    pnext_chain_head = &encode_profile_list_info;
   }
   // NOTE on multi-planar sampling: an earlier iteration set
   // VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT (and chained VkImageFormatListCreateInfo)
@@ -150,7 +189,7 @@ std::optional<CreateVulkanImageResult> CreateVulkanImage(
 
   VkImageCreateInfo create_info {
     .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-    .pNext = nullptr,
+    .pNext = pnext_chain_head,
     .flags = flags,
     .imageType = vk_image_type,
     .format = vk_format,
