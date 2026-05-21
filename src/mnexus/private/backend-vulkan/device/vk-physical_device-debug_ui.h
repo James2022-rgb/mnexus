@@ -15,6 +15,8 @@ namespace mnexus_backend::vulkan::debug_ui {
 void ShowVideoCodingCapabilitiesUi(VideoCodingCapabilities const& caps);
 void ShowVideoDecodeH265CapabilitiesUi(VideoDecodeH265Capabilities const& caps);
 void ShowVideoDecodeH265PropertiesUi(VideoDecodeH265Properties const& props);
+void ShowVideoEncodeH265CapabilitiesUi(VideoEncodeH265Capabilities const& caps);
+void ShowVideoEncodeH265PropertiesUi(VideoEncodeH265Properties const& props);
 
 } // namespace mnexus_backend::vulkan::debug_ui
 

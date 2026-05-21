@@ -99,9 +99,70 @@ void ShowVideoDecodeH265CapabilitiesUi(VideoDecodeH265Capabilities const& caps) 
   show("Main 10 (10-bit)", caps.main10_10bit);
 }
 
+void ShowVideoEncodeH265PropertiesUi(VideoEncodeH265Properties const& props) {
+  if (ImGui::TreeNode("VkVideoCapabilitiesKHR")) {
+    ShowVkVideoCapabilitiesKHRUi(props.coding_capabilities);
+    ImGui::TreePop();
+  }
+
+  // VkVideoEncodeCapabilitiesKHR-derived fields.
+  if (ImGui::TreeNode("VkVideoEncodeCapabilitiesKHR")) {
+    ImGui::BulletText("flags: %s",
+                      string_VkVideoEncodeCapabilityFlagsKHR(props.encode_flags).c_str());
+    ImGui::BulletText("rateControlModes: %s",
+                      string_VkVideoEncodeRateControlModeFlagsKHR(props.rate_control_modes).c_str());
+    ImGui::BulletText("maxRateControlLayers: %u", props.max_rate_control_layers);
+    ImGui::BulletText("maxBitrate: %llu",
+                      static_cast<unsigned long long>(props.max_bitrate));
+    ImGui::BulletText("maxQualityLevels: %u", props.max_quality_levels);
+    ShowVkExtent2DBullet("encodeInputPictureGranularity", props.encode_input_picture_granularity);
+    ImGui::BulletText("supportedEncodeFeedbackFlags: %s",
+                      string_VkVideoEncodeFeedbackFlagsKHR(props.supported_encode_feedback_flags).c_str());
+    ImGui::TreePop();
+  }
+
+  // VkVideoEncodeH265CapabilitiesKHR-derived fields.
+  if (ImGui::TreeNode("VkVideoEncodeH265CapabilitiesKHR")) {
+    ImGui::BulletText("flags: %s",
+                      string_VkVideoEncodeH265CapabilityFlagsKHR(props.encode_h265_flags).c_str());
+    ImGui::BulletText("maxLevelIdc: %s", H265LevelIdcToCStr(props.max_level_idc));
+    ImGui::BulletText("maxPPictureL0ReferenceCount: %u", props.max_p_picture_l0_reference_count);
+    ImGui::BulletText("maxBPictureL0ReferenceCount: %u", props.max_b_picture_l0_reference_count);
+    ImGui::BulletText("maxL1ReferenceCount: %u", props.max_l1_reference_count);
+    ImGui::BulletText("QP range: [%d, %d]", props.min_qp, props.max_qp);
+    ImGui::TreePop();
+  }
+
+  if (ImGui::TreeNode("VkVideoFormatPropertiesKHR (first)")) {
+    ShowVkVideoFormatPropertiesKHRUi(props.format_properties);
+    ImGui::TreePop();
+  }
+}
+
+void ShowVideoEncodeH265CapabilitiesUi(VideoEncodeH265Capabilities const& caps) {
+  auto show = [](char const* label, std::optional<VideoEncodeH265Properties> const& props) {
+    if (props.has_value()) {
+      if (ImGui::TreeNode(label)) {
+        ShowVideoEncodeH265PropertiesUi(*props);
+        ImGui::TreePop();
+      }
+    } else {
+      ImGui::Text("%s:", label);
+      ImGui::SameLine();
+      ImGui::TextDisabled("not supported");
+    }
+  };
+
+  show("Main (8-bit)", caps.main);
+}
+
 void ShowVideoCodingCapabilitiesUi(VideoCodingCapabilities const& caps) {
   if (ImGui::TreeNode("Decode H.265")) {
     ShowVideoDecodeH265CapabilitiesUi(caps.decode_h265);
+    ImGui::TreePop();
+  }
+  if (ImGui::TreeNode("Encode H.265")) {
+    ShowVideoEncodeH265CapabilitiesUi(caps.encode_h265);
     ImGui::TreePop();
   }
 }
