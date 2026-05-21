@@ -125,6 +125,12 @@ MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::DecodeVideoH265(
   MBASE_LOG_ERROR("DecodeVideoH265 is not supported by the WebGPU backend.");
 }
 
+MNEXUS_NO_THROW void MNEXUS_CALL MnexusCommandListWebGpu::EncodeVideoH265(
+  mnexus::EncodeVideoH265Desc const& /*desc*/
+) {
+  MBASE_LOG_ERROR("EncodeVideoH265 is not supported by the WebGPU backend.");
+}
+
 //
 // Timestamp queries (no-op: paired with the WebGPU IDevice's invalid
 // CreateTimestampQueryPool, so callers either skip these or use a

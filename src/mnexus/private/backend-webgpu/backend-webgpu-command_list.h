@@ -115,6 +115,7 @@ public:
   IMPL_VAPI(void, EndVideoCoding);
   IMPL_VAPI(void, ControlVideoCodingReset);
   IMPL_VAPI(void, DecodeVideoH265, mnexus::DecodeVideoH265Desc const& desc);
+  IMPL_VAPI(void, EncodeVideoH265, mnexus::EncodeVideoH265Desc const& desc);
 
   //
   // Timestamp queries (no-op on WebGPU; the public Create returns invalid).

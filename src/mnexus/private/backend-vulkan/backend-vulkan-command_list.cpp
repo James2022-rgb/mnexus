@@ -792,6 +792,10 @@ public:
 #endif
   }
 
+  IMPL_VAPI(void, EncodeVideoH265, mnexus::EncodeVideoH265Desc const& /*desc*/) {
+    MBASE_LOG_ERROR("EncodeVideoH265 is not yet implemented on the Vulkan backend.");
+  }
+
   //
   // Timestamp queries
   //

@@ -697,6 +697,45 @@ public:
     // No-op: Create always returns invalid.
   }
 
+  IMPL_VAPI(MnBool32, QueryVideoEncodeH265Capabilities,
+    mnexus::VideoH265Profile /*profile*/,
+    mnexus::VideoBitDepth    /*bit_depth*/,
+    mnexus::VideoEncodeH265Capabilities& /*out_caps*/
+  ) {
+    // WebGPU has no Vulkan Video equivalent.
+    return MnBoolFalse;
+  }
+
+  IMPL_VAPI(mnexus::VideoSessionHandle, CreateVideoSessionEncodeH265,
+    mnexus::VideoSessionEncodeH265Desc const& /*desc*/
+  ) {
+    MBASE_LOG_ERROR("CreateVideoSessionEncodeH265 is not supported by the WebGPU backend.");
+    return mnexus::VideoSessionHandle::Invalid();
+  }
+
+  IMPL_VAPI(mnexus::VideoSessionParametersHandle, CreateVideoSessionParametersEncodeH265,
+    mnexus::VideoSessionParametersEncodeH265Desc const& /*desc*/
+  ) {
+    MBASE_LOG_ERROR("CreateVideoSessionParametersEncodeH265 is not supported by the WebGPU backend.");
+    return mnexus::VideoSessionParametersHandle::Invalid();
+  }
+
+  IMPL_VAPI(MnBool32, GetEncodedVideoSessionParametersBytes,
+    mnexus::VideoSessionParametersHandle /*params*/,
+    uint64_t* /*inout_size*/,
+    void*     /*out_data*/
+  ) {
+    MBASE_LOG_ERROR("GetEncodedVideoSessionParametersBytes is not supported by the WebGPU backend.");
+    return MnBoolFalse;
+  }
+
+  IMPL_VAPI(MnBool32, GetLastEncodedBytesWritten,
+    mnexus::VideoSessionHandle /*session*/,
+    uint64_t* /*out_bytes*/
+  ) {
+    return MnBoolFalse;
+  }
+
   //
   // Timestamp queries
   //
