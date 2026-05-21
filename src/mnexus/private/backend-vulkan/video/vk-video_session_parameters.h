@@ -47,6 +47,13 @@ struct VideoSessionParametersHot final {
 struct VideoSessionParametersCold final {
   /// Originating session handle, kept for diagnostic / lifetime traceability.
   resource_pool::ResourceHandle session_handle = resource_pool::ResourceHandle::Null();
+
+  /// Annex B concatenation of the encoded VPS + SPS + PPS bytes generated
+  /// by the driver via `vkGetEncodedVideoSessionParametersKHR`. Populated
+  /// only by the encode factory; left empty for decode parameters (decode
+  /// already has the bytes in `mnexus::VideoSessionParametersDecodeH265Desc`,
+  /// no need to cache).
+  std::vector<uint8_t> encoded_vps_sps_pps_bytes;
 };
 
 using VideoSessionParametersResourcePool = resource_pool::TResourceGenerationalPool<
@@ -66,6 +73,21 @@ resource_pool::ResourceHandle EmplaceVideoSessionParametersResourcePoolDecodeH26
   IVulkanDevice& vk_device,
   VideoSessionResourcePool const& session_pool,
   mnexus::VideoSessionParametersDecodeH265Desc const& desc
+);
+
+/// Authors `StdVideoH265*` VPS / SPS / PPS structs from `desc`, creates
+/// a `VkVideoSessionParametersKHR` for the encode session referenced by
+/// `desc.session`, and reads back the driver-encoded VPS / SPS / PPS
+/// NAL bytes via `vkGetEncodedVideoSessionParametersKHR`. The bytes are
+/// cached in `VideoSessionParametersCold::encoded_vps_sps_pps_bytes`,
+/// retrievable via `IDevice::GetEncodedVideoSessionParametersBytes`.
+///
+/// Returns `ResourceHandle::Null()` on failure.
+resource_pool::ResourceHandle EmplaceVideoSessionParametersResourcePoolEncodeH265(
+  VideoSessionParametersResourcePool& out_pool,
+  IVulkanDevice& vk_device,
+  VideoSessionResourcePool const& session_pool,
+  mnexus::VideoSessionParametersEncodeH265Desc const& desc
 );
 
 } // namespace mnexus_backend::vulkan

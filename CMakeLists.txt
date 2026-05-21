@@ -634,6 +634,7 @@ if(${_enable_backend_vulkan})
       ${_private_backend_vulkan_dir}/video/vk-video_session.h
       ${_private_backend_vulkan_dir}/video/vk-video_session_parameters.cpp
       ${_private_backend_vulkan_dir}/video/vk-video_session_parameters.h
+      ${_private_backend_vulkan_dir}/video/vk-video_session_parameters_encode.cpp
     )
   endif()
 endif()

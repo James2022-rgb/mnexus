@@ -825,27 +825,93 @@ public:
   }
 
   IMPL_VAPI(mnexus::VideoSessionParametersHandle, CreateVideoSessionParametersEncodeH265,
-    mnexus::VideoSessionParametersEncodeH265Desc const& /*desc*/
+    mnexus::VideoSessionParametersEncodeH265Desc const& desc
   ) {
-    MBASE_LOG_ERROR("CreateVideoSessionParametersEncodeH265 is not yet implemented on the Vulkan backend.");
+#if MNEXUS_ENABLE_VIDEO_CODING
+    resource_pool::ResourceHandle const pool_handle = EmplaceVideoSessionParametersResourcePoolEncodeH265(
+      resource_storage_->video_session_parameters,
+      *vk_device_,
+      resource_storage_->video_sessions,
+      desc
+    );
+    if (pool_handle.IsNull()) {
+      return mnexus::VideoSessionParametersHandle::Invalid();
+    }
+    return mnexus::VideoSessionParametersHandle { pool_handle.AsU64() };
+#else
+    (void)desc;
+    MBASE_LOG_ERROR("CreateVideoSessionParametersEncodeH265 called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
     return mnexus::VideoSessionParametersHandle::Invalid();
+#endif
   }
 
   IMPL_VAPI(MnBool32, GetEncodedVideoSessionParametersBytes,
-    mnexus::VideoSessionParametersHandle /*params*/,
-    uint64_t* /*inout_size*/,
-    void*     /*out_data*/
+    mnexus::VideoSessionParametersHandle params,
+    uint64_t* inout_size,
+    void*     out_data
   ) {
-    MBASE_LOG_ERROR("GetEncodedVideoSessionParametersBytes is not yet implemented on the Vulkan backend.");
+#if MNEXUS_ENABLE_VIDEO_CODING
+    if (inout_size == nullptr) {
+      MBASE_LOG_ERROR("GetEncodedVideoSessionParametersBytes: inout_size must not be null.");
+      return MnBoolFalse;
+    }
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(params.Get());
+    if (pool_handle.IsNull()) {
+      MBASE_LOG_ERROR("GetEncodedVideoSessionParametersBytes: invalid params handle.");
+      return MnBoolFalse;
+    }
+    auto [hot, cold, lock] =
+      resource_storage_->video_session_parameters.GetConstRefWithSharedLockGuard(pool_handle);
+    auto const& bytes = cold.encoded_vps_sps_pps_bytes;
+    if (bytes.empty()) {
+      // Decode-side parameters: no cached encoded bytes (they live in the
+      // caller's hvcC blob). The two-call retrieval is encode-only.
+      MBASE_LOG_ERROR("GetEncodedVideoSessionParametersBytes: handle refers to a decode parameters object.");
+      return MnBoolFalse;
+    }
+
+    uint64_t const required = bytes.size();
+    if (out_data == nullptr) {
+      *inout_size = required;
+      return MnBoolTrue;
+    }
+    if (*inout_size < required) {
+      *inout_size = required;
+      return MnBoolFalse;
+    }
+    std::memcpy(out_data, bytes.data(), static_cast<size_t>(required));
+    *inout_size = required;
+    return MnBoolTrue;
+#else
+    (void)params; (void)inout_size; (void)out_data;
+    MBASE_LOG_ERROR("GetEncodedVideoSessionParametersBytes called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
     return MnBoolFalse;
+#endif
   }
 
   IMPL_VAPI(MnBool32, GetLastEncodedBytesWritten,
-    mnexus::VideoSessionHandle /*session*/,
-    uint64_t* /*out_bytes*/
+    mnexus::VideoSessionHandle session,
+    uint64_t* out_bytes
   ) {
-    MBASE_LOG_ERROR("GetLastEncodedBytesWritten is not yet implemented on the Vulkan backend.");
+#if MNEXUS_ENABLE_VIDEO_CODING
+    if (out_bytes == nullptr) {
+      return MnBoolFalse;
+    }
+    auto const pool_handle = resource_pool::ResourceHandle::FromU64(session.Get());
+    if (pool_handle.IsNull()) {
+      return MnBoolFalse;
+    }
+    auto [hot, cold, lock] =
+      resource_storage_->video_sessions.GetConstRefWithSharedLockGuard(pool_handle);
+    if (!hot.last_encoded_bytes_written_valid) {
+      return MnBoolFalse;
+    }
+    *out_bytes = hot.last_encoded_bytes_written;
+    return MnBoolTrue;
+#else
+    (void)session; (void)out_bytes;
     return MnBoolFalse;
+#endif
   }
 
   // ----------------------------------------------------------------------------------------------
