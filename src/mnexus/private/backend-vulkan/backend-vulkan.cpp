@@ -903,6 +903,32 @@ public:
     }
     auto [hot, cold, lock] =
       resource_storage_->video_sessions.GetConstRefWithSharedLockGuard(pool_handle);
+
+    // If a feedback query result is pending, drain it inline (blocks on
+    // the prior encode submission). Lets synchronous one-frame-at-a-time
+    // callers retrieve the byte count without having to issue a dummy
+    // BeginVideoCoding to trigger the drain.
+    if (hot.encode_feedback_pending && hot.encode_feedback_query_pool != VK_NULL_HANDLE) {
+      uint32_t bytes_written = 0;
+      VkResult const r = vkGetQueryPoolResults(
+        this->vk_device_->handle(),
+        hot.encode_feedback_query_pool,
+        0, 1,
+        sizeof(bytes_written),
+        &bytes_written,
+        sizeof(bytes_written),
+        VK_QUERY_RESULT_WAIT_BIT
+      );
+      if (r == VK_SUCCESS) {
+        hot.last_encoded_bytes_written       = bytes_written;
+        hot.last_encoded_bytes_written_valid = true;
+        hot.encode_feedback_pending          = false;
+      } else {
+        MBASE_LOG_ERROR("GetLastEncodedBytesWritten: vkGetQueryPoolResults failed: {}", string_VkResult(r));
+        return MnBoolFalse;
+      }
+    }
+
     if (!hot.last_encoded_bytes_written_valid) {
       return MnBoolFalse;
     }

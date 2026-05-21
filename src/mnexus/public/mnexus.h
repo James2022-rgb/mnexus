@@ -769,12 +769,19 @@ public:
   );
 
   /// Reports the byte count written by the most recently completed
-  /// `EncodeVideoH265` on `session`. The value becomes valid only after the
-  /// next `BeginVideoCoding` on the same session has executed (that scope
-  /// drains the prior submission's feedback query). Returns `MnBoolTrue`
-  /// and writes `*out_bytes` when a valid result is available; returns
+  /// `EncodeVideoH265` on `session`.
+  ///
+  /// Drains the encode feedback query inline if a result is pending,
+  /// blocking on the prior encode submission's completion. Lets a
+  /// synchronous "encode one frame, read bytes, encode next" loop work
+  /// without having to bracket the readback in a dummy `BeginVideoCoding`.
+  /// Pipelined callers can still rely on the next `BeginVideoCoding` to
+  /// drain instead -- the two paths are idempotent.
+  ///
+  /// Returns `MnBoolTrue` and writes `*out_bytes` on success; returns
   /// `MnBoolFalse` (leaving `*out_bytes` untouched) when no result has
-  /// landed yet, the session is decode-only, or video coding is disabled.
+  /// landed yet, the driver query read fails, the session is decode-only,
+  /// or video coding is disabled.
   _MNEXUS_VAPI(MnBool32, GetLastEncodedBytesWritten,
     VideoSessionHandle session,
     uint64_t*          out_bytes
