@@ -75,8 +75,41 @@ struct VideoDecodeH265Capabilities final {
   std::optional<VideoDecodeH265Properties> main10_10bit;
 };
 
+struct VideoEncodeH265Properties final {
+  VkVideoCapabilitiesKHR coding_capabilities {}; // pNext is nullptr in this struct.
+  /// `VkVideoEncodeCapabilitiesKHR`-derived fields (codec-agnostic encode caps).
+  VkVideoEncodeCapabilityFlagsKHR      encode_flags {};
+  VkVideoEncodeRateControlModeFlagsKHR rate_control_modes {};
+  uint32_t                             max_rate_control_layers {};
+  uint64_t                             max_bitrate {};
+  uint32_t                             max_quality_levels {};
+  VkExtent2D                           encode_input_picture_granularity {};
+  VkVideoEncodeFeedbackFlagsKHR        supported_encode_feedback_flags {};
+
+  /// `VkVideoEncodeH265CapabilitiesKHR`-derived fields (subset that the
+  /// current impl actually consults; extend as needed).
+  VkVideoEncodeH265CapabilityFlagsKHR encode_h265_flags {};
+  StdVideoH265LevelIdc                max_level_idc {};
+  uint32_t                            max_p_picture_l0_reference_count {};
+  uint32_t                            max_b_picture_l0_reference_count {};
+  uint32_t                            max_l1_reference_count {};
+  int32_t                             min_qp {};
+  int32_t                             max_qp {};
+
+  /// First entry of `vkGetPhysicalDeviceVideoFormatPropertiesKHR` for the
+  /// (VIDEO_ENCODE_SRC + VIDEO_ENCODE_DPB) usage combination.
+  VkVideoFormatPropertiesKHR format_properties {};
+};
+
+struct VideoEncodeH265Capabilities final {
+  /// Main profile (8-bit, 4:2:0). The only encode profile mnexus currently
+  /// probes; Main10 and other profiles will follow when needed.
+  std::optional<VideoEncodeH265Properties> main;
+};
+
 struct VideoCodingCapabilities final {
   VideoDecodeH265Capabilities decode_h265;
+  VideoEncodeH265Capabilities encode_h265;
 };
 
 struct QueueFamilyProperties final {

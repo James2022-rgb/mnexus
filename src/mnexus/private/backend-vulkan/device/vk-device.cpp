@@ -330,14 +330,18 @@ std::unique_ptr<IVulkanDevice> IVulkanDevice::Create(
     // capability and format support; we just consult the cached result here.
     if (desc.physical_device_desc->video_coding_capabilities().has_value()) {
       device_extensions.push_back(VK_KHR_VIDEO_QUEUE_EXTENSION_NAME);
-      device_extensions.push_back(VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME);
       device_extensions.push_back(VK_KHR_VIDEO_MAINTENANCE_1_EXTENSION_NAME);
 
       VideoCodingCapabilities const& caps = desc.physical_device_desc->video_coding_capabilities().value();
       if (caps.decode_h265.main.has_value()
         || caps.decode_h265.main10_8bit.has_value()
         || caps.decode_h265.main10_10bit.has_value()) {
+        device_extensions.push_back(VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME);
         device_extensions.push_back(VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME);
+      }
+      if (caps.encode_h265.main.has_value()) {
+        device_extensions.push_back(VK_KHR_VIDEO_ENCODE_QUEUE_EXTENSION_NAME);
+        device_extensions.push_back(VK_KHR_VIDEO_ENCODE_H265_EXTENSION_NAME);
       }
     }
   }

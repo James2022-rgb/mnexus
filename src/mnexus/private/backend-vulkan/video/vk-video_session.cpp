@@ -278,7 +278,238 @@ resource_pool::ResourceHandle EmplaceVideoSessionResourcePoolDecodeH265(
     .vk_video_session         = std::move(vk_video_session),
     .result_status_query_pool = result_status_query_pool,
   };
-  VideoSessionCold cold { .desc = desc };
+  VideoSessionCold cold { .decode_desc = desc };
+
+  return out_pool.Emplace(
+    std::forward_as_tuple(std::move(hot)),
+    std::forward_as_tuple(std::move(cold))
+  );
+}
+
+namespace {
+
+/// Resolve the internal H.265 encode caps slot probed by `PhysicalDeviceDesc::Query`.
+/// Current impl probes only (Main, 8-bit); other combinations return nullptr.
+VideoEncodeH265Properties const* SelectInternalEncodeH265Slot(
+  VideoEncodeH265Capabilities const& caps,
+  mnexus::VideoH265Profile profile,
+  mnexus::VideoBitDepth bit_depth
+) {
+  if (profile == mnexus::VideoH265Profile::kMain && bit_depth == mnexus::VideoBitDepth::k8) {
+    return caps.main.has_value() ? &*caps.main : nullptr;
+  }
+  return nullptr;
+}
+
+StdVideoH265LevelIdc ToStdVideoH265LevelIdc(mnexus::VideoH265Level level) {
+  // VideoH265Level::k1_0 (= 0) maps to STD_VIDEO_H265_LEVEL_IDC_1_0 (= 0) and
+  // so on through k6_2 / STD_VIDEO_H265_LEVEL_IDC_6_2 by construction; the
+  // assert in backend-vulkan.cpp guards the invariant.
+  return static_cast<StdVideoH265LevelIdc>(level);
+}
+
+} // anonymous namespace
+
+resource_pool::ResourceHandle EmplaceVideoSessionResourcePoolEncodeH265(
+  VideoSessionResourcePool& out_pool,
+  IVulkanDevice& vk_device,
+  mnexus::VideoSessionEncodeH265Desc const& desc
+) {
+  if (!vk_device.IsExtensionEnabled(VK_KHR_VIDEO_QUEUE_EXTENSION_NAME)
+   || !vk_device.IsExtensionEnabled(VK_KHR_VIDEO_ENCODE_QUEUE_EXTENSION_NAME)
+   || !vk_device.IsExtensionEnabled(VK_KHR_VIDEO_ENCODE_H265_EXTENSION_NAME)) {
+    MBASE_LOG_ERROR("CreateVideoSessionEncodeH265: required Vulkan Video encode extensions not enabled.");
+    return resource_pool::ResourceHandle::Null();
+  }
+
+  auto const& selection = vk_device.queue_selection();
+  if (!selection.dedicated_video_encode.has_value()) {
+    MBASE_LOG_ERROR("CreateVideoSessionEncodeH265: no video encode queue family was selected.");
+    return resource_pool::ResourceHandle::Null();
+  }
+
+  auto const& opt_caps = vk_device.physical_device_desc().video_coding_capabilities();
+  if (!opt_caps.has_value()) {
+    MBASE_LOG_ERROR("CreateVideoSessionEncodeH265: no video coding capabilities probed for this device.");
+    return resource_pool::ResourceHandle::Null();
+  }
+  VideoEncodeH265Properties const* slot =
+    SelectInternalEncodeH265Slot(opt_caps->encode_h265, desc.profile, desc.bit_depth);
+  if (slot == nullptr) {
+    MBASE_LOG_ERROR("CreateVideoSessionEncodeH265: requested (profile, bit_depth) combination is not supported by the device.");
+    return resource_pool::ResourceHandle::Null();
+  }
+
+  VkVideoComponentBitDepthFlagsKHR const bit_depth_flag = ToVkVideoComponentBitDepth(desc.bit_depth);
+  VkVideoEncodeH265ProfileInfoKHR h265_profile_info {
+    .sType         = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_PROFILE_INFO_KHR,
+    .pNext         = nullptr,
+    .stdProfileIdc = ToStdVideoH265ProfileIdc(desc.profile),
+  };
+  VkVideoProfileInfoKHR profile_info {
+    .sType               = VK_STRUCTURE_TYPE_VIDEO_PROFILE_INFO_KHR,
+    .pNext               = &h265_profile_info,
+    .videoCodecOperation = VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR,
+    .chromaSubsampling   = VK_VIDEO_CHROMA_SUBSAMPLING_420_BIT_KHR,
+    .lumaBitDepth        = bit_depth_flag,
+    .chromaBitDepth      = bit_depth_flag,
+  };
+
+  // Encode H.265 session create info carries the upper bound on the level
+  // that any VideoSessionParameters built against this session may use.
+  StdVideoH265LevelIdc const max_level_idc = ToStdVideoH265LevelIdc(desc.max_level);
+  VkVideoEncodeH265SessionCreateInfoKHR encode_session_create_info {
+    .sType          = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_CREATE_INFO_KHR,
+    .pNext          = nullptr,
+    .useMaxLevelIdc = VK_TRUE,
+    .maxLevelIdc    = max_level_idc,
+  };
+
+  VkFormat const picture_vk_format = ToVkFormat(desc.picture_format);
+  VkVideoSessionCreateInfoKHR create_info {
+    .sType                          = VK_STRUCTURE_TYPE_VIDEO_SESSION_CREATE_INFO_KHR,
+    .pNext                          = &encode_session_create_info,
+    .queueFamilyIndex               = selection.dedicated_video_encode->queue_family_index,
+    .flags                          = 0,
+    .pVideoProfile                  = &profile_info,
+    .pictureFormat                  = picture_vk_format,
+    .maxCodedExtent                 = VkExtent2D { desc.max_coded_extent.width, desc.max_coded_extent.height },
+    .referencePictureFormat         = picture_vk_format,
+    .maxDpbSlots                    = desc.max_dpb_slots,
+    .maxActiveReferencePictures     = desc.max_active_reference_pictures,
+    .pStdHeaderVersion              = &slot->coding_capabilities.stdHeaderVersion,
+  };
+
+  VkDevice const vk_device_handle = vk_device.handle();
+  VkVideoSessionKHR vk_session = VK_NULL_HANDLE;
+  VkResult result = vkCreateVideoSessionKHR(vk_device_handle, &create_info, nullptr, &vk_session);
+  if (result != VK_SUCCESS) {
+    MBASE_LOG_ERROR("vkCreateVideoSessionKHR (encode) failed: {}", string_VkResult(result));
+    return resource_pool::ResourceHandle::Null();
+  }
+
+  // Memory binding -- same shape as the decode side. Encode sessions also
+  // need driver-private working memory allocated through vkAllocateMemory.
+  uint32_t requirement_count = 0;
+  vkGetVideoSessionMemoryRequirementsKHR(vk_device_handle, vk_session, &requirement_count, nullptr);
+
+  std::vector<VkVideoSessionMemoryRequirementsKHR> requirements(requirement_count);
+  for (auto& req : requirements) {
+    req.sType = VK_STRUCTURE_TYPE_VIDEO_SESSION_MEMORY_REQUIREMENTS_KHR;
+    req.pNext = nullptr;
+  }
+  vkGetVideoSessionMemoryRequirementsKHR(vk_device_handle, vk_session, &requirement_count, requirements.data());
+
+  std::vector<VkDeviceMemory> allocated_memories;
+  std::vector<VkBindVideoSessionMemoryInfoKHR> bind_infos;
+  allocated_memories.reserve(requirement_count);
+  bind_infos.reserve(requirement_count);
+
+  auto cleanup_on_failure = [&] {
+    for (VkDeviceMemory mem : allocated_memories) {
+      vkFreeMemory(vk_device_handle, mem, nullptr);
+    }
+    vkDestroyVideoSessionKHR(vk_device_handle, vk_session, nullptr);
+  };
+
+  auto const& mem_props = vk_device.physical_device_desc().memory_properties();
+  for (auto const& req : requirements) {
+    std::optional<uint32_t> const opt_type_idx = PickVideoSessionMemoryType(
+      mem_props,
+      req.memoryRequirements.memoryTypeBits
+    );
+    if (!opt_type_idx.has_value()) {
+      MBASE_LOG_ERROR("CreateVideoSessionEncodeH265: no memory type satisfies binding {} (memoryTypeBits=0x{:x}).",
+        req.memoryBindIndex, req.memoryRequirements.memoryTypeBits);
+      cleanup_on_failure();
+      return resource_pool::ResourceHandle::Null();
+    }
+
+    VkMemoryAllocateInfo alloc_info {
+      .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .pNext           = nullptr,
+      .allocationSize  = req.memoryRequirements.size,
+      .memoryTypeIndex = *opt_type_idx,
+    };
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    result = vkAllocateMemory(vk_device_handle, &alloc_info, nullptr, &memory);
+    if (result != VK_SUCCESS) {
+      MBASE_LOG_ERROR("vkAllocateMemory for encode video session binding {} failed: {}", req.memoryBindIndex, string_VkResult(result));
+      cleanup_on_failure();
+      return resource_pool::ResourceHandle::Null();
+    }
+    allocated_memories.push_back(memory);
+
+    bind_infos.push_back(VkBindVideoSessionMemoryInfoKHR {
+      .sType           = VK_STRUCTURE_TYPE_BIND_VIDEO_SESSION_MEMORY_INFO_KHR,
+      .pNext           = nullptr,
+      .memoryBindIndex = req.memoryBindIndex,
+      .memory          = memory,
+      .memoryOffset    = 0,
+      .memorySize      = req.memoryRequirements.size,
+    });
+  }
+
+  result = vkBindVideoSessionMemoryKHR(
+    vk_device_handle, vk_session,
+    static_cast<uint32_t>(bind_infos.size()), bind_infos.data()
+  );
+  if (result != VK_SUCCESS) {
+    MBASE_LOG_ERROR("vkBindVideoSessionMemoryKHR (encode) failed: {}", string_VkResult(result));
+    cleanup_on_failure();
+    return resource_pool::ResourceHandle::Null();
+  }
+
+  // Feedback query pool -- single slot for the most recent encode. The
+  // pNext chain carries `VkQueryPoolVideoEncodeFeedbackCreateInfoKHR`
+  // (asks for the bytes-written feedback) followed by the session's
+  // profile info. Per spec the pool's profile must match the session's.
+  VkQueryPool encode_feedback_query_pool = VK_NULL_HANDLE;
+  {
+    VkQueryPoolVideoEncodeFeedbackCreateInfoKHR encode_feedback_info {
+      .sType               = VK_STRUCTURE_TYPE_QUERY_POOL_VIDEO_ENCODE_FEEDBACK_CREATE_INFO_KHR,
+      .pNext               = &profile_info,
+      .encodeFeedbackFlags = VK_VIDEO_ENCODE_FEEDBACK_BITSTREAM_BYTES_WRITTEN_BIT_KHR,
+    };
+    if ((slot->supported_encode_feedback_flags & VK_VIDEO_ENCODE_FEEDBACK_BITSTREAM_BYTES_WRITTEN_BIT_KHR) == 0) {
+      MBASE_LOG_ERROR("CreateVideoSessionEncodeH265: driver does not advertise VK_VIDEO_ENCODE_FEEDBACK_BITSTREAM_BYTES_WRITTEN_BIT_KHR.");
+      cleanup_on_failure();
+      return resource_pool::ResourceHandle::Null();
+    }
+    VkQueryPoolCreateInfo const query_pool_create_info {
+      .sType              = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+      .pNext              = &encode_feedback_info,
+      .flags              = 0,
+      .queryType          = VK_QUERY_TYPE_VIDEO_ENCODE_FEEDBACK_KHR,
+      .queryCount         = 1,
+      .pipelineStatistics = 0,
+    };
+    VkResult const r = vkCreateQueryPool(vk_device_handle, &query_pool_create_info, nullptr, &encode_feedback_query_pool);
+    if (r != VK_SUCCESS) {
+      MBASE_LOG_ERROR("CreateVideoSessionEncodeH265: vkCreateQueryPool (VIDEO_ENCODE_FEEDBACK_KHR) failed: {}", string_VkResult(r));
+      cleanup_on_failure();
+      return resource_pool::ResourceHandle::Null();
+    }
+  }
+
+  VulkanVideoSession vk_video_session(
+    vk_session,
+    [vk_device_handle, vk_session, allocated = std::move(allocated_memories), encode_feedback_query_pool] {
+      vkDestroyQueryPool(vk_device_handle, encode_feedback_query_pool, nullptr);
+      for (VkDeviceMemory mem : allocated) {
+        vkFreeMemory(vk_device_handle, mem, nullptr);
+      }
+      vkDestroyVideoSessionKHR(vk_device_handle, vk_session, nullptr);
+    },
+    vk_device.GetDeferredDestroyer()
+  );
+
+  VideoSessionHot hot {
+    .vk_video_session               = std::move(vk_video_session),
+    .encode_feedback_query_pool     = encode_feedback_query_pool,
+    .encode_needs_rate_control_init = true,
+  };
+  VideoSessionCold cold { .encode_desc = desc };
 
   return out_pool.Emplace(
     std::forward_as_tuple(std::move(hot)),

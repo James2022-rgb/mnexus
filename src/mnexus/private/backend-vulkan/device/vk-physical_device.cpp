@@ -323,6 +323,128 @@ PhysicalDeviceDesc PhysicalDeviceDesc::Query(VulkanInstance const& instance, VkP
         }
       }
     }
+
+    // Encode H.265 probe. Independent of the decode probe above: a device
+    // may expose encode without decode (or vice versa).
+    if (result.QueryExtensionSupport(VK_KHR_VIDEO_ENCODE_QUEUE_EXTENSION_NAME)
+     && result.QueryExtensionSupport(VK_KHR_VIDEO_ENCODE_H265_EXTENSION_NAME)) {
+      constexpr VkImageUsageFlags kRequiredEncodeImageUsage =
+          VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT_KHR
+        | VK_IMAGE_USAGE_VIDEO_ENCODE_DPB_BIT_KHR
+        | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+
+      auto query_video_encode_h265_support = [vk_physical_device](
+        StdVideoH265ProfileIdc std_profile_idc,
+        VkVideoComponentBitDepthFlagsKHR bit_depth
+      ) -> std::optional<VideoEncodeH265Properties> {
+        VkVideoProfileInfoKHR profile_info {
+          .sType = VK_STRUCTURE_TYPE_VIDEO_PROFILE_INFO_KHR,
+          .pNext = nullptr,
+          .videoCodecOperation = VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR,
+          .chromaSubsampling = VK_VIDEO_CHROMA_SUBSAMPLING_420_BIT_KHR,
+          .lumaBitDepth = bit_depth,
+          .chromaBitDepth = bit_depth,
+        };
+
+        VkVideoEncodeH265ProfileInfoKHR encode_h265_profile_info{};
+        encode_h265_profile_info.sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_PROFILE_INFO_KHR;
+        encode_h265_profile_info.stdProfileIdc = std_profile_idc;
+        profile_info.pNext = &encode_h265_profile_info;
+
+        VkVideoCapabilitiesKHR caps{};
+        caps.sType = VK_STRUCTURE_TYPE_VIDEO_CAPABILITIES_KHR;
+
+        VkVideoEncodeCapabilitiesKHR encode_caps{};
+        encode_caps.sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_CAPABILITIES_KHR;
+        caps.pNext = &encode_caps;
+
+        VkVideoEncodeH265CapabilitiesKHR encode_h265_caps{};
+        encode_h265_caps.sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_CAPABILITIES_KHR;
+        encode_caps.pNext = &encode_h265_caps;
+
+        VkResult const video_caps_result = vkGetPhysicalDeviceVideoCapabilitiesKHR(vk_physical_device, &profile_info, &caps);
+        if (video_caps_result != VK_SUCCESS) {
+          MBASE_LOG_WARN("vkGetPhysicalDeviceVideoCapabilitiesKHR (encode H.265) failed: {}", string_VkResult(video_caps_result));
+          return std::nullopt;
+        }
+
+        if (!(encode_caps.rateControlModes & VK_VIDEO_ENCODE_RATE_CONTROL_MODE_DISABLED_BIT_KHR)) {
+          MBASE_LOG_WARN("Encode H.265 does not advertise rateControlModes DISABLED (CQP); skipping.");
+          return std::nullopt;
+        }
+
+        VkVideoProfileListInfoKHR profile_list_info {
+          .sType = VK_STRUCTURE_TYPE_VIDEO_PROFILE_LIST_INFO_KHR,
+          .pNext = nullptr,
+          .profileCount = 1,
+          .pProfiles = &profile_info,
+        };
+
+        VkPhysicalDeviceVideoFormatInfoKHR format_info {
+          .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_FORMAT_INFO_KHR,
+          .pNext = &profile_list_info,
+          .imageUsage = kRequiredEncodeImageUsage,
+        };
+
+        uint32_t format_props_value_count = 0;
+        vkGetPhysicalDeviceVideoFormatPropertiesKHR(vk_physical_device, &format_info, &format_props_value_count, nullptr);
+
+        if (format_props_value_count == 0) {
+          // Drivers that need SRC and DPB to be different formats reject the
+          // combined usage. Retry SRC-only to at least learn the input format.
+          format_info.imageUsage = VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT_KHR | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+          vkGetPhysicalDeviceVideoFormatPropertiesKHR(vk_physical_device, &format_info, &format_props_value_count, nullptr);
+        }
+        if (format_props_value_count == 0) {
+          MBASE_LOG_WARN("No video format properties returned by vkGetPhysicalDeviceVideoFormatPropertiesKHR for H.265 encode support query.");
+          return std::nullopt;
+        }
+
+        std::vector<VkVideoFormatPropertiesKHR> format_props_values(format_props_value_count);
+        for (auto& v : format_props_values) {
+          v.sType = VK_STRUCTURE_TYPE_VIDEO_FORMAT_PROPERTIES_KHR;
+          v.pNext = nullptr;
+        }
+        VkResult const video_format_result = vkGetPhysicalDeviceVideoFormatPropertiesKHR(vk_physical_device, &format_info, &format_props_value_count, format_props_values.data());
+        if (video_format_result != VK_SUCCESS) {
+          MBASE_LOG_WARN("vkGetPhysicalDeviceVideoFormatPropertiesKHR (encode H.265) failed: {}", string_VkResult(video_format_result));
+          return std::nullopt;
+        }
+
+        // Strip pNext from the cached copy: the chain points at stack-local memory.
+        caps.pNext = nullptr;
+        VkVideoFormatPropertiesKHR format_properties = format_props_values.front();
+        format_properties.pNext = nullptr;
+        return VideoEncodeH265Properties {
+          .coding_capabilities = caps,
+          .encode_flags = encode_caps.flags,
+          .rate_control_modes = encode_caps.rateControlModes,
+          .max_rate_control_layers = encode_caps.maxRateControlLayers,
+          .max_bitrate = encode_caps.maxBitrate,
+          .max_quality_levels = encode_caps.maxQualityLevels,
+          .encode_input_picture_granularity = encode_caps.encodeInputPictureGranularity,
+          .supported_encode_feedback_flags = encode_caps.supportedEncodeFeedbackFlags,
+          .encode_h265_flags = encode_h265_caps.flags,
+          .max_level_idc = encode_h265_caps.maxLevelIdc,
+          .max_p_picture_l0_reference_count = encode_h265_caps.maxPPictureL0ReferenceCount,
+          .max_b_picture_l0_reference_count = encode_h265_caps.maxBPictureL0ReferenceCount,
+          .max_l1_reference_count = encode_h265_caps.maxL1ReferenceCount,
+          .min_qp = encode_h265_caps.minQp,
+          .max_qp = encode_h265_caps.maxQp,
+          .format_properties = format_properties,
+        };
+      };
+
+      std::optional<VideoEncodeH265Properties> encode_h265_main =
+        query_video_encode_h265_support(STD_VIDEO_H265_PROFILE_IDC_MAIN, VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR);
+
+      if (encode_h265_main.has_value()) {
+        if (!result.video_coding_capabilities_.has_value()) {
+          result.video_coding_capabilities_ = VideoCodingCapabilities{};
+        }
+        result.video_coding_capabilities_->encode_h265.main = std::move(encode_h265_main);
+      }
+    }
   }
 
   return result;

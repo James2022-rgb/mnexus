@@ -127,6 +127,72 @@ VideoDecodeH265Properties const* SelectDecodeH265Slot(
   // (kMain, k10) is never valid: the Main profile is 8-bit only.
   return nullptr;
 }
+
+/// Translate the backend-internal `VideoEncodeH265Properties` into the
+/// public `mnexus::VideoEncodeH265Capabilities` shape.
+mnexus::VideoEncodeH265Capabilities ToPublicVideoEncodeH265Capabilities(
+  VideoEncodeH265Properties const& props
+) {
+  mnexus::VideoEncodeH265Capabilities out {};
+
+  // VkVideoCapabilitiesKHR -> VideoCommonCapabilities
+  out.common.picture_access_granularity = mnexus::Extent2d {
+    .width  = props.coding_capabilities.pictureAccessGranularity.width,
+    .height = props.coding_capabilities.pictureAccessGranularity.height,
+  };
+  out.common.min_coded_extent = mnexus::Extent2d {
+    .width  = props.coding_capabilities.minCodedExtent.width,
+    .height = props.coding_capabilities.minCodedExtent.height,
+  };
+  out.common.max_coded_extent = mnexus::Extent2d {
+    .width  = props.coding_capabilities.maxCodedExtent.width,
+    .height = props.coding_capabilities.maxCodedExtent.height,
+  };
+  out.common.min_bitstream_buffer_offset_alignment = props.coding_capabilities.minBitstreamBufferOffsetAlignment;
+  out.common.min_bitstream_buffer_size_alignment   = props.coding_capabilities.minBitstreamBufferSizeAlignment;
+  out.common.max_dpb_slots                         = props.coding_capabilities.maxDpbSlots;
+  out.common.max_active_reference_pictures         = props.coding_capabilities.maxActiveReferencePictures;
+  out.common.protected_content =
+    (props.coding_capabilities.flags & VK_VIDEO_CAPABILITY_PROTECTED_CONTENT_BIT_KHR) != 0
+      ? MnBoolTrue : MnBoolFalse;
+  out.common.separate_reference_images =
+    (props.coding_capabilities.flags & VK_VIDEO_CAPABILITY_SEPARATE_REFERENCE_IMAGES_BIT_KHR) != 0
+      ? MnBoolTrue : MnBoolFalse;
+
+  // VkVideoEncodeCapabilitiesKHR -> VideoEncodeCommonCapabilities
+  out.encode_common.rate_control_supports_disabled =
+    (props.rate_control_modes & VK_VIDEO_ENCODE_RATE_CONTROL_MODE_DISABLED_BIT_KHR) != 0
+      ? MnBoolTrue : MnBoolFalse;
+  out.encode_common.max_rate_control_layer_count = props.max_rate_control_layers;
+  out.encode_common.max_quality_levels           = props.max_quality_levels;
+
+  // StdVideoH265LevelIdc -> mnexus::VideoH265Level.
+  out.max_level = static_cast<mnexus::VideoH265Level>(props.max_level_idc);
+
+  // VkFormat -> mnexus::Format
+  out.picture_format = FromVkFormat(props.format_properties.format);
+
+  // Clamp uint32 -> uint8 for the public API field (which assumes the
+  // common case of 0..8 references; values beyond that are uncommon).
+  out.max_p_picture_l0_reference_count = static_cast<uint8_t>(
+    std::min<uint32_t>(props.max_p_picture_l0_reference_count, 255u));
+
+  return out;
+}
+
+/// Pick which internal slot corresponds to the requested (profile, bit_depth).
+/// The current impl probes only (Main, 8-bit); other combinations return
+/// nullptr until support is added.
+VideoEncodeH265Properties const* SelectEncodeH265Slot(
+  VideoEncodeH265Capabilities const& caps,
+  mnexus::VideoH265Profile profile,
+  mnexus::VideoBitDepth bit_depth
+) {
+  if (profile == mnexus::VideoH265Profile::kMain && bit_depth == mnexus::VideoBitDepth::k8) {
+    return caps.main.has_value() ? &*caps.main : nullptr;
+  }
+  return nullptr;
+}
 #endif // MNEXUS_ENABLE_VIDEO_CODING
 
 } // anonymous namespace
@@ -714,19 +780,48 @@ public:
   }
 
   IMPL_VAPI(MnBool32, QueryVideoEncodeH265Capabilities,
-    mnexus::VideoH265Profile /*profile*/,
-    mnexus::VideoBitDepth    /*bit_depth*/,
-    mnexus::VideoEncodeH265Capabilities& /*out_caps*/
+    mnexus::VideoH265Profile profile,
+    mnexus::VideoBitDepth    bit_depth,
+    mnexus::VideoEncodeH265Capabilities& out_caps
   ) {
-    MBASE_LOG_ERROR("QueryVideoEncodeH265Capabilities is not yet implemented on the Vulkan backend.");
+#if MNEXUS_ENABLE_VIDEO_CODING
+    auto const& opt_caps = vk_device_->physical_device_desc().video_coding_capabilities();
+    if (!opt_caps.has_value()) {
+      return MnBoolFalse;
+    }
+
+    VideoEncodeH265Properties const* slot = SelectEncodeH265Slot(opt_caps->encode_h265, profile, bit_depth);
+    if (slot == nullptr) {
+      return MnBoolFalse;
+    }
+
+    out_caps = ToPublicVideoEncodeH265Capabilities(*slot);
+    return MnBoolTrue;
+#else
+    (void)profile; (void)bit_depth; (void)out_caps;
+    MBASE_LOG_ERROR("QueryVideoEncodeH265Capabilities called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
     return MnBoolFalse;
+#endif
   }
 
   IMPL_VAPI(mnexus::VideoSessionHandle, CreateVideoSessionEncodeH265,
-    mnexus::VideoSessionEncodeH265Desc const& /*desc*/
+    mnexus::VideoSessionEncodeH265Desc const& desc
   ) {
-    MBASE_LOG_ERROR("CreateVideoSessionEncodeH265 is not yet implemented on the Vulkan backend.");
+#if MNEXUS_ENABLE_VIDEO_CODING
+    resource_pool::ResourceHandle const pool_handle = EmplaceVideoSessionResourcePoolEncodeH265(
+      resource_storage_->video_sessions,
+      *vk_device_,
+      desc
+    );
+    if (pool_handle.IsNull()) {
+      return mnexus::VideoSessionHandle::Invalid();
+    }
+    return mnexus::VideoSessionHandle { pool_handle.AsU64() };
+#else
+    (void)desc;
+    MBASE_LOG_ERROR("CreateVideoSessionEncodeH265 called but mnexus was built without MNEXUS_ENABLE_VIDEO_CODING");
     return mnexus::VideoSessionHandle::Invalid();
+#endif
   }
 
   IMPL_VAPI(mnexus::VideoSessionParametersHandle, CreateVideoSessionParametersEncodeH265,
