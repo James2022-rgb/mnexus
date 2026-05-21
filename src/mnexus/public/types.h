@@ -251,6 +251,15 @@ typedef enum MnTextureUsageFlagBits {
   /// `MnTextureUsageFlagBitVideoDecodeDst`. For DPB+output coincide
   /// configurations, set both bits on the same texture.
   MnTextureUsageFlagBitVideoDecodeDpb  = 1 << 7,
+  /// Vulkan Video encode source picture (input YUV fed to
+  /// `vkCmdEncodeVideoKHR`). Requires the Vulkan Video encode extensions
+  /// (`VK_KHR_video_encode_queue` + a codec-specific extension) to be
+  /// enabled on the device; rejected on backends without video support.
+  MnTextureUsageFlagBitVideoEncodeSrc  = 1 << 8,
+  /// Vulkan Video encode DPB (reconstructed reference pictures written
+  /// by `vkCmdEncodeVideoKHR`). Same prerequisites as
+  /// `MnTextureUsageFlagBitVideoEncodeSrc`.
+  MnTextureUsageFlagBitVideoEncodeDpb  = 1 << 9,
   MnTextureUsageFlagForce32            = 0x7FFFFFFF,
 } MnTextureUsageFlagBits;
 typedef uint32_t MnTextureUsageFlags;
@@ -332,6 +341,12 @@ enum {
   MnResourceBarrierStateVideoDecodeDpb,
   /// VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR (decode bitstream source image).
   MnResourceBarrierStateVideoDecodeSrc,
+  /// VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR (encode input picture).
+  MnResourceBarrierStateVideoEncodeSrc,
+  /// VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR (encode reconstructed reference
+  /// pictures). Used for both the reconstructed-picture write target and
+  /// the active reference slots inside an encode coding scope.
+  MnResourceBarrierStateVideoEncodeDpb,
 };
 
 typedef enum MnResourceBarrierStageFlagBits {
@@ -352,6 +367,11 @@ typedef enum MnResourceBarrierStageFlagBits {
   /// (release) and destination (acquire) sides of barriers around
   /// `vkCmdDecodeVideoKHR`.
   MnResourceBarrierStageFlagBitVideoDecode           = 1 << 10,
+
+  /// VK_PIPELINE_STAGE_2_VIDEO_ENCODE_BIT_KHR. Used by both the source
+  /// (release) and destination (acquire) sides of barriers around
+  /// `vkCmdEncodeVideoKHR`.
+  MnResourceBarrierStageFlagBitVideoEncode           = 1 << 11,
 
   MnResourceBarrierStageFlagBitForce32 = 0x7FFFFFFF,
 } MnResourceBarrierStageFlagBits;
@@ -611,6 +631,81 @@ typedef struct MnVideoSessionParametersDecodeH265Desc _MN_FINAL {
   uint8_t const* pps_data _MN_INIT(_MN_NULL);
   uint32_t       pps_size _MN_INIT(0);
 } MnVideoSessionParametersDecodeH265Desc;
+
+/// Encode-shared capabilities. Mirrors a subset of `VkVideoEncodeCapabilitiesKHR`
+/// + `VkVideoEncodeCapabilityFlagsKHR`. CQP-only callers only care about
+/// `rate_control_supports_disabled = MnBoolTrue`.
+typedef struct MnVideoEncodeCommonCapabilities _MN_FINAL {
+  /// Driver supports `VK_VIDEO_ENCODE_RATE_CONTROL_MODE_DISABLED_BIT_KHR`,
+  /// i.e. constant-QP encoding (rate control performed by the application).
+  MnBool32 rate_control_supports_disabled _MN_INIT(MnBoolFalse);
+  /// Maximum number of rate-control layers the driver supports. Always >= 1.
+  /// Unused for CQP.
+  uint32_t max_rate_control_layer_count _MN_INIT(0);
+  /// Number of driver-defined quality levels (>= 1). Quality level 0 is the
+  /// fastest preset; the highest index is the slowest / highest quality.
+  uint32_t max_quality_levels _MN_INIT(0);
+} MnVideoEncodeCommonCapabilities;
+
+/// H.265 encode capabilities. Composition of (coding common + encode common
+/// + codec-specific).
+typedef struct MnVideoEncodeH265Capabilities _MN_FINAL {
+  MnVideoCommonCapabilities       common;
+  MnVideoEncodeCommonCapabilities encode_common;
+  MnVideoH265Level                max_level _MN_INIT(MnVideoH265Level1_0);
+  /// Format the driver wants for the input picture AND for DPB pictures.
+  /// e.g. `MnFormatG8_B8R8_2PLANE_420_UNORM` for Main (8-bit 4:2:0).
+  MnFormat                        picture_format _MN_INIT(MnFormatUndefined);
+  /// Upper bound on `list0_dpb_slot_count` in P pictures' picture info.
+  uint8_t                         max_p_picture_l0_reference_count _MN_INIT(0);
+} MnVideoEncodeH265Capabilities;
+
+/// Descriptor for H.265 encode `VideoSession` creation. Mirrors the
+/// operation-specific fields of `VkVideoSessionCreateInfoKHR` (chained
+/// with `VkVideoEncodeH265SessionCreateInfoKHR`).
+typedef struct MnVideoSessionEncodeH265Desc _MN_FINAL {
+  MnVideoH265Profile profile _MN_INIT(MnVideoH265ProfileMain);
+  MnVideoBitDepth    bit_depth _MN_INIT(MnVideoBitDepth8);
+  /// Format used for both the input picture and DPB pictures. Must match
+  /// `MnVideoEncodeH265Capabilities::picture_format` for the chosen profile.
+  MnFormat           picture_format _MN_INIT(MnFormatUndefined);
+  MnExtent2d         max_coded_extent;
+  uint32_t           max_dpb_slots _MN_INIT(0);
+  uint32_t           max_active_reference_pictures _MN_INIT(0);
+  /// Upper bound on the H.265 level that any `VideoSessionParameters` built
+  /// against this session may use.
+  MnVideoH265Level   max_level _MN_INIT(MnVideoH265Level1_0);
+} MnVideoSessionEncodeH265Desc;
+
+/// Descriptor for H.265 encode `VideoSessionParameters` creation. The
+/// implementation **generates** VPS / SPS / PPS from this config; retrieve
+/// the encoded bytes via `MnDeviceGetEncodedVideoSessionParametersBytes`
+/// after creation.
+typedef struct MnVideoSessionParametersEncodeH265Desc _MN_FINAL {
+  MnResourceHandle session _MN_INIT(MnInvalidResourceHandle);
+  /// H.265 level encoded into the generated SPS.
+  MnVideoH265Level level _MN_INIT(MnVideoH265Level1_0);
+  /// Coded picture dimensions (luma samples). Must be a multiple of the
+  /// driver's encode-input-picture granularity.
+  uint32_t coded_width _MN_INIT(0);
+  uint32_t coded_height _MN_INIT(0);
+  /// Number of short-term reference frames the SPS advertises. 1 is enough
+  /// for an IDR + N x P GOP (each P references the previous picture).
+  uint8_t  num_ref_frames _MN_INIT(1);
+  /// Maximum number of pictures that may precede any picture in decode order
+  /// AND follow it in output order. 0 for IPP / IPPPP (no B-frames).
+  uint8_t  max_num_reorder_pics _MN_INIT(0);
+} MnVideoSessionParametersEncodeH265Desc;
+
+typedef enum MnVideoEncodeH265PictureType {
+  /// IDR (Instantaneous Decoder Refresh): NAL unit type
+  /// `IDR_W_RADL` / `IDR_N_LP`. Resets POC and the DPB.
+  MnVideoEncodeH265PictureTypeIdr = 0,
+  /// Predictive (P): single forward-reference inter prediction. NAL unit
+  /// type `TRAIL_R` (or `TRAIL_N` if `is_reference == false`).
+  MnVideoEncodeH265PictureTypeP   = 1,
+  MnVideoEncodeH265PictureTypeForce32 = 0x7FFFFFFF,
+} MnVideoEncodeH265PictureType;
 
 // ----------------------------------------------------------------------------------------------------
 // Shader
@@ -1141,6 +1236,8 @@ enum class TextureUsageFlagBits : uint32_t {
   kTransferDst      = MnTextureUsageFlagBitTransferDst,
   kVideoDecodeDst   = MnTextureUsageFlagBitVideoDecodeDst,
   kVideoDecodeDpb   = MnTextureUsageFlagBitVideoDecodeDpb,
+  kVideoEncodeSrc   = MnTextureUsageFlagBitVideoEncodeSrc,
+  kVideoEncodeDpb   = MnTextureUsageFlagBitVideoEncodeDpb,
 };
 MBASE_DEFINE_ENUM_CLASS_BITFLAGS_OPERATORS(TextureUsageFlagBits);
 using TextureUsageFlags = mbase::BitFlags<TextureUsageFlagBits>;
@@ -1227,6 +1324,11 @@ enum class ResourceBarrierState : uint8_t {
   kVideoDecodeDpb   = MnResourceBarrierStateVideoDecodeDpb,
   /// Vulkan Video bitstream source image (rare; bitstream is usually a buffer).
   kVideoDecodeSrc   = MnResourceBarrierStateVideoDecodeSrc,
+  /// Vulkan Video encode input picture.
+  kVideoEncodeSrc   = MnResourceBarrierStateVideoEncodeSrc,
+  /// Vulkan Video encode DPB (reconstructed references). Used for both
+  /// the setup-reference write target and the active reference slots.
+  kVideoEncodeDpb   = MnResourceBarrierStateVideoEncodeDpb,
 };
 
 /// Pipeline-stage bits used by `ICommandList::TextureBarrier` to specify
@@ -1246,6 +1348,7 @@ enum class ResourceBarrierStageFlagBits : uint32_t {
   kTransfer              = MnResourceBarrierStageFlagBitTransfer,
 
   kVideoDecode           = MnResourceBarrierStageFlagBitVideoDecode,
+  kVideoEncode           = MnResourceBarrierStageFlagBitVideoEncode,
 
   kFragmentTestsBits = kEarlyFragmentTests | kLateFragmentTests,
 
@@ -1467,6 +1570,48 @@ struct VideoSessionParametersDecodeH265Desc final {
 };
 _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(VideoSessionParametersDecodeH265Desc, MnVideoSessionParametersDecodeH265Desc);
 
+struct VideoEncodeCommonCapabilities final {
+  MnBool32 rate_control_supports_disabled = MnBoolFalse;
+  uint32_t max_rate_control_layer_count = 0;
+  uint32_t max_quality_levels = 0;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(VideoEncodeCommonCapabilities, MnVideoEncodeCommonCapabilities);
+
+struct VideoEncodeH265Capabilities final {
+  VideoCommonCapabilities       common;
+  VideoEncodeCommonCapabilities encode_common;
+  VideoH265Level                max_level = VideoH265Level::k1_0;
+  Format                        picture_format = Format::kUndefined;
+  uint8_t                       max_p_picture_l0_reference_count = 0;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(VideoEncodeH265Capabilities, MnVideoEncodeH265Capabilities);
+
+struct VideoSessionEncodeH265Desc final {
+  VideoH265Profile profile = VideoH265Profile::kMain;
+  VideoBitDepth    bit_depth = VideoBitDepth::k8;
+  Format           picture_format = Format::kUndefined;
+  Extent2d         max_coded_extent;
+  uint32_t         max_dpb_slots = 0;
+  uint32_t         max_active_reference_pictures = 0;
+  VideoH265Level   max_level = VideoH265Level::k1_0;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(VideoSessionEncodeH265Desc, MnVideoSessionEncodeH265Desc);
+
+struct VideoSessionParametersEncodeH265Desc final {
+  VideoSessionHandle session;
+  VideoH265Level     level = VideoH265Level::k1_0;
+  uint32_t           coded_width = 0;
+  uint32_t           coded_height = 0;
+  uint8_t            num_ref_frames = 1;
+  uint8_t            max_num_reorder_pics = 0;
+};
+_MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(VideoSessionParametersEncodeH265Desc, MnVideoSessionParametersEncodeH265Desc);
+
+enum class VideoEncodeH265PictureType : uint32_t {
+  kIdr = MnVideoEncodeH265PictureTypeIdr,
+  kP   = MnVideoEncodeH265PictureTypeP,
+};
+
 /// Identifies a picture slot for `BeginVideoCoding` / `DecodeVideoH265`.
 ///
 /// `slot_index = -1` means "the picture being reconstructed" (in `setup_reference`
@@ -1554,6 +1699,71 @@ struct DecodeVideoH265Desc final {
   /// H.265 picture info computed by the caller (slice-header parse, POC
   /// computer, DPB slot tracker -- see `DecodeVideoH265PictureInfo`).
   DecodeVideoH265PictureInfo picture_info;
+};
+
+/// H.265-specific per-encode picture information. Caller owns the GOP
+/// structure (IDR cadence, POC, reference selection); mnexus forwards
+/// the values into `StdVideoEncodeH265PictureInfo` /
+/// `StdVideoEncodeH265SliceSegmentHeader` and chooses the NAL unit type
+/// from `picture_type`.
+struct EncodeVideoH265PictureInfo final {
+  VideoEncodeH265PictureType picture_type = VideoEncodeH265PictureType::kIdr;
+
+  /// PicOrderCntVal of the reconstructed picture. 0 for IDR; caller's
+  /// running counter for P (typically previous POC + 1 for IPP).
+  int32_t pic_order_cnt_val = 0;
+
+  /// Temporal sub-layer id. 0 unless temporal scalability is in use
+  /// (always 0 for the supported IDR + N x P GOP).
+  uint8_t temporal_id = 0;
+
+  /// Constant QP used for this picture's slice. Range is the H.265 spec
+  /// range [0, 51]; lower is higher quality. Typical CQP range for
+  /// transcode-quality material is 22..32.
+  int8_t  constant_qp = 28;
+
+  /// Identifying parameter set id (mirrors
+  /// `StdVideoEncodeH265SliceSegmentHeader::slice_pic_parameter_set_id`).
+  /// 0 for the single-PPS configurations the current impl supports.
+  uint8_t pps_pic_parameter_set_id = 0;
+
+  /// DPB slot indices populating reference list 0 (forward references).
+  /// Unused entries beyond `list0_dpb_slot_count` are ignored. For an
+  /// IDR + N x P GOP, count is 1 on P pictures (= previous picture's DPB
+  /// slot) and 0 on IDR pictures.
+  uint8_t list0_dpb_slot_indices[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+  uint8_t list0_dpb_slot_count = 0;
+};
+
+struct EncodeVideoH265Desc final {
+  /// Output bitstream destination. Buffer MUST have `kVideoEncodeDst`
+  /// usage. Actual byte count written is reported asynchronously via
+  /// `IDevice::GetLastEncodedBytesWritten` after the next
+  /// `BeginVideoCoding` on the same session drains the feedback query.
+  BufferHandle dst_buffer;
+  uint64_t     dst_buffer_offset = 0;
+  /// Upper bound on bytes the encoder may write into `dst_buffer`
+  /// starting at `dst_buffer_offset`.
+  uint64_t     dst_buffer_range = 0;
+
+  /// Input picture (uncompressed YCbCr). Layout MUST be `kVideoEncodeSrc`.
+  TextureHandle src_picture;
+  /// Array layer of `src_picture` to consume. 0 unless the input is
+  /// stored in a multi-layer 2D array texture.
+  uint32_t      src_array_layer = 0;
+
+  /// DPB slot the reconstructed picture is written into. Layout of the
+  /// `picture` texture's `array_layer` MUST be `kVideoEncodeDpb`.
+  VideoReferenceSlotInfo setup_reference;
+
+  /// Active reference pictures (subset of `bound_reference_slots` from
+  /// the enclosing `BeginVideoCoding`). Indices are also referenced
+  /// from `picture_info.list0_dpb_slot_indices`.
+  container::ArrayProxy<VideoReferenceSlotInfo const> active_references;
+
+  /// H.265 picture info computed by the caller (GOP / POC / ref-list
+  /// management -- see `EncodeVideoH265PictureInfo`).
+  EncodeVideoH265PictureInfo picture_info;
 };
 
 // ----------------------------------------------------------------------------------------------------

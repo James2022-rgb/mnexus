@@ -721,6 +721,65 @@ public:
   );
   _MNEXUS_VAPI(void, DestroyVideoSessionParameters, VideoSessionParametersHandle params);
 
+  /// Queries H.265 encode capabilities for a (profile x bit_depth) combination.
+  /// Returns `MnBoolTrue` if the combination is supported and `out_caps` was
+  /// populated. Returns `MnBoolFalse` when video coding is disabled at build
+  /// time, when the backend lacks Vulkan Video, or when the device does not
+  /// expose the requested encode profile.
+  _MNEXUS_VAPI(MnBool32, QueryVideoEncodeH265Capabilities,
+    VideoH265Profile profile,
+    VideoBitDepth    bit_depth,
+    VideoEncodeH265Capabilities& out_caps
+  );
+
+  /// Creates an H.265 encode `VideoSession`. Mirrors the decode-side
+  /// `CreateVideoSessionDecodeH265`. Destroy via the shared
+  /// `DestroyVideoSession` entry point. Returns an invalid handle on
+  /// failure (build-time disabled, capability mismatch, OOM, missing
+  /// `dedicated_video_encode` queue).
+  _MNEXUS_VAPI(VideoSessionHandle, CreateVideoSessionEncodeH265,
+    VideoSessionEncodeH265Desc const& desc
+  );
+
+  /// Creates an H.265 encode `VideoSessionParameters`. Unlike decode, the
+  /// implementation **generates** VPS / SPS / PPS from `desc`; retrieve the
+  /// encoded NAL bytes via `GetEncodedVideoSessionParametersBytes`. Destroy
+  /// via the shared `DestroyVideoSessionParameters` entry point.
+  _MNEXUS_VAPI(VideoSessionParametersHandle, CreateVideoSessionParametersEncodeH265,
+    VideoSessionParametersEncodeH265Desc const& desc
+  );
+
+  /// Two-call retrieval pattern for the generated VPS / SPS / PPS bytes.
+  ///
+  /// Call once with `out_data == nullptr` to learn the required size: the
+  /// function writes the byte count into `*inout_size` and returns
+  /// `MnBoolTrue`. Allocate a buffer of that size, call again with
+  /// `out_data` pointing to the buffer; the function writes the bytes and
+  /// updates `*inout_size` with the actual number written. The returned
+  /// blob is an Annex B concatenation of VPS, SPS, PPS (with leading start
+  /// codes), suitable for prepending to the first encoded access unit and
+  /// for building the `hvcC` MP4 box.
+  ///
+  /// Returns `MnBoolFalse` on invalid handle, build-time disabled, or
+  /// driver failure.
+  _MNEXUS_VAPI(MnBool32, GetEncodedVideoSessionParametersBytes,
+    VideoSessionParametersHandle params,
+    uint64_t*                    inout_size,
+    void*                        out_data
+  );
+
+  /// Reports the byte count written by the most recently completed
+  /// `EncodeVideoH265` on `session`. The value becomes valid only after the
+  /// next `BeginVideoCoding` on the same session has executed (that scope
+  /// drains the prior submission's feedback query). Returns `MnBoolTrue`
+  /// and writes `*out_bytes` when a valid result is available; returns
+  /// `MnBoolFalse` (leaving `*out_bytes` untouched) when no result has
+  /// landed yet, the session is decode-only, or video coding is disabled.
+  _MNEXUS_VAPI(MnBool32, GetLastEncodedBytesWritten,
+    VideoSessionHandle session,
+    uint64_t*          out_bytes
+  );
+
   //
   // Timestamp queries
   //
@@ -1059,6 +1118,16 @@ public:
   /// Decodes one H.265 access unit into the slot specified by
   /// `desc.setup_reference`. MUST be called inside a coding scope.
   _MNEXUS_VAPI(void, DecodeVideoH265, DecodeVideoH265Desc const& desc);
+
+  /// Encodes one H.265 picture from `desc.src_picture` into
+  /// `desc.dst_buffer`. MUST be called inside a coding scope that was
+  /// begun with an encode-mode session/parameters pair. The actual
+  /// number of bytes written into the bitstream buffer is reported
+  /// asynchronously through a feedback query; retrieve it via
+  /// `IDevice::GetLastEncodedBytesWritten` after the next
+  /// `BeginVideoCoding` on the same session has executed (which drains
+  /// the prior submission's query results).
+  _MNEXUS_VAPI(void, EncodeVideoH265, EncodeVideoH265Desc const& desc);
 
   //
   // Timestamp queries
