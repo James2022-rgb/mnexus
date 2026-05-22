@@ -952,11 +952,9 @@ public:
     std_pic.flags.cross_layer_bla_flag             = 0;
     std_pic.flags.pic_output_flag                  = 1;
     std_pic.flags.no_output_of_prior_pics_flag     = is_idr ? 1 : 0;
-    // Emit the STRPS inline in the slice header (set via pShortTermRefPicSet
-    // below) rather than reference the SPS-defined one. Some drivers do not
-    // resolve `short_term_ref_pic_set_idx` correctly for P frames; inline
-    // RPS sidesteps that path entirely.
-    std_pic.flags.short_term_ref_pic_set_sps_flag  = 0;
+    // Use the SPS-defined STRPS (index 0) -- matches the Khronos
+    // reference encoder.
+    std_pic.flags.short_term_ref_pic_set_sps_flag  = 1;
     std_pic.flags.slice_temporal_mvp_enabled_flag  = 0;
     std_pic.pic_type                          = std_pic_type;
     std_pic.sps_video_parameter_set_id        = 0;
@@ -988,6 +986,13 @@ public:
 
     // ----- Build StdVideoEncodeH265SliceSegmentHeader -----
     StdVideoEncodeH265SliceSegmentHeader slice_header{};
+    // Slice header flags matched against the Khronos Vulkan-Video-Samples
+    // reference encoder for Main 8-bit single-slice CQP P/I/IDR. Notable
+    // alignments: collocated_from_l0_flag = 0 (NVIDIA derives the
+    // collocated picture itself), cu_chroma_qp_offset_enabled_flag = 1
+    // (matches PPS), deblocking_filter_override_flag = 1 (forces the
+    // slice to emit explicit deblocking params),
+    // slice_loop_filter_across_slices_enabled_flag = 0.
     slice_header.flags.first_slice_segment_in_pic_flag       = 1;
     slice_header.flags.dependent_slice_segment_flag          = 0;
     slice_header.flags.slice_sao_luma_flag                   = 1;
@@ -995,11 +1000,11 @@ public:
     slice_header.flags.num_ref_idx_active_override_flag      = 0;
     slice_header.flags.mvd_l1_zero_flag                      = 0;
     slice_header.flags.cabac_init_flag                       = 0;
-    slice_header.flags.cu_chroma_qp_offset_enabled_flag      = 0;
+    slice_header.flags.cu_chroma_qp_offset_enabled_flag      = 1;
     slice_header.flags.deblocking_filter_override_flag       = 0;
-    slice_header.flags.slice_deblocking_filter_disabled_flag = 0;
-    slice_header.flags.collocated_from_l0_flag               = is_p ? 1 : 0;
-    slice_header.flags.slice_loop_filter_across_slices_enabled_flag = 1;
+    slice_header.flags.slice_deblocking_filter_disabled_flag = 1;
+    slice_header.flags.collocated_from_l0_flag               = 0;
+    slice_header.flags.slice_loop_filter_across_slices_enabled_flag = 0;
     slice_header.slice_type             = slice_type;
     slice_header.slice_segment_address  = 0;
     slice_header.collocated_ref_idx     = is_p ? 0 : 0xFF;
@@ -1255,6 +1260,50 @@ public:
     if (session_hot.encode_feedback_query_pool != VK_NULL_HANDLE) {
       vkCmdEndQuery(encoder_->vk_cb_handle(), session_hot.encode_feedback_query_pool, 0);
       session_hot.encode_feedback_pending = true;
+    }
+
+    // DPB self-to-self barrier on the setup layer: makes the encode's
+    // WRITE to this layer visible to the READ by the next P frame's
+    // active-reference path. QueueWaitIdle between submissions is NOT a
+    // substitute on NVIDIA -- without this barrier the reconstructed
+    // picture's chroma is read as garbage by the next frame and errors
+    // compound through the DPB ping-pong. Per Khronos Vulkan-Video-
+    // Samples, the barrier sits inside the coding scope, after the
+    // encode op, before EndVideoCoding (the spec allows image barriers
+    // on video resources inside a video coding scope).
+    {
+      VkImageMemoryBarrier2KHR const dpb_barrier {
+        .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR,
+        .pNext               = nullptr,
+        .srcStageMask        = VK_PIPELINE_STAGE_2_VIDEO_ENCODE_BIT_KHR,
+        .srcAccessMask       = VK_ACCESS_2_VIDEO_ENCODE_WRITE_BIT_KHR,
+        .dstStageMask        = VK_PIPELINE_STAGE_2_VIDEO_ENCODE_BIT_KHR,
+        .dstAccessMask       = VK_ACCESS_2_VIDEO_ENCODE_READ_BIT_KHR,
+        .oldLayout           = VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR,
+        .newLayout           = VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image               = setup_hot.GetVkImage().handle(),
+        .subresourceRange    = VkImageSubresourceRange {
+          .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+          .baseMipLevel   = 0,
+          .levelCount     = 1,
+          .baseArrayLayer = desc.setup_reference.array_layer,
+          .layerCount     = 1,
+        },
+      };
+      VkDependencyInfoKHR const dep_info {
+        .sType                    = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR,
+        .pNext                    = nullptr,
+        .dependencyFlags          = 0,
+        .memoryBarrierCount       = 0,
+        .pMemoryBarriers          = nullptr,
+        .bufferMemoryBarrierCount = 0,
+        .pBufferMemoryBarriers    = nullptr,
+        .imageMemoryBarrierCount  = 1,
+        .pImageMemoryBarriers     = &dpb_barrier,
+      };
+      vkCmdPipelineBarrier2KHR(encoder_->vk_cb_handle(), &dep_info);
     }
 #else
     (void)desc;

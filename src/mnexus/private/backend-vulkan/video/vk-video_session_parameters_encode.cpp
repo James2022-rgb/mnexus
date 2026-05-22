@@ -205,8 +205,10 @@ StdVideoH265SequenceParameterSet BuildEncodeSps(
     .log2_diff_max_min_luma_coding_block_size       = 2,
     .log2_min_luma_transform_block_size_minus2      = 0,
     .log2_diff_max_min_luma_transform_block_size    = 3,
-    .max_transform_hierarchy_depth_inter            = 2,
-    .max_transform_hierarchy_depth_intra            = 2,
+    // Khronos reference formula: max(ctbLog2 - log2MinTB, 1).
+    // For CTB = 32 (log2 = 5) and min TB = 4 (log2 = 2) that's 3.
+    .max_transform_hierarchy_depth_inter            = 3,
+    .max_transform_hierarchy_depth_intra            = 3,
     .num_short_term_ref_pic_sets                    = 1,
     .num_long_term_ref_pics_sps                     = 0,
     // PCM fields are set to spec-defined defaults even when
@@ -249,7 +251,11 @@ StdVideoH265PictureParameterSet BuildEncodePps(int8_t qp) {
   pps_flags.cabac_init_present_flag                       = 1;
   pps_flags.constrained_intra_pred_flag                   = 0;
   pps_flags.transform_skip_enabled_flag                   = 1;
-  pps_flags.cu_qp_delta_enabled_flag                      = 1;
+  // Diagnostic: try 0 (Khronos sample sets 1; we're CQP so per-CTB QP
+  // deltas should all be 0, and disabling skips that emission entirely).
+  // If decoded P frames are fixed by this, the encoder was emitting bad
+  // QP deltas; if not, revert to 1.
+  pps_flags.cu_qp_delta_enabled_flag                      = 0;
   pps_flags.pps_slice_chroma_qp_offsets_present_flag      = 0;
   pps_flags.weighted_pred_flag                            = 0;
   pps_flags.weighted_bipred_flag                          = 0;
@@ -261,7 +267,12 @@ StdVideoH265PictureParameterSet BuildEncodePps(int8_t qp) {
   pps_flags.pps_loop_filter_across_slices_enabled_flag    = 1;
   pps_flags.deblocking_filter_control_present_flag        = 1;
   pps_flags.deblocking_filter_override_enabled_flag       = 0;
-  pps_flags.pps_deblocking_filter_disabled_flag           = 0;
+  // Diagnostic: fully disable in-loop deblocking. If NVIDIA's encoder
+  // reconstruction divergence is caused by a deblocking implementation
+  // mismatch (encoder applies / skips deblocking differently than the
+  // bitstream signals), turning it off should make encoder recon match
+  // decoder output bit-for-bit.
+  pps_flags.pps_deblocking_filter_disabled_flag           = 1;
   pps_flags.pps_scaling_list_data_present_flag            = 0;
   // lists_modification_present_flag: 0 since the IDR + N x P GOP we author
   // never needs the slice header to override the default RPL order.
