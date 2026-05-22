@@ -695,6 +695,13 @@ typedef struct MnVideoSessionParametersEncodeH265Desc _MN_FINAL {
   /// Maximum number of pictures that may precede any picture in decode order
   /// AND follow it in output order. 0 for IPP / IPPPP (no B-frames).
   uint8_t  max_num_reorder_pics _MN_INIT(0);
+  /// Driver-defined quality level bound to the parameters object via
+  /// `VkVideoEncodeQualityLevelInfoKHR`. Valid range is
+  /// `[0, VideoEncodeCommonCapabilities::max_quality_levels - 1]`.
+  /// 0 = the driver's fastest preset (less aggressive motion search,
+  /// coarser RDO, smaller compressed size, lower fidelity); higher
+  /// indices trade speed for quality.
+  uint32_t quality_level _MN_INIT(0);
 } MnVideoSessionParametersEncodeH265Desc;
 
 typedef enum MnVideoEncodeH265PictureType {
@@ -1604,6 +1611,7 @@ struct VideoSessionParametersEncodeH265Desc final {
   uint32_t           coded_height = 0;
   uint8_t            num_ref_frames = 1;
   uint8_t            max_num_reorder_pics = 0;
+  uint32_t           quality_level = 0;
 };
 _MNEXUS_STATIC_ASSERT_ABI_EQUIVALENCE(VideoSessionParametersEncodeH265Desc, MnVideoSessionParametersEncodeH265Desc);
 

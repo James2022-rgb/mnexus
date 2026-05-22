@@ -452,15 +452,16 @@ resource_pool::ResourceHandle EmplaceVideoSessionParametersResourcePoolEncodeH26
     .maxStdPPSCount     = 1,
     .pParametersAddInfo = &add_info,
   };
-  // Bind quality level 0 (fastest preset) to the parameters object.
+  // Bind the caller-requested quality level to the parameters object.
   // NVIDIA's encoder firmware validates the std params against the bound
   // quality level's preferred values at parameters emission time; the
   // implicit "no quality level set" path is observed to OOM during
-  // vkGetEncodedVideoSessionParametersKHR for the SPS.
+  // vkGetEncodedVideoSessionParametersKHR for the SPS, so this chain is
+  // always present (with a default of 0 = the fastest preset).
   VkVideoEncodeQualityLevelInfoKHR quality_level_info {
     .sType        = VK_STRUCTURE_TYPE_VIDEO_ENCODE_QUALITY_LEVEL_INFO_KHR,
     .pNext        = &encode_params_create_info,
-    .qualityLevel = 0,
+    .qualityLevel = desc.quality_level,
   };
   VkVideoSessionParametersCreateInfoKHR create_info {
     .sType                              = VK_STRUCTURE_TYPE_VIDEO_SESSION_PARAMETERS_CREATE_INFO_KHR,
