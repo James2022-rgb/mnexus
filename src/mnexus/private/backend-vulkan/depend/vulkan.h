@@ -26,6 +26,10 @@
 #  define VK_USE_PLATFORM_ANDROID_KHR 1
 # endif
 #endif
-#include "volk/volk.h"
+// volk comes from the `volk` CMake target mnexus fetches (its
+// interface include dir is the volk source dir). The old
+// "volk/volk.h" spelling only resolved through the Vulkan SDK's
+// optional Volk component, which minimal SDK installs (CI) lack.
+#include "volk.h"
 #include "vulkan/vk_enum_string_helper.h"
 #include "vulkan/utility/vk_format_utils.h"
